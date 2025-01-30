@@ -1,0 +1,398 @@
+[
+  {
+    "app_name": "Audacity",
+    "folder_name": "Audacity",
+    "description": "Audacity is a free, open-source digital audio editor and recording application.",
+    "categories": [
+      "Multimedia"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "audacity",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/icon-64.png"
+  },
+  {
+    "app_name": "Chromium",
+    "folder_name": "Chromium",
+    "description": "Open-source version of Google Chrome.",
+    "categories": [
+      "Internet"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "/data/data/com.termux/files/usr/bin/chromium-browser",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Chromium/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Chromium/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Chromium/icon-64.png"
+  },
+  {
+    "app_name": "Code oss",
+    "folder_name": "Code-oss",
+    "description": "VSCodium is a build of Visual Studio Code without telemetry and tracking.",
+    "categories": [
+      "Development"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "code-oss",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Code-oss/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Code-oss/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Code-oss/logo.png"
+  },
+  {
+    "app_name": "Darktable",
+    "folder_name": "Darktable",
+    "description": "Darktable is an advanced tool for editing and managing RAW image files.",
+    "categories": [
+      "Graphics"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "/data/data/com.termux/files/usr/bin/darktable",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Darktable/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Darktable/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Darktable/logo.png"
+  },
+  {
+    "app_name": "Fastfetch",
+    "folder_name": "Fastfetch",
+    "description": "Fastfetch is a neofetch-like tool for fetching system information and displaying it prettily.",
+    "categories": [
+      "Accessories"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/icon-64.png"
+  },
+  {
+    "app_name": "GIMP",
+    "folder_name": "GIMP",
+    "description": "GIMP stands for \"GNU Image Manipulation Program\" and is used to create images and edit photographs.",
+    "categories": [
+      "Graphics"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "gimp",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/GIMP/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/GIMP/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/GIMP/icon-64.png"
+  },
+  {
+    "app_name": "Gedit",
+    "folder_name": "Gedit",
+    "description": "Gedit is a simple yet powerful text editor with syntax highlighting.",
+    "categories": [
+      "Office",
+      "Accessories"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "gedit",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gedit/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gedit/uninstall.sh",
+    "logo_url": null
+  },
+  {
+    "app_name": "Git",
+    "folder_name": "Git",
+    "description": "A distributed version control system designed to handle everything from small to very large projects with speed and efficiency.",
+    "categories": [
+      "Development",
+      "Accessories"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/logo.png"
+  },
+  {
+    "app_name": "Github Desktop",
+    "folder_name": "Github-Desktop",
+    "description": "Github Desktop is a GUI git client that simplifies your development workflow.",
+    "categories": [
+      "Development"
+    ],
+    "supported_arch": "aarch64,arm",
+    "version": "3.4.8-linux1",
+    "app_type": "distro",
+    "supported_distro": "all",
+    "run_cmd": "pdrun github-desktop",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/icon-64.png"
+  },
+  {
+    "app_name": "Handbrake",
+    "folder_name": "Handbrake",
+    "description": "Handbrake is an open-source tool for compressing and converting video files",
+    "categories": [
+      "Multimedia"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "ghb",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Handbrake/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Handbrake/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Handbrake/logo.png"
+  },
+  {
+    "app_name": "Hangover",
+    "folder_name": "Hangover",
+    "description": "Hangover runs simple Win64 and Win32 applications on arm64 Linux. Only the application is emulated instead of a whole Wine installation.\n\nHangover can be used in place of the Wine app on Pi-Apps. It may be worth trying this to see if something that did not run on the emulated Wine will run here.\nFor example, one app (tested by Botspot) failed to launch the installer on emulated Wine (x64), got stuck installing on Hangover with the Box64 emulator, and successfully installed with the FEX emulator selected. (see how to select an emulator below)\n\nIf you have Wine installed already, clicking Install here will uninstall Wine first. Do note that installed applications and configuration left over from Wine in ~/.wine will need to be removed or renamed, as it appears Hangover cannot import it.\n\nExamples on how to run:\n$ wine your_x86_64_application.exe # Uses FEX for 64-bit apps\n$ wine your_x86_application.exe # To use Box64 for 32-bit apps\n$ HODLL=libwow64fex.dll wine your_x86_application.exe # To use FEX for 32-bit apps\n$ HODLL=xtajit.dll taskset -c 1 wine your_x86_application.exe # To use QEMU for 32-bit apps (limited to 1 core to workaround a bug)\n\nFor more information see https://github.com/AndreRH/hangover/blob/master/README.md",
+    "categories": [
+      "Work"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hangover/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hangover/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hangover/icon-64.png"
+  },
+  {
+    "app_name": "Inkscape",
+    "folder_name": "Inkscape",
+    "description": "Inkscape is a popular free vector graphics editor.\n\n- Flexible drawing tools\n- Broad file format compatibility\n- Powerful text tool\n- Bezier and spiro curves\n\nTo run: Menu -> Graphics -> Inkscape\nTo run in a terminal: inkscape\n\nNote: Also see the Boxy SVG tool.",
+    "categories": [
+      "Graphics"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "inkscape",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Inkscape/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Inkscape/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Inkscape/icon-64.png"
+  },
+  {
+    "app_name": "Kdenlive",
+    "folder_name": "Kdenlive",
+    "description": "Kdenlive is a popular video editor compatible with PiOS Bookworm.",
+    "categories": [
+      "Multimedia",
+      "Graphics"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "kdenlive",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/icon-64.png"
+  },
+  {
+    "app_name": "LibreOffice",
+    "folder_name": "LibreOffice",
+    "description": "LibreOffice is a free office suite including a word editor, slideshow, spreadsheet, database, and image editor.",
+    "categories": [
+      "Creat",
+      "Productivity"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "distro",
+    "supported_distro": "all",
+    "run_cmd": "libreoffice",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/icon-64.png"
+  },
+  {
+    "app_name": "Neofetch",
+    "folder_name": "Neofetch",
+    "description": "Neofetch is an aesthetically pleasing bash script to show system information.",
+    "categories": [
+      "Accessories"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Neofetch/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Neofetch/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Neofetch/icon-64.png"
+  },
+  {
+    "app_name": "Obsidian",
+    "folder_name": "Obsidian",
+    "description": "Powerful knowledge base using plain text Markdown files (for note-taking & project management)\n\nNote-taking is incredibly personal. Tried every app, but something always irks you? You deserve better.\nFor those who can't custom-build a solution for themselves, Obsidian is as close as you can get, with plugins, themes, and custom CSS at your disposal. \n\nWith Obsidian, your data sits in a local folder. Never leave your life's work held hostage in the cloud again.\n\nVibrant Community\nWith more than 50,000 members in our Discord chat and 30,000 members on our forum, Obsidian has one of the largest note-taking communities.\nOur community welcomes anyone who uses Obsidian or is interested in Obsidian, no matter your language, country, or field. Come join us!\n\nTo run from Menu: Menu -> Office -> Obsidian\nTo run from Terminal: obsidian",
+    "categories": [
+      "Development",
+      "Accessories"
+    ],
+    "supported_arch": "arm64",
+    "version": "1.7.7",
+    "app_type": "distro",
+    "supported_distro": "all",
+    "run_cmd": "pdrun /opt/AppImageLauncher/Obsidian/obsidian --no-sandbox",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Obsidian/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Obsidian/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Obsidian/icon-64.png"
+  },
+  {
+    "app_name": "Rhythmbox",
+    "folder_name": "Rhythmbox",
+    "description": "Rhythmbox is a music management and playback application.",
+    "categories": [
+      "Multimedia"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "rhythmbox",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rhythmbox/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rhythmbox/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rhythmbox/logo.png"
+  },
+  {
+    "app_name": "Scrcpy",
+    "folder_name": "Scrcpy",
+    "description": "Connect and control your Android smartphone.\nThis is similar to a remote desktop, where you can view the device's screen and navigate it normally.\n\nTo run: Menu -> System Tools -> Scrcpy\nTo run in a terminal: scrcpy\n\nNotes:\n- For more info, run \"scrcpy --help\"\n- The Android device requires at least API 21 (Android 5.0).\n- Make sure you enabled ADB debugging on your device.\n- The device needs to be connected to the same local network, or via USB.\n- On some devices, you also need to enable an additional option to control it using keyboard and mouse.\n- If you have issues, try to run the app a couple of times through Terminal.",
+    "categories": [
+      "Accessories"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Scrcpy/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Scrcpy/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Scrcpy/icon-64.png"
+  },
+  {
+    "app_name": "Shotcut",
+    "folder_name": "Shotcut",
+    "description": "Shotcut is a feature-rich video editor supporting various formats and advanced editing features.",
+    "categories": [
+      "Multimedia",
+      "Graphics"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "shotcut",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/logo.png"
+  },
+  {
+    "app_name": "Telegram",
+    "folder_name": "Telegram",
+    "description": "Telegram is a free and open-source, cross-platform instant messaging software.",
+    "categories": [
+      "Internet",
+      "Multimedia"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "distro",
+    "supported_distro": "all",
+    "run_cmd": "telegram-desktop",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/icon-64.png"
+  },
+  {
+    "app_name": "Thunderbird",
+    "folder_name": "Thunderbird",
+    "description": "Thunderbird is an email client with features like a tabbed interface, smart spam filter, and numerous add-ons.",
+    "categories": [
+      "Internet"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "thunderbird",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Thunderbird/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Thunderbird/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Thunderbird/icon-64.png"
+  },
+  {
+    "app_name": "Transmission",
+    "folder_name": "Transmission",
+    "description": "Transmission is a lightweight BitTorrent client used to download torrent files from the Internet.",
+    "categories": [
+      "Office"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "transmission-gtk",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/icon-64.png"
+  },
+  {
+    "app_name": "Visual Studio Code",
+    "folder_name": "Visual-Studio-Code",
+    "description": "Visual Studio Code is a free source-code editor made by Microsoft with support for debugging, syntax highlighting, and intelligent code completion.",
+    "categories": [
+      "Development"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "distro",
+    "supported_distro": "all",
+    "run_cmd": "pdrun /usr/share/code/code --no-sandbox",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/icon-64.png"
+  },
+  {
+    "app_name": "Webcord",
+    "folder_name": "Webcord",
+    "description": "Fast Discord client for ARM that mimics the official Discord client.\nThe app runs independent to chromium and can be hidden to the system tray unlike other solutions out there.\nTo run: Menu -> Internet -> WebCord.\nTo run in a terminal: webcord\nThis client is not officially provided or supported by Discord and technically violates ToS, use at your own risk\nMade by SpacingBat3 on Github with care :)",
+    "categories": [
+      "Internet",
+      "Multimedia"
+    ],
+    "supported_arch": "arm64,arm",
+    "version": "4.10.2",
+    "app_type": "distro",
+    "supported_distro": "all",
+    "run_cmd": "pdrun /opt/AppImageLauncher/Webcord/webcord --no-sandbox",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/icon-64.png"
+  },
+  {
+    "app_name": "Xpdf Reader",
+    "folder_name": "Xpdf-Reader",
+    "description": "Xpdf is a lightweight PDF reader for viewing documents.",
+    "categories": [
+      "Creat",
+      "Productivity"
+    ],
+    "supported_arch": "aarch64,arm",
+    "app_type": "native",
+    "run_cmd": "xpdf",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/logo.png"
+  },
+  {
+    "app_name": "Zen",
+    "folder_name": "Zen",
+    "description": "Privacy-focused browser based on Firefox\nZen Browser has side tabs by default and is very customizeable if you know a bit of CSS, or are willing to find someone else's mod files. It is said to run fast, and is competely open-source and takes design elements from Arc Browser.\n\nTo run: Menu -> Internet -> Zen Browser\nTo run in a terminal: zen-browser",
+    "categories": [
+      "Learn",
+      "Creat"
+    ],
+    "supported_arch": "aarch64",
+    "version": "1.7.2b",
+    "app_type": "distro",
+    "supported_distro": "all",
+    "run_cmd": "pdrun zen-browser",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/icon-64.png"
+  },
+  {
+    "app_name": "vlc",
+    "folder_name": "vlc",
+    "description": "VLC is a free and open source cross-platform multimedia player that plays most multimedia files and various streaming protocols.",
+    "categories": [
+      "Multimedia"
+    ],
+    "supported_arch": "aarch64,arm",
+    "version": "3.0.24",
+    "app_type": "both",
+    "supported_distro": "all",
+    "run_cmd": "vlc",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/logo.png"
+  }
+]

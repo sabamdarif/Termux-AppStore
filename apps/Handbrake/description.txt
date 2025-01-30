@@ -1,0 +1,1 @@
+Handbrake is an open-source tool for compressing and converting video files

@@ -95,7 +95,7 @@
     "run_cmd": "gedit",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gedit/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gedit/uninstall.sh",
-    "logo_url": null
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gedit/logo.png"
   },
   {
     "app_name": "Git",
@@ -146,7 +146,8 @@
     "folder_name": "Hangover",
     "description": "Hangover runs simple Win64 and Win32 applications on arm64 Linux. Only the application is emulated instead of a whole Wine installation.\n\nHangover can be used in place of the Wine app on Pi-Apps. It may be worth trying this to see if something that did not run on the emulated Wine will run here.\nFor example, one app (tested by Botspot) failed to launch the installer on emulated Wine (x64), got stuck installing on Hangover with the Box64 emulator, and successfully installed with the FEX emulator selected. (see how to select an emulator below)\n\nIf you have Wine installed already, clicking Install here will uninstall Wine first. Do note that installed applications and configuration left over from Wine in ~/.wine will need to be removed or renamed, as it appears Hangover cannot import it.\n\nExamples on how to run:\n$ wine your_x86_64_application.exe # Uses FEX for 64-bit apps\n$ wine your_x86_application.exe # To use Box64 for 32-bit apps\n$ HODLL=libwow64fex.dll wine your_x86_application.exe # To use FEX for 32-bit apps\n$ HODLL=xtajit.dll taskset -c 1 wine your_x86_application.exe # To use QEMU for 32-bit apps (limited to 1 core to workaround a bug)\n\nFor more information see https://github.com/AndreRH/hangover/blob/master/README.md",
     "categories": [
-      "Work"
+      "Accessories",
+      "Games"
     ],
     "supported_arch": "aarch64,arm",
     "app_type": "native",
@@ -188,8 +189,8 @@
     "folder_name": "LibreOffice",
     "description": "LibreOffice is a free office suite including a word editor, slideshow, spreadsheet, database, and image editor.",
     "categories": [
-      "Creat",
-      "Productivity"
+      "Productivity",
+      "Office"
     ],
     "supported_arch": "aarch64,arm",
     "app_type": "distro",
@@ -352,8 +353,9 @@
     "folder_name": "Xpdf-Reader",
     "description": "Xpdf is a lightweight PDF reader for viewing documents.",
     "categories": [
-      "Creat",
-      "Productivity"
+      "Productivity",
+      "Office",
+      "Accessories"
     ],
     "supported_arch": "aarch64,arm",
     "app_type": "native",
@@ -367,8 +369,7 @@
     "folder_name": "Zen",
     "description": "Privacy-focused browser based on Firefox\nZen Browser has side tabs by default and is very customizeable if you know a bit of CSS, or are willing to find someone else's mod files. It is said to run fast, and is competely open-source and takes design elements from Arc Browser.\n\nTo run: Menu -> Internet -> Zen Browser\nTo run in a terminal: zen-browser",
     "categories": [
-      "Learn",
-      "Creat"
+      "Internet"
     ],
     "supported_arch": "aarch64",
     "version": "1.7.2b",

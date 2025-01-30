@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/data/data/com.termux/files/usr/bin/python3
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -135,8 +135,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Load CSS
         css_provider = Gtk.CssProvider()
-        css_file = Path(__file__).parent / 'style' / 'style.css'
-        # css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
+        # css_file = Path(__file__).parent / 'style' / 'style.css'
+        css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
         css_provider.load_from_path(str(css_file))
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),

@@ -1,7 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 supported_arch="aarch64,arm"
-version="3.0.24"
+package_name="vlc"
+version=termux_local_version
 app_type="both"
 supported_distro="all"
 run_cmd="vlc"

@@ -7,8 +7,32 @@ supported_distro="all"
 # working_dir=""
 run_cmd="libreoffice"
 
-if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]];then
-  $selected_distro install libreoffice -y
-elif [[ "$selected_distro" == "fedora" ]]; then
-  $selected_distro install libreoffice -y
+# Check if a distro is selected
+if [ -z "$selected_distro" ]; then
+    echo "Error: No distro selected"
+    exit 1
+fi
+
+# Install based on distro type
+case "$selected_distro" in
+    "debian"|"ubuntu")
+        $selected_distro update
+        $selected_distro install libreoffice -y
+        ;;
+    "fedora")
+        $selected_distro install libreoffice -y
+        ;;
+    *)
+        echo "Unsupported distribution: $selected_distro"
+        exit 1
+        ;;
+esac
+
+# Check if installation was successful
+if [ $? -eq 0 ]; then
+    echo "LibreOffice installed successfully"
+    exit 0
+else
+    echo "LibreOffice installation failed"
+    exit 1
 fi

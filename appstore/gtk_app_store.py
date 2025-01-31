@@ -826,13 +826,28 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             script_name = f"appstore_{int(time.time())}.sh"
             script_path = os.path.join(TERMUX_TMP, script_name)
 
-            # Download using aria2c
+            # Download using aria2c with proper encoding handling
             print(f"Downloading script from {url} to {script_path}")
             command = f"aria2c -x 16 -s 16 '{url}' -d '{TERMUX_TMP}' -o '{script_name}'"
-            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, encoding='utf-8')
             
             if result.returncode != 0:
                 print(f"Download failed: {result.stderr}")
+                return None
+
+            # Verify file exists and is readable
+            if not os.path.exists(script_path):
+                print("Script file not found after download")
+                return None
+
+            # Read file content to verify encoding
+            try:
+                with open(script_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except UnicodeDecodeError:
+                print("Script file has invalid encoding")
+                if os.path.exists(script_path):
+                    os.remove(script_path)
                 return None
 
             # Modify script to source common functions
@@ -843,6 +858,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             return script_path
         except Exception as e:
             print(f"Error downloading script: {e}")
+            if script_path and os.path.exists(script_path):
+                os.remove(script_path)
             return None
 
     def on_uninstall_clicked(self, button, app):

@@ -172,7 +172,13 @@ def get_app_metadata(app_folder):
     install_sh_path = app_folder / 'install.sh'
     app_type = "unknown"
     run_cmd = None
-    metadata = {}
+    metadata = {
+        'app_type': None,
+        'run_cmd': None,
+        'supported_arch': None,
+        'version': None,
+        'supported_distro': None
+    }
     
     if install_sh_path.exists():
         try:
@@ -185,19 +191,19 @@ def get_app_metadata(app_folder):
                     elif line.strip().startswith('run_cmd='):
                         run_cmd = line.split('=')[1].strip().strip('"\'')
                         metadata['run_cmd'] = run_cmd
-                    elif line.strip().startswith('supported_arch='):  # Note: keeping original typo
+                    elif line.strip().startswith('supported_arch='):
                         supported_arch = line.split('=')[1].strip().strip('"\'')
                         metadata['supported_arch'] = supported_arch
                     elif line.strip().startswith('version='):
                         version = line.split('=')[1].strip().strip('"\'')
                         metadata['version'] = version
-                    
-                    # Only add supported_distro if app_type is distro or both
                     elif line.strip().startswith('supported_distro='):
-                        if app_type in ["distro", "both"]:
-                            supported_distro = line.split('=')[1].strip().strip('"\'')
-                            metadata['supported_distro'] = supported_distro
-                            
+                        supported_distro = line.split('=')[1].strip().strip('"\'')
+                        metadata['supported_distro'] = supported_distro
+
+                # Remove supported_distro if app_type isn't distro or both
+                if metadata['app_type'] not in ["distro", "both"]:
+                    metadata['supported_distro'] = None
         except Exception as e:
             print(f"Error reading install.sh from {install_sh_path}: {e}")
 

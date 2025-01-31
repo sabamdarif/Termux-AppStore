@@ -1028,11 +1028,29 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # App info
             info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
             
+            # Top row with app name and source type
+            top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            
             # App name
             name_label = Gtk.Label()
             name_label.set_markup(f"<b>{app['app_name']}</b>")
             name_label.set_halign(Gtk.Align.START)
-            info_box.pack_start(name_label, False, False, 0)
+            top_row.pack_start(name_label, False, False, 0)
+            
+            # Spacer
+            top_row.pack_start(Gtk.Label(), True, True, 0)
+            
+            # Source type label
+            source_label = Gtk.Label()
+            source_type = app.get('app_type', 'unknown').capitalize()
+            source_label.set_markup(f"Source: {source_type}")
+            source_label.get_style_context().add_class("metadata-label")
+            source_label.set_size_request(120, -1)
+            source_label.set_halign(Gtk.Align.CENTER)
+            source_label.set_margin_end(6)
+            top_row.pack_end(source_label, False, False, 0)
+            
+            info_box.pack_start(top_row, False, False, 0)
 
             # App description
             desc_label = Gtk.Label(label=app['description'][:100] + "..." if len(app['description']) > 100 else app['description'])
@@ -1040,47 +1058,52 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             desc_label.set_halign(Gtk.Align.START)
             info_box.pack_start(desc_label, False, False, 0)
 
-            # Bottom row box for buttons and source type
+            # Bottom row box for buttons and version
             bottom_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             bottom_box.set_margin_top(6)
 
             # Button box (left side of bottom row)
             button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
 
-            # Check if app is installed
+            # Version label (right side of bottom row)
+            version_label = Gtk.Label()
+            version = app.get('version')
+            if version:
+                version_label.set_markup(f"Version: {version}")
+            else:
+                version_label.set_markup("Version: Unavailable")
+            version_label.get_style_context().add_class("metadata-label")
+            version_label.set_size_request(120, -1)
+            version_label.set_halign(Gtk.Align.CENTER)
+            version_label.set_margin_end(6)
+
+            # Add buttons based on installation status
             is_installed = app['folder_name'] in self.installed_apps
 
             if is_installed:
-                # Add Open button only if run_cmd exists and is not null
                 if app.get('run_cmd') is not None:
                     open_button = Gtk.Button(label="Open")
                     open_button.get_style_context().add_class("open-button")
                     open_button.connect("clicked", self.on_open_clicked, app)
+                    open_button.set_size_request(120, -1)  # Match metadata label size
                     button_box.pack_start(open_button, False, False, 0)
 
-                # Add Uninstall button
                 uninstall_button = Gtk.Button(label="Uninstall")
                 uninstall_button.get_style_context().add_class("uninstall-button")
                 uninstall_button.connect("clicked", self.on_uninstall_clicked, app)
+                uninstall_button.set_size_request(120, -1)  # Match metadata label size
                 button_box.pack_start(uninstall_button, False, False, 0)
             else:
-                # Add Install button
                 install_button = Gtk.Button(label="Install")
                 install_button.get_style_context().add_class("install-button")
                 install_button.connect("clicked", self.on_install_clicked, app)
+                install_button.set_size_request(120, -1)  # Match metadata label size
                 button_box.pack_start(install_button, False, False, 0)
 
             bottom_box.pack_start(button_box, False, False, 0)
-
-            # Source type label (right side of bottom row)
-            source_label = Gtk.Label()
-            source_type = app.get('app_type', 'unknown').capitalize()
-            source_label.set_markup(f"Source: {source_type}")
-            source_label.get_style_context().add_class("source-type-label")
-            source_label.set_halign(Gtk.Align.END)
-            bottom_box.pack_end(source_label, False, False, 0)
-
+            bottom_box.pack_end(version_label, False, False, 0)  # Version label at bottom right
             info_box.pack_start(bottom_box, False, False, 0)
+            
             card_box.pack_start(info_box, True, True, 0)
             app_card.add(card_box)
             self.app_list_box.pack_start(app_card, False, True, 0)

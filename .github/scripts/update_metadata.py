@@ -177,7 +177,8 @@ def get_app_metadata(app_folder):
         'run_cmd': None,
         'supported_arch': None,
         'version': None,
-        'supported_distro': None
+        'supported_distro': None,
+        'package_name': None  # Add default package_name
     }
     
     if install_sh_path.exists():
@@ -200,6 +201,9 @@ def get_app_metadata(app_folder):
                     elif line.strip().startswith('supported_distro='):
                         supported_distro = line.split('=')[1].strip().strip('"\'')
                         metadata['supported_distro'] = supported_distro
+                    elif line.strip().startswith('package_name='):  # Add package_name check
+                        package_name = line.split('=')[1].strip().strip('"\'')
+                        metadata['package_name'] = package_name
 
                 # Remove supported_distro if app_type isn't distro or both
                 if metadata['app_type'] not in ["distro", "both"]:

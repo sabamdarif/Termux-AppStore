@@ -1,7 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 supported_arch="aarch64,arm"
-# version=2.34.1
+package_name="neofetch"
+version=termux_local_version
 app_type="native"
 # supported_distro="all"
 # working_dir=""

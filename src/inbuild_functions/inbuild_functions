@@ -385,5 +385,21 @@ EOF
     check_and_delete "$distro_path/opt/AppImageLauncher/install_appimage.sh"
 }
 
+function get_latest_version() {
+    local package_name
+    local latest_version
+    package_name=$1
+    if [[ "$PACKAGE_MANAGER" == "apt" ]]; then
+        latest_version=$(apt-cache policy "$package_name" | grep 'Candidate:' | awk '{print $2}')
+    elif [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+        latest_version=$(pacman -Si "$package_name" 2>/dev/null | grep 'Version' | awk '{print $3}')
+    fi
+    # print version if get
+    if [[ -n "$latest_version" ]]; then
+        echo "$latest_version"
+    fi
+
+}
+
 read_conf
 distro_path="$PREFIX/var/lib/proot-distro/installed-rootfs/$selected_distro"

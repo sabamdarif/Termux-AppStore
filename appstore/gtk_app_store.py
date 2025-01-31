@@ -28,6 +28,10 @@ APPSTORE_JSON = os.path.join(APPSTORE_DIR, "apps.json")
 LAST_REFRESH_FILE = os.path.join(APPSTORE_DIR, "last_refresh")
 GITHUB_APPS_JSON = "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/data/apps.json"
 
+# Add these constants after the existing path definitions
+APPSTORE_OLD_JSON_DIR = os.path.join(APPSTORE_DIR, 'old_json')
+UPDATES_TRACKING_FILE = os.path.expanduser("~/.termux_appstore/updates.json")
+
 # Function to validate logo size
 def validate_logo_size(logo_path):
     """Check if the logo is within the required size range."""
@@ -51,6 +55,8 @@ class AppStoreApplication(Gtk.Application):
             flags=Gio.ApplicationFlags.FLAGS_NONE
         )
         self.window = None
+        # Connect the activate signal
+        self.connect('activate', self.on_activate)
 
     def do_startup(self):
         Gtk.Application.do_startup(self)
@@ -64,7 +70,8 @@ class AppStoreApplication(Gtk.Application):
         except Exception as e:
             print(f"Failed to set application icon: {e}")
 
-    def do_activate(self):
+    def on_activate(self, app):
+        """Handler for the application's activate signal"""
         if not self.window:
             self.window = AppStoreWindow(self)
         self.window.present()
@@ -192,41 +199,41 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Start the initial data load
         self.check_for_updates()
 
+        # Initialize updates tracking
+        self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
+        os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
+        self.pending_updates = self.load_pending_updates()
+
     def setup_directories(self):
         """Create necessary directories for the app store"""
         os.makedirs(APPSTORE_DIR, exist_ok=True)
         os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
 
     def check_for_updates(self):
-        print('Checking for updates...')  # Log when checking for updates
-        """Check if updates are needed based on last refresh time"""
+        print('Checking for updates...')
         try:
-            # Show loading indicators at the start of the check
             self.spinner.show()
             self.spinner.start()
             self.loading_label.show()
 
-            # Check if apps.json exists
             if not os.path.exists(APPSTORE_JSON):
-                self.start_refresh()
+                self.start_refresh(is_manual=False)
                 return
 
-            # Check last refresh time
             if os.path.exists(LAST_REFRESH_FILE):
                 with open(LAST_REFRESH_FILE, 'r') as f:
                     last_refresh = datetime.fromtimestamp(float(f.read().strip()))
                     if datetime.now() - last_refresh > timedelta(days=7):
-                        self.start_refresh()
+                        self.start_refresh(is_manual=False)
                     else:
-                        # Load existing data without refresh in a background thread
                         thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
                         thread.daemon = True
                         thread.start()
             else:
-                self.start_refresh()
-        except (FileNotFoundError, ValueError) as e:
+                self.start_refresh(is_manual=False)
+        except Exception as e:
             print(f"Error checking updates: {e}")
-            self.start_refresh()
+            self.start_refresh(is_manual=False)
 
     def load_app_metadata_and_setup_ui(self):
         """Load app metadata and set up UI in the background"""
@@ -241,9 +248,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.loading_label.hide()
         return False
 
-    def start_refresh(self):
+    def start_refresh(self, is_manual=True):
         """Start the refresh process in a background thread"""
         print("\nStarting refresh process...")
+        
+        # Store is_manual flag as instance variable
+        self.is_manual_refresh = is_manual
         
         # Clear existing content
         for child in self.content_box.get_children():
@@ -261,116 +271,108 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         thread.start()
 
     def refresh_data_background(self):
-        """Run refresh in background thread"""
         try:
             print("\nStarting refresh process...")
             
-            # Step 1: Wait briefly to ensure any previous download is complete
-            time.sleep(1)
+            # 1. First ensure old_json directory exists
+            os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
+            old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
             
-            # Step 2: Check and backup existing apps.json
+            # 2. If current apps.json exists, back it up before deleting
             if os.path.exists(APPSTORE_JSON):
-                print(f"Found existing apps.json at: {APPSTORE_JSON}")
-                
-                # Create old_json directory if it doesn't exist
-                old_json_dir = os.path.join(APPSTORE_DIR, 'old_json')
-                os.makedirs(old_json_dir, exist_ok=True)
-                
-                # Remove old backup if it exists
-                old_json_path = os.path.join(old_json_dir, 'apps.json')
-                if os.path.exists(old_json_path):
-                    print(f"Removing old backup at: {old_json_path}")
-                    os.remove(old_json_path)
-                
-                # Create new backup
-                print(f"Creating backup at: {old_json_path}")
+                print("Backing up current apps.json...")
                 shutil.copy2(APPSTORE_JSON, old_json_path)
-                
-                # Verify backup was created
-                if os.path.exists(old_json_path):
-                    print("Backup created successfully")
-                    # Only remove original after successful backup
-                    os.remove(APPSTORE_JSON)
-                    print(f"Removed original apps.json at: {APPSTORE_JSON}")
-            else:
-                print("No existing apps.json found to backup")
-
-            # Step 3: Clean up logo directory
-            if os.path.exists(APPSTORE_LOGO_DIR):
-                print(f"Cleaning up logo directory: {APPSTORE_LOGO_DIR}")
-                shutil.rmtree(APPSTORE_LOGO_DIR)
-                os.makedirs(APPSTORE_LOGO_DIR)
-
-            # Step 4: Download new apps.json
+                os.remove(APPSTORE_JSON)
+            
+            # 3. Download new apps.json
             print("Downloading new apps.json...")
             command = f"aria2c -x 16 -s 16 {GITHUB_APPS_JSON} -d {APPSTORE_DIR} -o apps.json"
             result = os.system(command)
             if result != 0:
-                print("Error downloading apps.json. Please check the URL or your connection.")
+                print("Error downloading apps.json")
                 GLib.idle_add(self.refresh_error, "Failed to download apps.json")
                 return False
 
-            # Rest of the download and processing code...
-            with open(APPSTORE_JSON, 'r') as f:
+            # 4. Compare versions and check for updates
+            updates = {}
+            if os.path.exists(old_json_path):
                 try:
-                    all_apps = json.load(f)
-                    
-                    # Get compatible architectures for the system
-                    compatible_archs = self.arch_compatibility.get(self.system_arch, [self.system_arch])
-                    print(f"System architecture: {self.system_arch}")
-                    print(f"Compatible architectures: {compatible_archs}")
-                    
-                    # Filter apps based on architecture compatibility
-                    self.apps_data = []
-                    for app in all_apps:
-                        app_arch = app.get('supported_arch', '')
-                        if not app_arch:  # If no architecture specified, assume compatible
-                            self.apps_data.append(app)
-                            continue
-                            
-                        # Split and clean architecture strings
-                        supported_archs = [arch.strip().lower() for arch in app_arch.split(',')]
+                    # Load old and new data
+                    with open(old_json_path, 'r') as f:
+                        old_data = json.load(f)
+                    with open(APPSTORE_JSON, 'r') as f:
+                        new_data = json.load(f)
+
+                    # Compare versions for installed apps only
+                    for app_name in self.installed_apps:
+                        old_app = next((app for app in old_data if app['folder_name'] == app_name), None)
+                        new_app = next((app for app in new_data if app['folder_name'] == app_name), None)
                         
-                        # Check if any of the app's architectures are compatible
-                        if any(arch in compatible_archs for arch in supported_archs):
-                            self.apps_data.append(app)
-                            print(f"Added compatible app: {app['app_name']} ({app_arch})")
-                        else:
-                            print(f"Skipped incompatible app: {app['app_name']} ({app_arch})")
-                    
-                    print(f"Loaded {len(self.apps_data)} compatible apps out of {len(all_apps)} total apps")
-                    
-                    # Download logos for compatible apps
-                    for app in self.apps_data:
-                        if self.stop_background_tasks:
-                            return False
+                        if old_app and new_app:
+                            old_version = old_app.get('version')
+                            new_version = new_app.get('version')
+                            if old_version != new_version:
+                                print(f"Update found for {app_name}: {old_version} -> {new_version}")
+                                updates[app_name] = new_version
 
-                        logo_dir = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'])
-                        os.makedirs(logo_dir, exist_ok=True)
+                    # Save updates to updates.json
+                    if updates:
+                        print(f"Saving updates to {self.updates_tracking_file}")
+                        self.pending_updates = updates
+                        self.save_pending_updates()
+                        print(f"Updates saved: {updates}")
 
-                        print(f"Downloading logo for {app['app_name']}...")
-                        logo_path = os.path.join(logo_dir, 'logo.png')
-                        command = f"aria2c -x 16 -s 16 {app['logo_url']} -d {logo_dir} -o logo.png"
-                        os.system(command)
+                except Exception as e:
+                    print(f"Error comparing versions: {e}")
+                    import traceback
+                    traceback.print_exc()
 
-                        # Validate the logo size
-                        if not validate_logo_size(logo_path):
+            # 5. Now handle logo directory
+            if os.path.exists(APPSTORE_LOGO_DIR):
+                print("Removing old logo directory...")
+                shutil.rmtree(APPSTORE_LOGO_DIR)
+            os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
+
+            # 6. Download logos for compatible apps
+            with open(APPSTORE_JSON, 'r') as f:
+                all_apps = json.load(f)
+                
+                # Get compatible architectures for the system
+                compatible_archs = self.arch_compatibility.get(self.system_arch, [self.system_arch])
+                
+                # Filter and download logos for compatible apps
+                for app in all_apps:
+                    if self.stop_background_tasks:
+                        return False
+
+                    # Check architecture compatibility
+                    app_arch = app.get('supported_arch', '')
+                    if app_arch:
+                        supported_archs = [arch.strip().lower() for arch in app_arch.split(',')]
+                        if not any(arch in compatible_archs for arch in supported_archs):
                             continue
 
-                    print("Refresh completed successfully!")
+                    logo_dir = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'])
+                    os.makedirs(logo_dir, exist_ok=True)
 
-                    # Update last refresh time
-                    with open(LAST_REFRESH_FILE, 'w') as f:
-                        f.write(str(time.time()))
+                    print(f"Downloading logo for {app['app_name']}...")
+                    logo_path = os.path.join(logo_dir, 'logo.png')
+                    command = f"aria2c -x 16 -s 16 {app['logo_url']} -d {logo_dir} -o logo.png"
+                    os.system(command)
 
-                    # Update UI in main thread
-                    if not self.stop_background_tasks:
-                        GLib.idle_add(self.refresh_complete)
+                    # Validate the logo size
+                    if not validate_logo_size(logo_path):
+                        continue
 
-                except json.JSONDecodeError as e:
-                    print(f"Failed to decode JSON: {str(e)}")
-                    GLib.idle_add(self.refresh_error, str(e))
-                    return False
+            # 7. Update last refresh time
+            with open(LAST_REFRESH_FILE, 'w') as f:
+                f.write(str(time.time()))
+
+            print("Refresh completed successfully!")
+            
+            # Update UI in main thread
+            if not self.stop_background_tasks:
+                GLib.idle_add(self.refresh_complete)
 
         except Exception as e:
             print(f"Error during refresh: {e}")
@@ -382,8 +384,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         return False
 
     def refresh_complete(self):
-        print('Refresh complete!')  # Log when refresh is complete
         """Called when refresh is complete"""
+        print('Refresh complete!')
         
         # Load app metadata first
         self.load_app_metadata()
@@ -400,6 +402,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Setup UI with the new data
         self.setup_app_list_ui()
+        
+        # Refresh the display to show updated buttons
+        self.show_apps()
         
         return False
 
@@ -757,10 +762,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if process.returncode == 0 and not self.installation_cancelled:
                         GLib.idle_add(update_progress, 0.95, "Finalizing installation...")
                         GLib.idle_add(lambda: self.update_installation_status(app['folder_name'], True))
+                        
+                        # Remove from pending updates if this was an update
+                        if app['folder_name'] in self.pending_updates:
+                            del self.pending_updates[app['folder_name']]
+                            self.save_pending_updates()
+                        
                         time.sleep(0.5)
                         GLib.idle_add(update_progress, 1.0, "Installation complete!")
                         time.sleep(1)
                         GLib.idle_add(progress_dialog.destroy)
+                        GLib.idle_add(self.show_apps)  # Refresh the UI
                     else:
                         GLib.idle_add(update_progress, 1.0, "Installation failed!")
                         time.sleep(2)
@@ -1081,11 +1093,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             is_installed = app['folder_name'] in self.installed_apps
 
             if is_installed:
-                if app.get('run_cmd') is not None:
+                has_update = app['folder_name'] in self.pending_updates
+                if has_update and app.get('install_url'):
+                    update_button = Gtk.Button(label="Update")
+                    update_button.get_style_context().add_class("update-button")
+                    update_button.connect("clicked", self.on_update_clicked, app)
+                    update_button.set_size_request(120, -1)
+                    button_box.pack_start(update_button, False, False, 0)
+                elif app.get('run_cmd') is not None:
                     open_button = Gtk.Button(label="Open")
                     open_button.get_style_context().add_class("open-button")
                     open_button.connect("clicked", self.on_open_clicked, app)
-                    open_button.set_size_request(120, -1)  # Match metadata label size
+                    open_button.set_size_request(120, -1)
                     button_box.pack_start(open_button, False, False, 0)
 
                 uninstall_button = Gtk.Button(label="Uninstall")
@@ -1203,6 +1222,266 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Handle Ctrl+Q accelerator"""
         self.on_delete_event(None, None)
         return True
+
+    def load_pending_updates(self):
+        """Load pending updates from tracking file"""
+        try:
+            if os.path.exists(self.updates_tracking_file):
+                print(f"Loading updates from {self.updates_tracking_file}")
+                with open(self.updates_tracking_file, 'r') as f:
+                    updates = json.load(f)
+                    print(f"Loaded updates: {updates}")
+                    return updates
+            else:
+                print(f"No updates file found at {self.updates_tracking_file}")
+                return {}
+        except Exception as e:
+            print(f"Error loading updates tracking: {e}")
+            return {}
+
+    def save_pending_updates(self):
+        """Save pending updates to tracking file"""
+        try:
+            os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
+            print(f"Saving updates to {self.updates_tracking_file}")
+            print(f"Updates to save: {self.pending_updates}")
+            with open(self.updates_tracking_file, 'w') as f:
+                json.dump(self.pending_updates, f, indent=2)
+            print(f"Successfully saved updates")
+        except Exception as e:
+            print(f"Error saving updates tracking: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def compare_versions(self, old_data, new_data):
+        """Compare versions between old and new apps.json"""
+        updates = {}
+        print("\nComparing versions:")
+        for new_app in new_data:
+            app_name = new_app['folder_name']
+            new_version = new_app.get('version')
+            
+            # Find corresponding app in old data
+            old_app = next((app for app in old_data if app['folder_name'] == app_name), None)
+            if old_app:
+                old_version = old_app.get('version')
+                print(f"Comparing {app_name}: old={old_version}, new={new_version}")
+                if new_version and old_version != new_version:
+                    print(f"Update found for {app_name}: {old_version} -> {new_version}")
+                    updates[app_name] = new_version
+        
+        print(f"Total updates found: {len(updates)}")
+        print(f"Updates: {updates}")
+        return updates
+
+    def on_update_clicked(self, button, app):
+        """Handle update button click"""
+        try:
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                flags=0,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.YES_NO,
+                text=f"Update {app['app_name']}?"
+            )
+            response = dialog.run()
+            dialog.destroy()
+
+            if response == Gtk.ResponseType.YES:
+                # Create progress dialog with fixed width but expandable height
+                progress_dialog = Gtk.Dialog(
+                    title="Updating...",
+                    parent=self,
+                    modal=True
+                )
+                progress_dialog.set_default_size(350, 150)  # Set initial size
+                progress_dialog.set_resizable(True)  # Allow resizing
+                
+                # Add minimize button to titlebar
+                header = Gtk.HeaderBar()
+                header.set_show_close_button(False)
+                minimize_button = Gtk.Button()
+                minimize_button.set_relief(Gtk.ReliefStyle.NONE)
+                minimize_icon = Gtk.Image.new_from_icon_name("window-minimize", Gtk.IconSize.MENU)
+                minimize_button.add(minimize_icon)
+                minimize_button.connect("clicked", lambda x: progress_dialog.iconify())
+                header.pack_end(minimize_button)
+                progress_dialog.set_titlebar(header)
+                
+                # Add cancel button and connect to response signal
+                cancel_button = progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+                
+                vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+                vbox.set_margin_start(10)
+                vbox.set_margin_end(10)
+                vbox.set_margin_top(10)
+                vbox.set_margin_bottom(10)
+                
+                # Status label with better text handling
+                status_label = Gtk.Label()
+                status_label.set_line_wrap(True)
+                status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+                status_label.set_justify(Gtk.Justification.LEFT)
+                status_label.set_halign(Gtk.Align.START)
+                status_label.set_text("Starting update...")
+                
+                # Create a scrolled window for status label that expands
+                scroll = Gtk.ScrolledWindow()
+                scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+                scroll.set_size_request(-1, 80)  # Minimum height
+                scroll.add(status_label)
+                vbox.pack_start(scroll, True, True, 0)  # Allow vertical expansion
+                
+                # Progress bar that expands horizontally
+                progress_bar = Gtk.ProgressBar()
+                progress_bar.set_show_text(True)
+                progress_bar.set_size_request(300, -1)
+                vbox.pack_start(progress_bar, False, True, 0)
+                
+                progress_dialog.get_content_area().add(vbox)
+                progress_dialog.show_all()
+
+                # Track current process and script path
+                current_process = {'process': None}
+                script_path = [None]  # Use list to allow modification in nested functions
+
+                def on_cancel_clicked(dialog, response_id):
+                    if response_id == Gtk.ResponseType.CANCEL:
+                        # Set cancellation flag
+                        self.installation_cancelled = True
+                        
+                        # Terminate current process if it exists
+                        if current_process['process']:
+                            try:
+                                current_process['process'].terminate()
+                                current_process['process'].wait()
+                            except:
+                                pass  # Process might have already ended
+                        
+                        # Clean up script if it exists
+                        if script_path[0] and os.path.exists(script_path[0]):
+                            try:
+                                os.remove(script_path[0])
+                            except:
+                                pass
+                        
+                        dialog.destroy()
+
+                # Connect the response signal
+                progress_dialog.connect('response', on_cancel_clicked)
+
+                def update_progress(fraction, status_text):
+                    if not status_text:
+                        return False
+                    
+                    # Parse aria2c download progress format
+                    if '[#' in status_text and ']' in status_text:
+                        # Extract progress details from aria2c output
+                        progress_part = status_text[status_text.find('['):status_text.find(']')+1]
+                        file_part = status_text[status_text.find(']')+1:].strip()
+                        
+                        # Format the status text to show both progress and file
+                        status_label.set_text(f"{progress_part}\n{file_part}")
+                    elif isinstance(status_text, str) and status_text.strip():
+                        status_label.set_text(status_text)
+                    
+                    progress_bar.set_fraction(fraction)
+                    progress_bar.set_text(f"{int(fraction * 100)}%")
+                    return False
+
+                def install_thread():
+                    try:
+                        # Download script (20%)
+                        GLib.idle_add(update_progress, 0.2, "Downloading install script...")
+                        script_path[0] = self.download_script(app['install_url'])
+                        if not script_path[0] or self.installation_cancelled:
+                            if script_path[0] and os.path.exists(script_path[0]):
+                                os.remove(script_path[0])
+                            GLib.idle_add(progress_dialog.destroy)
+                            return
+
+                        # Make script executable (30%)
+                        GLib.idle_add(update_progress, 0.3, "Preparing update...")
+                        os.chmod(script_path[0], os.stat(script_path[0]).st_mode | stat.S_IEXEC)
+
+                        # Execute script with better progress tracking
+                        GLib.idle_add(update_progress, 0.4, "Starting update...")
+                        process = subprocess.Popen(
+                            ['bash', script_path[0]],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            universal_newlines=True,
+                            bufsize=1
+                        )
+                        
+                        # Store process reference for cancellation
+                        current_process['process'] = process
+
+                        for line in process.stdout:
+                            if self.installation_cancelled:
+                                process.terminate()
+                                process.wait()
+                                GLib.idle_add(progress_dialog.destroy)
+                                return
+
+                            line = line.strip()
+                            progress = 0.4
+
+                            # Update progress based on specific actions
+                            if "download" in line.lower():
+                                progress = 0.5
+                            elif "extracting" in line.lower() or "tar" in line.lower():
+                                progress = 0.7
+                            elif "installing" in line.lower():
+                                progress = 0.8
+                            elif "creating desktop entry" in line.lower():
+                                progress = 0.9
+
+                            if line:  # Only update if line is not empty
+                                GLib.idle_add(update_progress, progress, line)
+
+                        process.wait()
+                        if process.returncode == 0 and not self.installation_cancelled:
+                            GLib.idle_add(update_progress, 0.95, "Finalizing update...")
+                            
+                            # Remove from pending updates
+                            if app['folder_name'] in self.pending_updates:
+                                self.pending_updates.remove(app['folder_name'])
+                                self.save_pending_updates()
+                            
+                            time.sleep(0.5)
+                            GLib.idle_add(update_progress, 1.0, "Update complete!")
+                            time.sleep(1)
+                            GLib.idle_add(progress_dialog.destroy)
+                            GLib.idle_add(self.show_apps)  # Refresh the UI
+                        else:
+                            GLib.idle_add(update_progress, 1.0, "Update failed!")
+                            time.sleep(2)
+                            GLib.idle_add(progress_dialog.destroy)
+
+                    except Exception as e:
+                        print(f"Update error: {str(e)}")
+                        GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
+                        time.sleep(2)
+                        GLib.idle_add(progress_dialog.destroy)
+                    
+                    finally:
+                        current_process['process'] = None
+                        if script_path[0] and os.path.exists(script_path[0]):
+                            try:
+                                os.remove(script_path[0])
+                                print(f"Cleaned up script: {script_path[0]}")
+                            except Exception as e:
+                                print(f"Error cleaning up script: {e}")
+
+                thread = threading.Thread(target=install_thread)
+                thread.daemon = True
+                thread.start()
+
+        except Exception as e:
+            print(f"Error in update process: {e}")
+            import traceback
+            traceback.print_exc()
 
 def main():
     app = AppStoreApplication()

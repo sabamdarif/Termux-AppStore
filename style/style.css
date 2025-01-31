@@ -79,12 +79,17 @@ window {
 }
 
 /* Buttons */
-.install-button {
-    background: #2ecc71;
+.install-button, .uninstall-button, .open-button {
     color: white;
     border: none;
     border-radius: 4px;
-    padding: 6px 12px;
+    padding: 4px 8px;  /* Reduced padding */
+    min-width: 120px;  /* Match metadata label size */
+    font-size: 12px;   /* Match metadata label font size */
+}
+
+.install-button {
+    background: #2ecc71;
 }
 
 .install-button:hover {
@@ -93,14 +98,18 @@ window {
 
 .uninstall-button {
     background: #e74c3c;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 6px 12px;
 }
 
 .uninstall-button:hover {
     background: #c0392b;
+}
+
+.open-button {
+    background: #2ecc71;
+}
+
+.open-button:hover {
+    background: #27ae60;
 }
 
 /* Refresh button */
@@ -209,23 +218,18 @@ window {
     font-size: 12px;
 }
 
-/* Source type label */
-.source-type-label {
+/* Metadata labels (for both version and source type) */
+.metadata-label {
     color: #888888;
     font-size: 12px;
     padding: 4px 8px;
     border: 1px solid #444444;
     border-radius: 4px;
     background-color: #333333;
+    min-width: 120px;  /* Ensure minimum width */
 }
 
-.open-button {
-    background: #2ecc71;
-    color: white;
-    padding: 6px 12px;
-    border-radius: 4px;
-}
-
-.open-button:hover {
-    background: #27ae60;
+/* Remove the old source-type-label class as it's replaced by metadata-label */
+.source-type-label {
+    /* Remove this class or keep it for backward compatibility */
 }

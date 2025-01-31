@@ -5,12 +5,13 @@ version=1.7.7
 app_type="distro"
 supported_distro="all"
 # working_dir="${distro_path}/opt/AppImageLauncher"
+page_url="https://github.com/obsidianmd/obsidian-releases"
 run_cmd="pdrun /opt/AppImageLauncher/Obsidian/obsidian --no-sandbox"
 
 cd ${TMPDIR}
 
 print_success "Downloading Obsidian AppImage..."
-download_file "https://github.com/obsidianmd/obsidian-releases/releases/download/v${version}/Obsidian-${version}-${supported_arch}.AppImage"
+download_file "${page_url}/download/v${version}/Obsidian-${version}-${supported_arch}.AppImage"
 install_appimage "Obsidian-${version}-${supported_arch}.AppImage" "Obsidian"
 
 print_success "Downloading and installing icons..."

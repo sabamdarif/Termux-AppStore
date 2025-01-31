@@ -5,13 +5,14 @@ version=1.7.2b
 app_type="distro"
 supported_distro="all"
 working_dir="${distro_path}/opt"
+page_url="https://github.com/zen-browser/desktop"
 run_cmd="pdrun zen-browser"
 
 # chown -R $(whoami):$(whoami) ${distro_path}
 cd $working_dir
 check_and_delete "zen zen-browser zen-browser-arm64-copr"
 echo "$(pwd)"
-download_file "https://github.com/zen-browser/desktop/releases/download/${version}/zen.linux-${supported_arch}.tar.bz2"
+download_file "${page_url}/releases/download/${version}/zen.linux-${supported_arch}.tar.bz2"
 tar -xvjf zen.linux-${supported_arch}.tar.bz2
 check_and_delete "zen.linux-${supported_arch}.tar.bz2"
 mv zen zen-browser

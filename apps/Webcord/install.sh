@@ -4,8 +4,8 @@ supported_arch="arm64,arm"
 version=4.10.2
 app_type="distro"
 supported_distro="all"
-working_dir="${distro_path}"
-run_cmd="pdrun /opt/AppImageLauncher/Webcord/webcord --no-sandbox"
+working_dir="${distro_path}/root"
+page_url="https://github.com/SpacingBat3/WebCord"
 
 app_arch=$(uname -m)
 case "$app_arch" in
@@ -13,8 +13,14 @@ case "$app_arch" in
     armv7*|arm) archtype="armv7l" ;;
 esac
 
-if [[ "$archtype" == "arm" ]]; then
-  cd $working_dir/opt/AppImageLauncher
+if [[ "$archtype" == "armv7l" ]]; then
+run_cmd="pdrun /opt/AppImageLauncher/Webcord/webcord --no-sandbox"
+else
+run_cmd="pdrun webcord --no-sandbox"
+fi
+
+if [[ "$archtype" == "armv7l" ]]; then
+  cd ${distro_path}/opt/AppImageLauncher
   download_file "https://github.com/SpacingBat3/WebCord/releases/download/v${version}/webcord_${version}_${archtype}.AppImage"
   install_appimage "webcord_${version}_${archtype}.AppImage" "Webcord"
 else

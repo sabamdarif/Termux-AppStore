@@ -233,3 +233,17 @@ window {
 .source-type-label {
     /* Remove this class or keep it for backward compatibility */
 }
+
+.update-button {
+    background: #f39c12;  /* Orange color for updates */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    min-width: 120px;
+    font-size: 12px;
+}
+
+.update-button:hover {
+    background: #d35400;
+}

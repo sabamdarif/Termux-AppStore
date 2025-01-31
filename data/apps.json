@@ -6,9 +6,11 @@
     "categories": [
       "Multimedia"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "audacity",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/icon-64.png"
@@ -20,9 +22,11 @@
     "categories": [
       "Internet"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "/data/data/com.termux/files/usr/bin/chromium-browser",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Chromium/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Chromium/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Chromium/icon-64.png"
@@ -34,9 +38,11 @@
     "categories": [
       "Development"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "code-oss",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Code-oss/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Code-oss/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Code-oss/logo.png"
@@ -48,9 +54,11 @@
     "categories": [
       "Graphics"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "/data/data/com.termux/files/usr/bin/darktable",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Darktable/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Darktable/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Darktable/logo.png"
@@ -62,8 +70,11 @@
     "categories": [
       "Accessories"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
+    "run_cmd": null,
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/icon-64.png"
@@ -75,9 +86,11 @@
     "categories": [
       "Graphics"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "gimp",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/GIMP/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/GIMP/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/GIMP/icon-64.png"
@@ -90,9 +103,11 @@
       "Office",
       "Accessories"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "gedit",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gedit/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gedit/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gedit/logo.png"
@@ -105,8 +120,11 @@
       "Development",
       "Accessories"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
+    "run_cmd": null,
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/logo.png"
@@ -118,11 +136,11 @@
     "categories": [
       "Development"
     ],
+    "app_type": "distro",
+    "run_cmd": "pdrun github-desktop --no-sandbox",
     "supported_arch": "aarch64,arm",
     "version": "3.4.8-linux1",
-    "app_type": "distro",
     "supported_distro": "all",
-    "run_cmd": "pdrun github-desktop",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/icon-64.png"
@@ -134,9 +152,11 @@
     "categories": [
       "Multimedia"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "ghb",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Handbrake/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Handbrake/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Handbrake/logo.png"
@@ -149,8 +169,11 @@
       "Accessories",
       "Games"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
+    "run_cmd": null,
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hangover/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hangover/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hangover/icon-64.png"
@@ -162,9 +185,11 @@
     "categories": [
       "Graphics"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "inkscape",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Inkscape/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Inkscape/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Inkscape/icon-64.png"
@@ -177,9 +202,11 @@
       "Multimedia",
       "Graphics"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "kdenlive",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/icon-64.png"
@@ -192,10 +219,11 @@
       "Productivity",
       "Office"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "distro",
-    "supported_distro": "all",
     "run_cmd": "libreoffice",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": "all",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/icon-64.png"
@@ -207,8 +235,11 @@
     "categories": [
       "Accessories"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
+    "run_cmd": null,
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Neofetch/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Neofetch/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Neofetch/icon-64.png"
@@ -221,11 +252,11 @@
       "Development",
       "Accessories"
     ],
+    "app_type": "distro",
+    "run_cmd": "pdrun /opt/AppImageLauncher/Obsidian/obsidian --no-sandbox",
     "supported_arch": "arm64",
     "version": "1.7.7",
-    "app_type": "distro",
     "supported_distro": "all",
-    "run_cmd": "pdrun /opt/AppImageLauncher/Obsidian/obsidian --no-sandbox",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Obsidian/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Obsidian/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Obsidian/icon-64.png"
@@ -237,9 +268,11 @@
     "categories": [
       "Multimedia"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "rhythmbox",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rhythmbox/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rhythmbox/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rhythmbox/logo.png"
@@ -251,8 +284,11 @@
     "categories": [
       "Accessories"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
+    "run_cmd": null,
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Scrcpy/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Scrcpy/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Scrcpy/icon-64.png"
@@ -265,9 +301,11 @@
       "Multimedia",
       "Graphics"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "shotcut",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/logo.png"
@@ -280,10 +318,11 @@
       "Internet",
       "Multimedia"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "distro",
-    "supported_distro": "all",
     "run_cmd": "telegram-desktop",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": "all",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/icon-64.png"
@@ -295,9 +334,11 @@
     "categories": [
       "Internet"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "thunderbird",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Thunderbird/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Thunderbird/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Thunderbird/icon-64.png"
@@ -309,9 +350,11 @@
     "categories": [
       "Office"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "transmission-gtk",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/icon-64.png"
@@ -323,10 +366,11 @@
     "categories": [
       "Development"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "distro",
-    "supported_distro": "all",
     "run_cmd": "pdrun /usr/share/code/code --no-sandbox",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": "all",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/icon-64.png"
@@ -339,11 +383,11 @@
       "Internet",
       "Multimedia"
     ],
+    "app_type": "distro",
+    "run_cmd": "pdrun webcord --no-sandbox",
     "supported_arch": "arm64,arm",
     "version": "4.10.2",
-    "app_type": "distro",
     "supported_distro": "all",
-    "run_cmd": "pdrun /opt/AppImageLauncher/Webcord/webcord --no-sandbox",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/icon-64.png"
@@ -357,9 +401,11 @@
       "Office",
       "Accessories"
     ],
-    "supported_arch": "aarch64,arm",
     "app_type": "native",
     "run_cmd": "xpdf",
+    "supported_arch": "aarch64,arm",
+    "version": null,
+    "supported_distro": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/logo.png"
@@ -371,11 +417,11 @@
     "categories": [
       "Internet"
     ],
+    "app_type": "distro",
+    "run_cmd": "pdrun zen-browser",
     "supported_arch": "aarch64",
     "version": "1.7.2b",
-    "app_type": "distro",
     "supported_distro": "all",
-    "run_cmd": "pdrun zen-browser",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/icon-64.png"
@@ -387,11 +433,11 @@
     "categories": [
       "Multimedia"
     ],
+    "app_type": "both",
+    "run_cmd": "vlc",
     "supported_arch": "aarch64,arm",
     "version": "3.0.24",
-    "app_type": "both",
     "supported_distro": "all",
-    "run_cmd": "vlc",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/logo.png"

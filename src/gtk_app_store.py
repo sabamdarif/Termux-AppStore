@@ -303,7 +303,28 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     with open(APPSTORE_JSON, 'r') as f:
                         new_data = json.load(f)
 
-                    # Compare versions for installed apps only
+                    # Update versions for native apps using package manager
+                    for app in new_data:
+                        if app['app_type'] == 'native' and app.get('version') == 'termux_local_version' and app.get('package_name'):
+                            # Get latest version from package manager
+                            cmd = f"source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                            cmd += f"if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                            cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
+                            cmd += f"elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                            cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
+                            
+                            try:
+                                result = subprocess.run(['bash', '-c', cmd], 
+                                                     capture_output=True, 
+                                                     text=True, 
+                                                     timeout=10)
+                                if result.returncode == 0 and result.stdout.strip():
+                                    app['version'] = result.stdout.strip()
+                                    print(f"Updated version for {app['app_name']}: {app['version']}")
+                            except Exception as e:
+                                print(f"Error getting version for {app['app_name']}: {e}")
+
+                    # Compare versions for installed apps
                     for app_name in self.installed_apps:
                         old_app = next((app for app in old_data if app['folder_name'] == app_name), None)
                         new_app = next((app for app in new_data if app['folder_name'] == app_name), None)
@@ -314,6 +335,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if old_version != new_version:
                                 print(f"Update found for {app_name}: {old_version} -> {new_version}")
                                 updates[app_name] = new_version
+
+                    # Save the updated metadata back to apps.json
+                    with open(APPSTORE_JSON, 'w') as f:
+                        json.dump(new_data, f, indent=2)
 
                     # Save updates to updates.json
                     if updates:

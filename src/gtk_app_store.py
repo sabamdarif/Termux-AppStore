@@ -477,6 +477,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def load_app_metadata(self):
         """Load app metadata from the centralized JSON file"""
         try:
+            # First check Termux Desktop configuration
+            termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            distro_enabled = False
+            selected_distro = None
+            
+            if os.path.exists(termux_desktop_config):
+                try:
+                    with open(termux_desktop_config, 'r') as f:
+                        for line in f:
+                            if line.startswith('distro_add_answer='):
+                                distro_enabled = line.strip().split('=')[1].lower() == 'y'
+                            elif line.startswith('selected_distro='):
+                                selected_distro = line.strip().split('=')[1].lower()
+                except Exception as e:
+                    print(f"Error reading Termux Desktop config: {e}")
+            else:
+                print("Warning: Termux Desktop not installed")
+
             with open(APPSTORE_JSON) as f:
                 all_apps = json.load(f)
                 
@@ -485,9 +503,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print(f"System architecture: {self.system_arch}")
             print(f"Compatible architectures: {compatible_archs}")
             
-            # Filter apps based on architecture compatibility
+            # Filter apps based on architecture compatibility and distro settings
             self.apps_data = []
             for app in all_apps:
+                # Skip distro apps if distro is not enabled
+                if app.get('app_type') == 'distro':
+                    if not distro_enabled:
+                        print(f"Skipping distro app {app['app_name']}: distro support disabled")
+                        continue
+                        
+                    # Check distro compatibility
+                    supported_distro = app.get('supported_distro')
+                    if supported_distro and supported_distro != 'all' and supported_distro != selected_distro:
+                        print(f"Skipping incompatible distro app {app['app_name']}: requires {supported_distro}, but using {selected_distro}")
+                        continue
+                
+                # Check architecture compatibility
                 app_arch = app.get('supported_arch', '')
                 if not app_arch:  # If no architecture specified, assume compatible
                     self.apps_data.append(app)

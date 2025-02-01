@@ -2,7 +2,7 @@
 
 supported_arch="aarch64,arm"
 package_name="code"
-# version=2.34.1
+version=distro_local_version
 app_type="distro"
 supported_distro="all"
 # working_dir="${distro_path}"

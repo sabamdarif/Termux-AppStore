@@ -3,7 +3,7 @@
 supported_arch="aarch64,arm"
 package_name="vlc"
 version=termux_local_version
-app_type="both"
+app_type="native"
 supported_distro="all"
 run_cmd="vlc"
 

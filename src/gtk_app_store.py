@@ -212,10 +212,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def check_for_updates(self):
         print('Checking for updates...')
         try:
-            self.spinner.show()
-            self.spinner.start()
-            self.loading_label.show()
-
             if not os.path.exists(APPSTORE_JSON):
                 self.start_refresh(is_manual=False)
                 return
@@ -226,7 +222,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if datetime.now() - last_refresh > timedelta(days=7):
                         self.start_refresh(is_manual=False)
                     else:
+                        # Load app metadata and setup UI first
                         thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
+                        thread.daemon = True
+                        thread.start()
+
+                        # Start another thread for version updates
+                        thread = threading.Thread(target=self.update_app_versions)
                         thread.daemon = True
                         thread.start()
             else:
@@ -234,6 +236,121 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error checking updates: {e}")
             self.start_refresh(is_manual=False)
+
+    def update_app_versions(self):
+        """Update versions for all apps in the background"""
+        try:
+            with open(APPSTORE_JSON, 'r') as f:
+                all_apps = json.load(f)
+            
+            # Check Termux Desktop configuration first
+            termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            distro_enabled = False
+            selected_distro = None
+            
+            if os.path.exists(termux_desktop_config):
+                try:
+                    with open(termux_desktop_config, 'r') as f:
+                        for line in f:
+                            if line.startswith('distro_add_answer='):
+                                distro_enabled = line.strip().split('=')[1].lower() == 'y'
+                            elif line.startswith('selected_distro='):
+                                selected_distro = line.strip().split('=')[1].lower()
+                except Exception as e:
+                    print(f"Error reading Termux Desktop config: {e}")
+            else:
+                print("Warning: Termux Desktop not installed")
+
+            # Update native app versions
+            for app in all_apps:
+                if (app['app_type'] == 'native' and 
+                    app.get('version') == 'termux_local_version' and 
+                    app.get('package_name')):
+                    cmd = f"source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                    cmd += f"if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                    cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
+                    cmd += f"elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                    cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
+                    
+                    try:
+                        result = subprocess.run(['bash', '-c', cmd], 
+                                             capture_output=True, 
+                                             text=True, 
+                                             timeout=10)
+                        if result.returncode == 0 and result.stdout.strip():
+                            app['version'] = result.stdout.strip()
+                            print(f"Updated version for {app['app_name']}: {app['version']}")
+                    except Exception as e:
+                        print(f"Error getting version for {app['app_name']}: {e}")
+
+            # Update distro app versions if distro is enabled
+            if distro_enabled and selected_distro:
+                # First check if proot-distro is working correctly
+                test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
+                try:
+                    test_result = subprocess.run(['bash', '-c', test_cmd],
+                                              capture_output=True,
+                                              text=True,
+                                              timeout=10)
+                    if test_result.returncode != 0:
+                        print(f"Error: proot-distro test failed for {selected_distro}")
+                        print(f"Stderr: {test_result.stderr}")
+                        return
+                except Exception as e:
+                    print(f"Error testing proot-distro: {e}")
+                    return
+
+                # Process all distro apps
+                for app in all_apps:
+                    if (app.get('app_type') == 'distro' and 
+                        app.get('version') == 'distro_local_version'):
+                        
+                        supported_distro = app.get('supported_distro')
+                        if supported_distro != 'all' and supported_distro != selected_distro:
+                            print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
+                            continue
+
+                        # Use app name as package name if not specified
+                        package_name = app.get('package_name') or app.get('run_cmd')
+                        if not package_name:
+                            print(f"Skipping {app['app_name']}: no package name or run command found")
+                            continue
+
+                        print(f"Checking version for {app['app_name']}...")
+                        cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
+                        
+                        if selected_distro in ['ubuntu', 'debian']:
+                            cmd += f"'latest_version=$(apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\") && echo \"$latest_version\"'"
+                        elif selected_distro == 'fedora':
+                            cmd += f"'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \") && echo \"$latest_version\"'"
+                        elif selected_distro == 'archlinux':
+                            cmd += f"'latest_version=$(pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\") && echo \"$latest_version\"'"
+
+                        try:
+                            result = subprocess.run(['bash', '-c', cmd], 
+                                                 capture_output=True, 
+                                                 text=True, 
+                                                 timeout=30)
+                            if result.returncode == 0 and result.stdout.strip():
+                                app['version'] = result.stdout.strip()
+                                print(f"Updated version for distro app {app['app_name']}: {app['version']}")
+                            else:
+                                print(f"Failed to get version for {app['app_name']}")
+                                if result.stderr:
+                                    print(f"Error: {result.stderr}")
+                        except Exception as e:
+                            print(f"Error getting version for distro app {app['app_name']}: {e}")
+                            continue
+
+            # Save updated versions
+            with open(APPSTORE_JSON, 'w') as f:
+                json.dump(all_apps, f, indent=2)
+
+            # Refresh the UI to show updated versions
+            GLib.idle_add(self.show_apps)
+
+        except Exception as e:
+            print(f"Error updating app versions: {e}")
 
     def load_app_metadata_and_setup_ui(self):
         """Load app metadata and set up UI in the background"""
@@ -293,64 +410,96 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 GLib.idle_add(self.refresh_error, "Failed to download apps.json")
                 return False
 
-            # 4. Compare versions and check for updates
-            updates = {}
-            if os.path.exists(old_json_path):
+            # 4. Load and update versions
+            print("Updating app versions...")
+            with open(APPSTORE_JSON, 'r') as f:
+                all_apps = json.load(f)
+
+            # Update native app versions
+            for app in all_apps:
+                if (app['app_type'] == 'native' and 
+                    app.get('version') == 'termux_local_version' and 
+                    app.get('package_name')):
+                    cmd = f"source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                    cmd += f"if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                    cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
+                    cmd += f"elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                    cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
+                    
+                    try:
+                        result = subprocess.run(['bash', '-c', cmd], 
+                                             capture_output=True, 
+                                             text=True, 
+                                             timeout=10)
+                        if result.returncode == 0 and result.stdout.strip():
+                            app['version'] = result.stdout.strip()
+                            print(f"Updated version for {app['app_name']}: {app['version']}")
+                    except Exception as e:
+                        print(f"Error getting version for {app['app_name']}: {e}")
+
+            # Check Termux Desktop configuration
+            termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            distro_enabled = False
+            selected_distro = None
+            
+            if os.path.exists(termux_desktop_config):
                 try:
-                    # Load old and new data
-                    with open(old_json_path, 'r') as f:
-                        old_data = json.load(f)
-                    with open(APPSTORE_JSON, 'r') as f:
-                        new_data = json.load(f)
-
-                    # Update versions for native apps using package manager
-                    for app in new_data:
-                        if app['app_type'] == 'native' and app.get('version') == 'termux_local_version' and app.get('package_name'):
-                            # Get latest version from package manager
-                            cmd = f"source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
-                            cmd += f"if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
-                            cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
-                            cmd += f"elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
-                            cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
-                            
-                            try:
-                                result = subprocess.run(['bash', '-c', cmd], 
-                                                     capture_output=True, 
-                                                     text=True, 
-                                                     timeout=10)
-                                if result.returncode == 0 and result.stdout.strip():
-                                    app['version'] = result.stdout.strip()
-                                    print(f"Updated version for {app['app_name']}: {app['version']}")
-                            except Exception as e:
-                                print(f"Error getting version for {app['app_name']}: {e}")
-
-                    # Compare versions for installed apps
-                    for app_name in self.installed_apps:
-                        old_app = next((app for app in old_data if app['folder_name'] == app_name), None)
-                        new_app = next((app for app in new_data if app['folder_name'] == app_name), None)
-                        
-                        if old_app and new_app:
-                            old_version = old_app.get('version')
-                            new_version = new_app.get('version')
-                            if old_version != new_version:
-                                print(f"Update found for {app_name}: {old_version} -> {new_version}")
-                                updates[app_name] = new_version
-
-                    # Save the updated metadata back to apps.json
-                    with open(APPSTORE_JSON, 'w') as f:
-                        json.dump(new_data, f, indent=2)
-
-                    # Save updates to updates.json
-                    if updates:
-                        print(f"Saving updates to {self.updates_tracking_file}")
-                        self.pending_updates = updates
-                        self.save_pending_updates()
-                        print(f"Updates saved: {updates}")
-
+                    with open(termux_desktop_config, 'r') as f:
+                        for line in f:
+                            if line.startswith('distro_add_answer='):
+                                distro_enabled = line.strip().split('=')[1].lower() == 'y'
+                            elif line.startswith('selected_distro='):
+                                selected_distro = line.strip().split('=')[1].lower()
                 except Exception as e:
-                    print(f"Error comparing versions: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    print(f"Error reading Termux Desktop config: {e}")
+
+            # Update distro app versions if distro is enabled
+            if distro_enabled and selected_distro:
+                for app in all_apps:
+                    if (app.get('app_type') == 'distro' and 
+                        app.get('version') == 'distro_local_version'):
+                        
+                        supported_distro = app.get('supported_distro')
+                        if supported_distro != 'all' and supported_distro != selected_distro:
+                            continue
+
+                        package_name = app.get('package_name') or app.get('run_cmd')
+                        if not package_name:
+                            continue
+
+                        cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
+                        
+                        if selected_distro in ['ubuntu', 'debian']:
+                            cmd += f"'latest_version=$(apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\") && echo \"$latest_version\"'"
+                        elif selected_distro == 'fedora':
+                            cmd += f"'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \") && echo \"$latest_version\"'"
+                        elif selected_distro == 'archlinux':
+                            cmd += f"'latest_version=$(pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\") && echo \"$latest_version\"'"
+
+                        try:
+                            result = subprocess.run(['bash', '-c', cmd], 
+                                                 capture_output=True, 
+                                                 text=True, 
+                                                 timeout=30)
+                            if result.returncode == 0 and result.stdout.strip():
+                                app['version'] = result.stdout.strip()
+                                print(f"Updated version for distro app {app['app_name']}: {app['version']}")
+                            else:
+                                print(f"Command failed for {app['app_name']}")
+                                print(f"Return code: {result.returncode}")
+                                print(f"Stdout: {result.stdout}")
+                                print(f"Stderr: {result.stderr}")
+                                
+                        except subprocess.TimeoutExpired:
+                            print(f"Command timed out for {app['app_name']} after 30 seconds")
+                            continue
+                        except Exception as e:
+                            print(f"Error getting version for distro app {app['app_name']}: {str(e)}")
+                            continue
+
+            # Save updated versions
+            with open(APPSTORE_JSON, 'w') as f:
+                json.dump(all_apps, f, indent=2)
 
             # 5. Now handle logo directory
             if os.path.exists(APPSTORE_LOGO_DIR):
@@ -358,36 +507,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 shutil.rmtree(APPSTORE_LOGO_DIR)
             os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
 
-            # 6. Download logos for compatible apps
-            with open(APPSTORE_JSON, 'r') as f:
-                all_apps = json.load(f)
-                
-                # Get compatible architectures for the system
-                compatible_archs = self.arch_compatibility.get(self.system_arch, [self.system_arch])
-                
-                # Filter and download logos for compatible apps
-                for app in all_apps:
-                    if self.stop_background_tasks:
-                        return False
+            # 6. Download logos
+            for app in all_apps:
+                if self.stop_background_tasks:
+                    return False
 
-                    # Check architecture compatibility
-                    app_arch = app.get('supported_arch', '')
-                    if app_arch:
-                        supported_archs = [arch.strip().lower() for arch in app_arch.split(',')]
-                        if not any(arch in compatible_archs for arch in supported_archs):
-                            continue
+                logo_dir = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'])
+                os.makedirs(logo_dir, exist_ok=True)
 
-                    logo_dir = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'])
-                    os.makedirs(logo_dir, exist_ok=True)
+                print(f"Downloading logo for {app['app_name']}...")
+                logo_path = os.path.join(logo_dir, 'logo.png')
+                command = f"aria2c -x 16 -s 16 {app['logo_url']} -d {logo_dir} -o logo.png"
+                os.system(command)
 
-                    print(f"Downloading logo for {app['app_name']}...")
-                    logo_path = os.path.join(logo_dir, 'logo.png')
-                    command = f"aria2c -x 16 -s 16 {app['logo_url']} -d {logo_dir} -o logo.png"
-                    os.system(command)
-
-                    # Validate the logo size
-                    if not validate_logo_size(logo_path):
-                        continue
+                # Validate the logo size
+                if not validate_logo_size(logo_path):
+                    continue
 
             # 7. Update last refresh time
             with open(LAST_REFRESH_FILE, 'w') as f:
@@ -497,6 +632,56 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             with open(APPSTORE_JSON) as f:
                 all_apps = json.load(f)
+                
+            # Update versions for distro apps if distro is enabled
+            if distro_enabled and selected_distro:
+                for app in all_apps:
+                    if (app.get('app_type') == 'distro' and 
+                        app.get('version') == 'distro_local_version' and
+                        app.get('package_name')):
+                        
+                        supported_distro = app.get('supported_distro')
+                        if supported_distro != 'all' and supported_distro != selected_distro:
+                            continue
+
+                        print(f"Checking version for {app['app_name']}...")
+
+                        # Prepare command based on distro type
+                        cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
+                        
+                        if selected_distro in ['ubuntu', 'debian']:
+                            cmd += f"'latest_version=$(apt-cache policy {app['package_name']} | grep Candidate: | awk \"{{print \\$2}}\") && echo \"$latest_version\"'"
+                        elif selected_distro == 'fedora':
+                            cmd += f"'latest_version=$(dnf info {app['package_name']} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \") && echo \"$latest_version\"'"
+                        elif selected_distro == 'archlinux':
+                            cmd += f"'latest_version=$(pacman -Si {app['package_name']} 2>/dev/null | grep Version | awk \"{{print \\$3}}\") && echo \"$latest_version\"'"
+
+                        try:
+                            print(f"Running command: {cmd}")
+                            result = subprocess.run(['bash', '-c', cmd], 
+                                                 capture_output=True, 
+                                                 text=True, 
+                                                 timeout=30)  # Increased timeout to 30 seconds
+                            
+                            if result.returncode == 0 and result.stdout.strip():
+                                app['version'] = result.stdout.strip()
+                                print(f"Updated version for distro app {app['app_name']}: {app['version']}")
+                            else:
+                                print(f"Command failed for {app['app_name']}")
+                                print(f"Return code: {result.returncode}")
+                                print(f"Stdout: {result.stdout}")
+                                print(f"Stderr: {result.stderr}")
+                                
+                        except subprocess.TimeoutExpired:
+                            print(f"Command timed out for {app['app_name']} after 30 seconds")
+                            continue
+                        except Exception as e:
+                            print(f"Error getting version for distro app {app['app_name']}: {str(e)}")
+                            continue
+
+                # Save the updated metadata back to apps.json
+                with open(APPSTORE_JSON, 'w') as f:
+                    json.dump(all_apps, f, indent=2)
                 
             # Get compatible architectures for the system
             compatible_archs = self.arch_compatibility.get(self.system_arch, [self.system_arch])
@@ -1135,11 +1320,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Version label (right side of bottom row)
             version_label = Gtk.Label()
-            version = app.get('version')
-            if version:
-                version_label.set_markup(f"Version: {version}")
+            version = app.get('version', '')
+            if version in ['termux_local_version', 'distro_local_version']:
+                version_label.set_text("Unavailable")
             else:
-                version_label.set_markup("Version: Unavailable")
+                version_label.set_text(version)
             version_label.get_style_context().add_class("metadata-label")
             version_label.set_size_request(120, -1)
             version_label.set_halign(Gtk.Align.CENTER)

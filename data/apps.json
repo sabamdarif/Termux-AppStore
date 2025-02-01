@@ -235,7 +235,7 @@
     "app_type": "distro",
     "run_cmd": "libreoffice",
     "supported_arch": "aarch64,arm",
-    "version": "termux_local_version",
+    "version": "distro_local_version",
     "supported_distro": "all",
     "package_name": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/install.sh",
@@ -340,7 +340,7 @@
     "app_type": "distro",
     "run_cmd": "telegram-desktop",
     "supported_arch": "aarch64,arm",
-    "version": null,
+    "version": "distro_local_version",
     "supported_distro": "all",
     "package_name": null,
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/install.sh",
@@ -382,6 +382,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/icon-64.png"
   },
   {
+    "app_name": "VLC",
+    "folder_name": "VLC",
+    "description": "VLC is a free and open source cross-platform multimedia player that plays most multimedia files and various streaming protocols.",
+    "categories": [
+      "Multimedia"
+    ],
+    "app_type": "native",
+    "run_cmd": "vlc",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "supported_distro": null,
+    "package_name": "vlc",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/VLC/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/VLC/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/VLC/logo.png"
+  },
+  {
     "app_name": "Visual Studio Code",
     "folder_name": "Visual-Studio-Code",
     "description": "Visual Studio Code is a free source-code editor made by Microsoft with support for debugging, syntax highlighting, and intelligent code completion.",
@@ -391,7 +408,7 @@
     "app_type": "distro",
     "run_cmd": "pdrun /usr/share/code/code --no-sandbox",
     "supported_arch": "aarch64,arm",
-    "version": null,
+    "version": "distro_local_version",
     "supported_distro": "all",
     "package_name": "code",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/install.sh",
@@ -451,22 +468,5 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/icon-64.png"
-  },
-  {
-    "app_name": "vlc",
-    "folder_name": "vlc",
-    "description": "VLC is a free and open source cross-platform multimedia player that plays most multimedia files and various streaming protocols.",
-    "categories": [
-      "Multimedia"
-    ],
-    "app_type": "both",
-    "run_cmd": "vlc",
-    "supported_arch": "aarch64,arm",
-    "version": "termux_local_version",
-    "supported_distro": "all",
-    "package_name": "vlc",
-    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/install.sh",
-    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/uninstall.sh",
-    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/vlc/logo.png"
   }
 ]

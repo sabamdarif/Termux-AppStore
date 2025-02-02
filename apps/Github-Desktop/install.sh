@@ -2,6 +2,7 @@
 
 supported_arch="aarch64,arm"
 version=release-3.4.8-linux1
+final_version="${version#release-}"
 app_type="distro"
 supported_distro="all"
 working_dir="${distro_path}/root"
@@ -17,12 +18,12 @@ esac
 
 if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]]; then
     cd $working_dir
-    download_file "${page_url}/download/release-${version}/GitHubDesktop-linux-${archtype}-${version}.deb"
+    download_file "${page_url}/download/release-${final_version}/GitHubDesktop-linux-${archtype}-${version}.deb"
     distro_run "apt install ./GitHubDesktop-linux-${archtype}-${version}.deb -y"
     check_and_delete "${working_dir}/GitHubDesktop-linux-${archtype}-${version}.deb"
 elif [[ "$selected_distro" == "fedora" ]]; then
     cd $working_dir
-    download_file "${page_url}/download/release-${version}/GitHubDesktop-linux-${app_arch}-${version}.rpm"
+    download_file "${page_url}/download/release-${final_version}/GitHubDesktop-linux-${app_arch}-${version}.rpm"
     distro_run "dnf install ./GitHubDesktop-linux-${app_arch}-${version}.rpm -y"
     check_and_delete "${working_dir}/GitHubDesktop-linux-${app_arch}-${version}.rpm"
 else

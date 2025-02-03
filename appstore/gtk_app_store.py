@@ -102,9 +102,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.arch_compatibility = {
             'arm64': ['arm64', 'aarch64'],
             'aarch64': ['arm64', 'aarch64'],
-            'arm': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a'],
-            'armv7l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a'],
-            'armhf': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a']
+            'arm': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+            'armv7l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+            'armhf': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+            'armv8l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l']
         }
 
         # Add keyboard accelerators
@@ -387,6 +388,39 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         thread.daemon = True
         thread.start()
 
+    def check_native_package_installed(self, package_name):
+        """Check if a native package is installed based on package manager"""
+        try:
+            # Get package manager type
+            cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && echo $TERMUX_APP_PACKAGE_MANAGER"
+            result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True)
+            pkg_manager = result.stdout.strip()
+
+            if pkg_manager == "apt":
+                # Try dpkg -l first
+                cmd = f"dpkg -l | grep -q '^ii  {package_name}'"
+                if subprocess.run(['bash', '-c', cmd], capture_output=True).returncode == 0:
+                    return True
+                
+                # Try apt list as fallback
+                cmd = f"apt list --installed 2>/dev/null | grep -q '^{package_name}/'"
+                return subprocess.run(['bash', '-c', cmd], capture_output=True).returncode == 0
+            
+            elif pkg_manager == "pacman":
+                # Try pacman -Qi first
+                cmd = f"pacman -Qi {package_name} 2>/dev/null"
+                if subprocess.run(['bash', '-c', cmd], capture_output=True).returncode == 0:
+                    return True
+                
+                # Try pacman -Q as fallback
+                cmd = f"pacman -Q {package_name} 2>/dev/null"
+                return subprocess.run(['bash', '-c', cmd], capture_output=True).returncode == 0
+            
+            return False
+        except Exception as e:
+            print(f"Error checking package installation status: {e}")
+            return False
+
     def refresh_data_background(self):
         try:
             print("\nStarting refresh process...")
@@ -524,13 +558,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 if not validate_logo_size(logo_path):
                     continue
 
+            # After downloading and processing apps.json, check for installed native packages
+            print("Checking for installed native packages...")
+            with open(APPSTORE_JSON, 'r') as f:
+                all_apps = json.load(f)
+
+            installed_apps = set()
+            if os.path.exists(self.installed_apps_file):
+                with open(self.installed_apps_file) as f:
+                    installed_apps = set(json.load(f))
+
+            for app in all_apps:
+                if app['app_type'] == 'native':
+                    package_name = app.get('package_name') or app.get('run_cmd')
+                    if package_name and self.check_native_package_installed(package_name):
+                        print(f"Found installed package: {package_name}")
+                        installed_apps.add(app['folder_name'])
+
+            # Save updated installed apps list
+            with open(self.installed_apps_file, 'w') as f:
+                json.dump(list(installed_apps), f, indent=2)
+            
+            self.installed_apps = list(installed_apps)
+
             # 7. Update last refresh time
             with open(LAST_REFRESH_FILE, 'w') as f:
                 f.write(str(time.time()))
 
             print("Refresh completed successfully!")
             
-            # Update UI in main thread
             if not self.stop_background_tasks:
                 GLib.idle_add(self.refresh_complete)
 
@@ -738,6 +794,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def setup_app_list_ui(self):
         """Set up the main app list UI"""
+        # Add architecture warning for non-arm64 systems
+        if self.system_arch not in ['arm64', 'aarch64']:
+            warning_bar = Gtk.InfoBar()
+            warning_bar.set_message_type(Gtk.MessageType.WARNING)
+            warning_bar.set_show_close_button(True)
+            warning_bar.connect("response", lambda bar, resp: bar.destroy())
+            
+            warning_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            warning_icon = Gtk.Image.new_from_icon_name("dialog-warning", Gtk.IconSize.MENU)
+            warning_box.pack_start(warning_icon, False, False, 0)
+            
+            warning_label = Gtk.Label()
+            warning_label.set_markup(f"System architecture <b>{self.system_arch}</b> might get some compatibility issues")
+            warning_box.pack_start(warning_label, False, False, 0)
+            
+            warning_bar.get_content_area().add(warning_box)
+            self.main_box.pack_start(warning_bar, False, False, 0)
+            warning_bar.show_all()
+
         # Left panel - Categories
         sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         sidebar.set_size_request(200, -1)

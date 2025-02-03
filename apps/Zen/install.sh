@@ -6,7 +6,7 @@ app_type="distro"
 supported_distro="all"
 working_dir="${distro_path}/opt"
 page_url="https://github.com/zen-browser/desktop"
-run_cmd="pdrun zen-browser"
+run_cmd="zen-browser"
 
 # chown -R $(whoami):$(whoami) ${distro_path}
 cd $working_dir

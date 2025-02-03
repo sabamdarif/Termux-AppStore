@@ -7,7 +7,7 @@ app_type="distro"
 supported_distro="all"
 working_dir="${distro_path}/root"
 page_url="https://github.com/shiftkey/desktop"
-run_cmd="pdrun github-desktop --no-sandbox"
+run_cmd="github-desktop --no-sandbox"
 
 app_arch=$(uname -m)
 case "$app_arch" in

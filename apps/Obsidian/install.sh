@@ -6,7 +6,7 @@ app_type="distro"
 supported_distro="all"
 # working_dir="${distro_path}/opt/AppImageLauncher"
 page_url="https://github.com/obsidianmd/obsidian-releases"
-run_cmd="pdrun /opt/AppImageLauncher/Obsidian/obsidian --no-sandbox"
+run_cmd="/opt/AppImageLauncher/Obsidian/obsidian --no-sandbox"
 
 cd ${TMPDIR}
 
@@ -23,7 +23,7 @@ print_success "Creating desktop entry..."
 cat <<EOF | tee ${PREFIX}/share/applications/obsidian.desktop >/dev/null
 [Desktop Entry]
 Name=Obsidian
-Exec=${run_cmd}
+Exec=pdrun ${run_cmd}
 Terminal=false
 Type=Application
 Icon=obsidian

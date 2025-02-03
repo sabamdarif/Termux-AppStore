@@ -14,9 +14,9 @@ case "$app_arch" in
 esac
 
 if [[ "$archtype" == "armv7l" ]]; then
-run_cmd="pdrun /opt/AppImageLauncher/Webcord/webcord --no-sandbox"
+run_cmd="/opt/AppImageLauncher/Webcord/webcord --no-sandbox"
 else
-run_cmd="pdrun webcord --no-sandbox"
+run_cmd="webcord --no-sandbox"
 fi
 
 if [[ "$archtype" == "armv7l" ]]; then
@@ -41,7 +41,7 @@ print_success "Creating desktop entry..."
 cat <<EOF | tee ${PREFIX}/share/applications/webcord.desktop >/dev/null
 [Desktop Entry]
 Name=Webcord
-Exec=${run_cmd}
+Exec=pdrun ${run_cmd}
 Terminal=false
 Type=Application
 Icon=webcord

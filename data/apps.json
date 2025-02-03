@@ -145,7 +145,7 @@
       "Development"
     ],
     "app_type": "distro",
-    "run_cmd": "pdrun github-desktop --no-sandbox",
+    "run_cmd": "github-desktop --no-sandbox",
     "supported_arch": "aarch64,arm",
     "version": "release-3.4.8-linux1",
     "supported_distro": "all",
@@ -268,7 +268,7 @@
       "Accessories"
     ],
     "app_type": "distro",
-    "run_cmd": "pdrun /opt/AppImageLauncher/Obsidian/obsidian --no-sandbox",
+    "run_cmd": "/opt/AppImageLauncher/Obsidian/obsidian --no-sandbox",
     "supported_arch": "arm64",
     "version": "v1.8.4",
     "supported_distro": "all",
@@ -424,7 +424,7 @@
       "Multimedia"
     ],
     "app_type": "distro",
-    "run_cmd": "pdrun webcord --no-sandbox",
+    "run_cmd": "webcord --no-sandbox",
     "supported_arch": "arm64,arm",
     "version": "v4.10.3",
     "supported_distro": "all",
@@ -460,7 +460,7 @@
       "Internet"
     ],
     "app_type": "distro",
-    "run_cmd": "pdrun zen-browser",
+    "run_cmd": "zen-browser",
     "supported_arch": "aarch64",
     "version": "1.7.4b",
     "supported_distro": "all",

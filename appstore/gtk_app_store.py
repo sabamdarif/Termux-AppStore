@@ -1868,51 +1868,84 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_update_system(self, button):
         """Handle system update button click"""
+        print("\n=== Starting System Update Process ===")
         button.set_sensitive(False)
         button.get_style_context().add_class('updating')
         
         def update_system_thread():
             try:
                 # Update Termux packages
-                GLib.idle_add(lambda: self.update_button.set_label("Updating Termux..."))
-                cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
-                cmd += "if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
-                cmd += "apt update -y && apt upgrade -y; "
-                cmd += "elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
-                cmd += "pacman -Syu --noconfirm; fi"
+                print("\n=== Checking Package Manager ===")
+                GLib.idle_add(lambda: self.update_button.set_label("Checking..."))
                 
+                cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && echo $TERMUX_APP_PACKAGE_MANAGER"
+                result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True)
+                pkg_manager = result.stdout.strip()
+                print(f"Detected package manager: {pkg_manager}")
+
+                print("\n=== Updating Termux Packages ===")
+                GLib.idle_add(lambda: self.update_button.set_label("Updating Termux..."))
+                
+                if pkg_manager == "apt":
+                    print("Running apt update...")
+                    cmd = "apt update -y"
+                    process = subprocess.Popen(['bash', '-c', cmd], 
+                                            stdout=subprocess.PIPE, 
+                                            stderr=subprocess.STDOUT,
+                                            universal_newlines=True)
+                    for line in process.stdout:
+                        print(line.strip())
+                    process.wait()
+                    
+                    print("\nRunning apt upgrade...")
+                    cmd = "apt upgrade -y"
+                elif pkg_manager == "pacman":
+                    print("Running pacman system update...")
+                    cmd = "pacman -Syu --noconfirm"
+                else:
+                    print(f"Unsupported package manager: {pkg_manager}")
+                    raise Exception(f"Unsupported package manager: {pkg_manager}")
+
                 process = subprocess.Popen(['bash', '-c', cmd], 
                                         stdout=subprocess.PIPE, 
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
                 
-                # Update progress while command runs
                 progress = 0
                 for line in process.stdout:
-                    progress = min(progress + 2, 50)  # First 50% for Termux update
+                    print(line.strip())
+                    progress = min(progress + 2, 50)
                     GLib.idle_add(lambda p=progress: self.update_progress(p))
                 
                 process.wait()
+                print("\n=== Termux Update Complete ===")
                 
-                # Update selected distro if enabled
+                # Check for distro updates
+                print("\n=== Checking for Linux Distribution ===")
                 termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
                 if os.path.exists(termux_desktop_config):
+                    print("Found Termux Desktop configuration")
                     with open(termux_desktop_config, 'r') as f:
                         config = f.read()
                         if 'distro_add_answer=y' in config:
                             for line in config.split('\n'):
                                 if line.startswith('selected_distro='):
                                     selected_distro = line.split('=')[1].strip('"')
+                                    print(f"\n=== Updating {selected_distro} Distribution ===")
                                     GLib.idle_add(lambda: self.update_button.set_label(f"Updating {selected_distro}..."))
                                     
                                     update_cmd = ""
                                     if selected_distro in ['ubuntu', 'debian']:
+                                        print("Using apt package manager")
                                         update_cmd = "apt update -y && apt upgrade -y"
                                     elif selected_distro == 'fedora':
+                                        print("Using dnf package manager")
                                         update_cmd = "dnf update -y"
                                     elif selected_distro == 'archlinux':
+                                        print("Using pacman package manager")
                                         update_cmd = "pacman -Syu --noconfirm"
                                     
+                                    print(f"Running update command: {update_cmd}")
                                     cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c '{update_cmd}'"
                                     process = subprocess.Popen(['bash', '-c', cmd],
                                                             stdout=subprocess.PIPE,
@@ -1920,14 +1953,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                                             universal_newlines=True)
                                     
                                     for line in process.stdout:
-                                        progress = min(progress + 2, 100)  # Remaining 50% for distro update
+                                        print(line.strip())
+                                        progress = min(progress + 2, 100)
                                         GLib.idle_add(lambda p=progress: self.update_progress(p))
                                     
                                     process.wait()
+                                    print(f"\n=== {selected_distro} Update Complete ===")
+                        else:
+                            print("No Linux distribution enabled in Termux Desktop")
+                else:
+                    print("Termux Desktop not installed")
                 
+                print("\n=== System Update Complete ===")
                 GLib.idle_add(self.update_complete)
                 
             except Exception as e:
+                print(f"\n=== Update Failed ===")
+                print(f"Error: {str(e)}")
+                print(f"Stack trace:")
+                import traceback
+                traceback.print_exc()
                 GLib.idle_add(lambda: self.show_error_dialog(f"Update failed: {str(e)}"))
                 GLib.idle_add(self.update_complete)
 

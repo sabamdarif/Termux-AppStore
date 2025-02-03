@@ -182,7 +182,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         header.props.title = "Termux App Store"
         self.set_titlebar(header)
 
-        # Add refresh button to header
+        # Add update system button to header bar (left side)
+        self.update_button = Gtk.Button(label="Update System")
+        self.update_button.get_style_context().add_class('system-update-button')
+        self.update_button.connect("clicked", self.on_update_system)
+        header.pack_start(self.update_button)
+
+        # Add refresh button to header (right side)
         self.refresh_button = Gtk.Button()
         self.refresh_button.set_tooltip_text("Refresh App List")
         refresh_icon = Gtk.Image.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
@@ -1859,6 +1865,97 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print(f"Error in update process: {e}")
             import traceback
             traceback.print_exc()
+
+    def on_update_system(self, button):
+        """Handle system update button click"""
+        button.set_sensitive(False)
+        button.get_style_context().add_class('updating')
+        
+        def update_system_thread():
+            try:
+                # Update Termux packages
+                GLib.idle_add(lambda: self.update_button.set_label("Updating Termux..."))
+                cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                cmd += "if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                cmd += "apt update -y && apt upgrade -y; "
+                cmd += "elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                cmd += "pacman -Syu --noconfirm; fi"
+                
+                process = subprocess.Popen(['bash', '-c', cmd], 
+                                        stdout=subprocess.PIPE, 
+                                        stderr=subprocess.STDOUT,
+                                        universal_newlines=True)
+                
+                # Update progress while command runs
+                progress = 0
+                for line in process.stdout:
+                    progress = min(progress + 2, 50)  # First 50% for Termux update
+                    GLib.idle_add(lambda p=progress: self.update_progress(p))
+                
+                process.wait()
+                
+                # Update selected distro if enabled
+                termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+                if os.path.exists(termux_desktop_config):
+                    with open(termux_desktop_config, 'r') as f:
+                        config = f.read()
+                        if 'distro_add_answer=y' in config:
+                            for line in config.split('\n'):
+                                if line.startswith('selected_distro='):
+                                    selected_distro = line.split('=')[1].strip('"')
+                                    GLib.idle_add(lambda: self.update_button.set_label(f"Updating {selected_distro}..."))
+                                    
+                                    update_cmd = ""
+                                    if selected_distro in ['ubuntu', 'debian']:
+                                        update_cmd = "apt update -y && apt upgrade -y"
+                                    elif selected_distro == 'fedora':
+                                        update_cmd = "dnf update -y"
+                                    elif selected_distro == 'archlinux':
+                                        update_cmd = "pacman -Syu --noconfirm"
+                                    
+                                    cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c '{update_cmd}'"
+                                    process = subprocess.Popen(['bash', '-c', cmd],
+                                                            stdout=subprocess.PIPE,
+                                                            stderr=subprocess.STDOUT,
+                                                            universal_newlines=True)
+                                    
+                                    for line in process.stdout:
+                                        progress = min(progress + 2, 100)  # Remaining 50% for distro update
+                                        GLib.idle_add(lambda p=progress: self.update_progress(p))
+                                    
+                                    process.wait()
+                
+                GLib.idle_add(self.update_complete)
+                
+            except Exception as e:
+                GLib.idle_add(lambda: self.show_error_dialog(f"Update failed: {str(e)}"))
+                GLib.idle_add(self.update_complete)
+
+        thread = threading.Thread(target=update_system_thread)
+        thread.daemon = True
+        thread.start()
+
+    def update_progress(self, progress):
+        """Update the progress bar effect on button"""
+        css = f"""
+            .updating {{
+                background-image: linear-gradient(to right, @theme_selected_bg_color 0%, 
+                    @theme_selected_bg_color {progress}%, transparent {progress}%);
+            }}
+        """
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(css.encode())
+        self.update_button.get_style_context().add_provider(
+            css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        return True
+
+    def update_complete(self):
+        """Reset update button state after update completes"""
+        self.update_button.set_sensitive(True)
+        self.update_button.set_label("Update System")
+        self.update_button.get_style_context().remove_class('updating')
+        self.update_progress(0)
+        return False
 
 def main():
     app = AppStoreApplication()

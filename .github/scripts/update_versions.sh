@@ -65,7 +65,7 @@ for app_folder in apps/*; do
     echo "Latest version for $app_name: $LATEST_VERSION"
     
     # Get current version (without quotes)
-    CURRENT_VERSION=$(grep 'version=' "$install_file" | sed 's/version=//')
+    CURRENT_VERSION=$(grep '^version=' "$install_file" | head -n1 | sed 's/version=//')
     echo "Current version: $CURRENT_VERSION"
     
     if [[ "$CURRENT_VERSION" != "$LATEST_VERSION" ]]; then

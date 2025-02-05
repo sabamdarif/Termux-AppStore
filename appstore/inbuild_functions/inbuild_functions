@@ -1,8 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-termux_desktop_path="$PREFIX/etc/termux-desktop"
+termux_desktop_path="/data/data/com.termux/files/usr/etc/termux-desktop"
 config_file="$termux_desktop_path/configuration.conf"
-log_file="$HOME/.appstore/app-install.log"
+log_file="/data/data/com.termux/files/home/.appstore/app-install.log"
 
 function print_log() {
     local call_stack=""
@@ -99,7 +99,7 @@ function download_file() {
     if ! command -v aria2c &> /dev/null; then
         package_install_and_check "aria2"
     fi
-
+    check_and_delete "$file_name"
     if command -v aria2c &> /dev/null; then
         aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url"
         if [[ -f "$file_name" ]]; then
@@ -368,19 +368,23 @@ function install_appimage() {
     local appimage_name="$2"
     local appimage_path="$distro_path/opt/AppImageLauncher/$appimage_name"
     
-    check_and_create_directory "$distro_path/opt/AppImageLauncher"
+    check_and_create_directory "$distro_path/opt/AppImageLauncher/"
     check_and_delete "$appimage_path"
-    mv -f "$appimage_file" "$distro_path/opt/AppImageLauncher"
+    echo ${pwd}
+    mv -f "$appimage_file" "$distro_path/opt/AppImageLauncher/"
 
     cat << EOF > "$distro_path/opt/AppImageLauncher/install_appimage.sh"
 #!/bin/bash
+
 cd /opt/AppImageLauncher
+ldconfig
 chmod +x "${appimage_file}"
-./"${appimage_file}" --appimage-extract
+APPIMAGE_EXTRACT_AND_RUN=1 ./${appimage_file} --appimage-extract
 mv -f squashfs-root "$appimage_name"
 rm -f "${appimage_file}"
 EOF
 
+    distro_run "chmod +x /opt/AppImageLauncher/install_appimage.sh"
     distro_run "bash /opt/AppImageLauncher/install_appimage.sh"
     check_and_delete "$distro_path/opt/AppImageLauncher/install_appimage.sh"
 }
@@ -402,4 +406,4 @@ function get_latest_version() {
 }
 
 read_conf
-distro_path="$PREFIX/var/lib/proot-distro/installed-rootfs/$selected_distro"
+distro_path="/data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/$selected_distro"

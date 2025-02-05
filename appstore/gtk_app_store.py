@@ -324,13 +324,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
                             continue
 
-                        # Use app name as package name if not specified
-                        package_name = app.get('package_name') or app.get('run_cmd')
+                        # First try distro-specific run command
+                        package_name = app.get(f"{selected_distro}_run_cmd")
+                        if not package_name:
+                            # Then try generic run command
+                            package_name = app.get('run_cmd')
+                            if package_name:
+                                package_name = package_name.split()[0]  # Get first word of run command
+                        
+                        # If still no package name, try the package_name field
+                        if not package_name:
+                            package_name = app.get('package_name')
+
                         if not package_name:
                             print(f"Skipping {app['app_name']}: no package name or run command found")
                             continue
 
-                        print(f"Checking version for {app['app_name']}...")
+                        print(f"Checking version for {app['app_name']} using package name: {package_name}...")
                         cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
                         
                         if selected_distro in ['ubuntu', 'debian']:
@@ -610,7 +620,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     if selected_distro in ['ubuntu', 'debian']:
                                         version_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\" | tr -d \"\\n\"'"
                                     elif selected_distro == 'fedora':
-                                        version_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F\": \" \"/^Version/ {{print \\$2}}\") && echo \"$latest_version\" | tr -d \"\\n\"'"
+                                        version_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F\": \" \"/^Version/ {{print \\$2}}\" | tr -d \"\\n\") && echo \"$latest_version\"'"
                                     elif selected_distro == 'archlinux':
                                         version_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\" | tr -d \"\\n\"'"
 

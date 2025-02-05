@@ -178,7 +178,11 @@ def get_app_metadata(app_folder):
         'supported_arch': None,
         'version': None,
         'supported_distro': None,
-        'package_name': None  # Add default package_name
+        'package_name': None,  # Add default package_name
+        'ubuntu_run_cmd': None,
+        'debian_run_cmd': None,
+        'fedora_run_cmd': None,
+        'archlinux_run_cmd': None
     }
     
     if install_sh_path.exists():
@@ -204,10 +208,17 @@ def get_app_metadata(app_folder):
                     elif line.strip().startswith('package_name='):  # Add package_name check
                         package_name = line.split('=')[1].strip().strip('"\'')
                         metadata['package_name'] = package_name
+                    
+                    # Add checks for distro-specific run commands
+                    elif line.strip().startswith(('ubuntu_run_cmd=', 'debian_run_cmd=', 
+                         'fedora_run_cmd=', 'archlinux_run_cmd=')):
+                        cmd_type = line.split('=')[0].strip()
+                        cmd_value = line.split('=')[1].strip().strip('"\'')
+                        metadata[cmd_type] = cmd_value
 
-                # Remove supported_distro if app_type isn't distro or both
-                if metadata['app_type'] not in ["distro", "both"]:
-                    metadata['supported_distro'] = None
+            # Remove None values from metadata
+            metadata = {k: v for k, v in metadata.items() if v is not None}
+
         except Exception as e:
             print(f"Error reading install.sh from {install_sh_path}: {e}")
 

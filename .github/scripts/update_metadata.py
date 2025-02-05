@@ -178,7 +178,7 @@ def get_app_metadata(app_folder):
         'supported_arch': None,
         'version': None,
         'supported_distro': None,
-        'package_name': None,  # Add default package_name
+        'package_name': None,
         'ubuntu_run_cmd': None,
         'debian_run_cmd': None,
         'fedora_run_cmd': None,
@@ -205,7 +205,7 @@ def get_app_metadata(app_folder):
                     elif line.strip().startswith('supported_distro='):
                         supported_distro = line.split('=')[1].strip().strip('"\'')
                         metadata['supported_distro'] = supported_distro
-                    elif line.strip().startswith('package_name='):  # Add package_name check
+                    elif line.strip().startswith('package_name='):
                         package_name = line.split('=')[1].strip().strip('"\'')
                         metadata['package_name'] = package_name
                     
@@ -215,6 +215,10 @@ def get_app_metadata(app_folder):
                         cmd_type = line.split('=')[0].strip()
                         cmd_value = line.split('=')[1].strip().strip('"\'')
                         metadata[cmd_type] = cmd_value
+
+            # Remove supported_distro if app_type is native
+            if metadata.get('app_type') == 'native':
+                metadata.pop('supported_distro', None)
 
             # Remove None values from metadata
             metadata = {k: v for k, v in metadata.items() if v is not None}

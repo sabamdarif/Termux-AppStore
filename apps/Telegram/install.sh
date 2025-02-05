@@ -5,6 +5,7 @@ version=distro_local_version
 app_type="distro"
 supported_distro="fedora,ubuntu"
 # working_dir=""
+package_name="telegram-desktop"
 run_cmd="telegram-desktop"
 
 if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]];then

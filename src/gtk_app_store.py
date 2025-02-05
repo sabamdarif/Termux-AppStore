@@ -211,6 +211,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
         self.pending_updates = self.load_pending_updates()
 
+        # Create the 'Update System' button
+        self.update_system_button = Gtk.Button(label='Update System')
+        self.update_system_button.connect('clicked', self.on_update_system)
+        self.main_box.pack_start(self.update_system_button, False, False, 0)
+
     def setup_directories(self):
         """Create necessary directories for the app store"""
         os.makedirs(APPSTORE_DIR, exist_ok=True)
@@ -492,6 +497,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     continue
                     
                 supported_archs = [arch.strip().lower() for arch in app_arch.split(',')]
+                
+                # Check if any of the app's architectures are compatible
                 if any(arch in compatible_archs for arch in supported_archs):
                     filtered_apps.append(app)
                     print(f"Added compatible app: {app['app_name']} ({app_arch})")
@@ -569,7 +576,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
                                     continue
 
-                                package_name = app.get('package_name') or app.get('run_cmd')
+                                # Try distro-specific package name first
+                                package_name = app.get(f"{selected_distro}_package_name") or app.get('package_name')
+                                if not package_name:
+                                    # Try distro-specific run command as fallback
+                                    run_cmd = app.get(f"{selected_distro}_run_cmd") or app.get('run_cmd')
+                                    package_name = run_cmd.split()[0] if run_cmd else None
+
                                 if not package_name:
                                     print(f"Skipping {app['app_name']}: no package name or run command found")
                                     continue
@@ -935,6 +948,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         right_panel.set_margin_start(10)
         right_panel.set_margin_end(10)
         right_panel.set_margin_top(10)
+        right_panel.set_margin_bottom(10)
         scrolled.add(right_panel)
 
         # Add search entry at the top of app list
@@ -1289,7 +1303,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             progress_dialog.set_default_size(400, -1)
             progress_dialog.set_resizable(False)
             progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            progress_dialog.set_deletable(False)
             
             vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
             vbox.set_margin_start(20)

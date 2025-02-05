@@ -3,7 +3,7 @@
 supported_arch="aarch64,arm"
 version=distro_local_version
 app_type="distro"
-supported_distro="all"
+supported_distro="fedora,ubuntu"
 # working_dir=""
 run_cmd="telegram-desktop"
 

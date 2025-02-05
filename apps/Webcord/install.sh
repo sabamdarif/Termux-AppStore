@@ -1,40 +1,23 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-supported_arch="arm64,arm"
+supported_arch="arm64"
 version=v4.10.3
 app_type="distro"
-supported_distro="all"
+supported_distro="fedora,ubuntu,debian"
 working_dir="${distro_path}/root"
 page_url="https://github.com/SpacingBat3/WebCord"
-
-app_arch=$(uname -m)
-case "$app_arch" in
-    aarch64) archtype="arm64" ;;
-    armv7*|arm) archtype="armv7l" ;;
-esac
-
-if [[ "$archtype" == "armv7l" ]]; then
-run_cmd="/opt/AppImageLauncher/Webcord/webcord --no-sandbox"
-else
 run_cmd="webcord --no-sandbox"
-fi
 
-if [[ "$archtype" == "armv7l" ]]; then
-  cd ${distro_path}/opt/AppImageLauncher
-  download_file "https://github.com/SpacingBat3/WebCord/releases/download/v${version}/webcord_${version}_${archtype}.AppImage"
-  install_appimage "webcord_${version}_${archtype}.AppImage" "Webcord"
-else
-  if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]];then
-      cd $working_dir
-      download_file "https://github.com/SpacingBat3/WebCord/releases/download/v${version}/webcord_${version}_${archtype}.deb"
-      distro_run "apt install ./webcord_${version}_${archtype}.deb -y"
-      distro_run "rm -f ./webcord_${version}_${archtype}.deb"
-  elif [[ "$selected_distro" == "fedora" ]]; then
-      cd $working_dir
-      download_file "https://github.com/SpacingBat3/WebCord/releases/download/v${version}/webcord_${version}_${archtype}.rpm"
-      distro_run "dnf install ./webcord_${version}_${archtype}.rpm -y"
-      distro_run "rm -f ./webcord_${version}_${archtype}.rpm"
-  fi
+if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]];then
+    cd $working_dir
+    download_file "${page_url}/releases/download/${version}/webcord_${version#v}_${supported_arch}.deb"
+    distro_run "apt install ./webcord_${version#v}_${supported_arch}.deb -y"
+    distro_run "rm -f webcord_${version#v}_${supported_arch}.deb"
+elif [[ "$selected_distro" == "fedora" ]]; then
+    cd $working_dir
+    download_file "${page_url}/releases/download/${version}/webcord_${version#v}_${supported_arch}.rpm"
+    distro_run "dnf install ./webcord_${version#v}_${supported_arch}.rpm -y"
+    distro_run "rm -f webcord_${version#v}_${supported_arch}.rpm"
 fi
 
 print_success "Creating desktop entry..."

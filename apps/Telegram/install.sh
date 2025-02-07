@@ -3,10 +3,10 @@
 supported_arch="aarch64,arm"
 version=distro_local_version
 app_type="distro"
-supported_distro="fedora,ubuntu"
+supported_distro="fedora,debian"
 # working_dir=""
 package_name="telegram-desktop"
-run_cmd="telegram-desktop"
+run_cmd="telegram-desktop --no-sandbox"
 
 if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]];then
     $selected_distro install telegram-desktop -y
@@ -15,4 +15,8 @@ elif [[ "$selected_distro" == "fedora" ]]; then
     $selected_distro install telegram-desktop -y
 fi
 
-fix_exec "telegram-desktop.desktop" "--no-sandbox"
+if [[ "$selected_distro" == "debian" ]];then
+    fix_exec "org.telegram.desktop.desktop" "--no-sandbox"
+else
+    fix_exec "telegram-desktop.desktop" "--no-sandbox"
+fi

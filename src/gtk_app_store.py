@@ -320,9 +320,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         app.get('version') == 'distro_local_version'):
                         
                         supported_distro = app.get('supported_distro')
-                        if supported_distro != 'all' and supported_distro != selected_distro:
-                            print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
-                            continue
+                        if supported_distro and supported_distro != 'all':
+                            # Split supported_distro into a list if it contains commas
+                            supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                            if selected_distro not in supported_distros:
+                                print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
+                                continue
 
                         # First try distro-specific run command
                         package_name = app.get(f"{selected_distro}_run_cmd")
@@ -582,9 +585,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         for app in filtered_apps:
                             if app['app_type'] == 'distro':
                                 supported_distro = app.get('supported_distro')
-                                if supported_distro != 'all' and supported_distro != selected_distro:
-                                    print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
-                                    continue
+                                if supported_distro and supported_distro != 'all':
+                                    # Split supported_distro into a list if it contains commas
+                                    supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                                    if selected_distro not in supported_distros:
+                                        print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
+                                        continue
 
                                 # Try distro-specific package name first
                                 package_name = app.get(f"{selected_distro}_package_name") or app.get('package_name')
@@ -798,8 +804,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         app.get('package_name')):
                         
                         supported_distro = app.get('supported_distro')
-                        if supported_distro != 'all' and supported_distro != selected_distro:
-                            continue
+                        if supported_distro and supported_distro != 'all':
+                            # Split supported_distro into a list if it contains commas
+                            supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                            if selected_distro not in supported_distros:
+                                continue
 
                         print(f"Checking version for {app['app_name']}...")
 
@@ -848,19 +857,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Filter apps based on architecture compatibility and distro settings
             self.apps_data = []
             for app in all_apps:
-                # Skip distro apps if distro is not enabled
-                if app.get('app_type') == 'distro':
-                    if not distro_enabled:
-                        print(f"Skipping distro app {app['app_name']}: distro support disabled")
-                        continue
-                        
-                    # Check distro compatibility
-                    supported_distro = app.get('supported_distro')
-                    if supported_distro and supported_distro != 'all' and supported_distro != selected_distro:
-                        print(f"Skipping incompatible distro app {app['app_name']}: requires {supported_distro}, but using {selected_distro}")
-                        continue
-                
-                # Check architecture compatibility
+                # Check architecture compatibility first
                 app_arch = app.get('supported_arch', '')
                 if not app_arch:  # If no architecture specified, assume compatible
                     self.apps_data.append(app)
@@ -871,8 +868,30 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 
                 # Check if any of the app's architectures are compatible
                 if any(arch in compatible_archs for arch in supported_archs):
-                    self.apps_data.append(app)
-                    print(f"Added compatible app: {app['app_name']} ({app_arch})")
+                    # For native apps, add them directly
+                    if app.get('app_type') != 'distro':
+                        self.apps_data.append(app)
+                        print(f"Added compatible app: {app['app_name']} ({app_arch})")
+                        continue
+
+                    # For distro apps, check distro compatibility
+                    if not distro_enabled:
+                        print(f"Skipping distro app {app['app_name']}: distro support disabled")
+                        continue
+                        
+                    # Check distro compatibility
+                    supported_distro = app.get('supported_distro')
+                    if supported_distro == 'all':
+                        self.apps_data.append(app)
+                        print(f"Added compatible app: {app['app_name']} ({app_arch})")
+                    elif supported_distro:
+                        # Split supported_distro into a list if it contains commas
+                        supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                        if selected_distro in supported_distros:
+                            self.apps_data.append(app)
+                            print(f"Added compatible app: {app['app_name']} ({app_arch})")
+                        else:
+                            print(f"Skipping incompatible distro app {app['app_name']}: requires one of {supported_distros}, but using {selected_distro}")
                 else:
                     print(f"Skipped incompatible app: {app['app_name']} ({app_arch})")
             

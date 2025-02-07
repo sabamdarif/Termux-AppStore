@@ -23,7 +23,7 @@
       "Internet"
     ],
     "app_type": "native",
-    "run_cmd": "/data/data/com.termux/files/usr/bin/chromium-browser",
+    "run_cmd": "/data/data/com.termux/files/usr/bin/chromium-browser --enable-features",
     "supported_arch": "aarch64,arm",
     "version": "termux_local_version",
     "package_name": "chromium",
@@ -315,10 +315,10 @@
       "Multimedia"
     ],
     "app_type": "distro",
-    "run_cmd": "telegram-desktop",
+    "run_cmd": "telegram-desktop --no-sandbox",
     "supported_arch": "aarch64,arm",
     "version": "distro_local_version",
-    "supported_distro": "fedora,ubuntu",
+    "supported_distro": "fedora,debian",
     "package_name": "telegram-desktop",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram/uninstall.sh",

@@ -40,21 +40,21 @@ jobs:
 
       - name: Create logos archive
         run: |
-          mkdir -p logos
+          mkdir -p logo
           for app_dir in apps/*; do
             if [ -d "$app_dir" ]; then
               app_name=$(basename "$app_dir")
               # Create app-specific folder and copy logo as logo.png
               if [ -f "$app_dir/logo.png" ]; then
-                mkdir -p "logos/${app_name}"
-                cp "$app_dir/logo.png" "logos/${app_name}/logo.png"
-              elif [ -f "$app_dir/icon-64.png" ]; then
-                mkdir -p "logos/${app_name}"
-                cp "$app_dir/icon-64.png" "logos/${app_name}/logo.png"
+                mkdir -p "logo/${app_name}"
+                cp "$app_dir/logo.png" "logo/${app_name}/logo.png"
+              elif [ -f "$app_dir/icon"*.png ]; then
+                mkdir -p "logo/${app_name}"
+                cp "$app_dir/icon"*.png "logo/${app_name}/logo.png"
               fi
             fi
           done
-          zip -r logos.zip logos/
+          cd logo && zip -r ../logos.zip * && cd ..
 
       - name: Create Release
         uses: softprops/action-gh-release@v1

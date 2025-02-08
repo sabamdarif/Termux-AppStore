@@ -31,23 +31,30 @@ jobs:
       - name: Update apps.json
         run: python .github/scripts/update_metadata.py
 
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create logos archive
         run: |
           mkdir -p logos
           for app_dir in apps/*; do
             if [ -d "$app_dir" ]; then
               app_name=$(basename "$app_dir")
-              # Find logo file (logo.png or icon.png)
-              logo_file=$(find "$app_dir" -maxdepth 1 -type f \( -name "logo.png" -o -name "icon.png" \))
-              if [ ! -z "$logo_file" ]; then
-                cp "$logo_file" "logos/${app_name}.png"
+              # First try logo.png, then icon-64.png
+              if [ -f "$app_dir/logo.png" ]; then
+                cp "$app_dir/logo.png" "logos/${app_name}.png"
+              elif [ -f "$app_dir/icon-64.png" ]; then
+                cp "$app_dir/icon-64.png" "logos/${app_name}.png"
               fi
             fi
           done
           zip -r logos.zip logos/
 
       - name: Create Release
-        if: steps.check_changes.outputs.changes == 'true'
         uses: softprops/action-gh-release@v1
         with:
           files: logos.zip
@@ -55,13 +62,6 @@ jobs:
           name: App Logos
           body: Archive of all app logos
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check for changes
-        id: check_changes
-        run: |
-          if [[ -n "$(git status --porcelain)" ]]; then
-            echo "changes=true" >> $GITHUB_OUTPUT
-          fi
 
       - name: Commit and push if changed
         if: steps.check_changes.outputs.changes == 'true'

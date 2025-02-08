@@ -473,6 +473,42 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print(f"Error checking distro package installation status: {e}")
             return False
 
+    def download_and_extract_logos(self):
+        """Download and extract logos zip file"""
+        try:
+            # Create temp directory if it doesn't exist
+            os.makedirs(TERMUX_TMP, exist_ok=True)
+            
+            # Download logos zip file
+            logos_zip = os.path.join(TERMUX_TMP, "logos.zip")
+            logos_url = "https://github.com/sabamdarif/Termux-AppStore/releases/download/logos/logos.zip"
+            
+            print("Downloading logos archive...")
+            command = f"aria2c -x 16 -s 16 '{logos_url}' -d '{TERMUX_TMP}' -o 'logos.zip'"
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                print(f"Failed to download logos: {result.stderr}")
+                return False
+            
+            # Create logo directory
+            os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
+            
+            # Extract logos
+            print("Extracting logos...")
+            command = f"unzip -o '{logos_zip}' -d '{APPSTORE_LOGO_DIR}'"
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            
+            # Clean up zip file
+            if os.path.exists(logos_zip):
+                os.remove(logos_zip)
+            
+            return result.returncode == 0
+            
+        except Exception as e:
+            print(f"Error handling logos: {e}")
+            return False
+
     def refresh_data_background(self):
         try:
             print("\nStarting refresh process...")
@@ -496,7 +532,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 GLib.idle_add(self.refresh_error, "Failed to download apps.json")
                 return False
 
-            # 4. Filter apps based on architecture compatibility
+            # 4. Handle logos - delete existing, download and extract new
+            if os.path.exists(APPSTORE_LOGO_DIR):
+                print("Removing existing logos...")
+                shutil.rmtree(APPSTORE_LOGO_DIR)
+            
+            print("Downloading and extracting new logos...")
+            if not self.download_and_extract_logos():
+                print("Error handling logos")
+                GLib.idle_add(self.refresh_error, "Failed to update logos")
+                return False
+
+            # 5. Filter apps based on architecture compatibility
             print("Filtering apps based on architecture...")
             with open(APPSTORE_JSON, 'r') as f:
                 all_apps = json.load(f)
@@ -518,7 +565,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 else:
                     print(f"Skipped incompatible app: {app['app_name']} ({app_arch})")
 
-            # 5. Check installed packages and update versions
+            # 6. Check installed packages and update versions
             print("Checking installed packages and versions...")
             # Check Termux Desktop configuration
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
@@ -672,25 +719,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 json.dump(list(installed_apps), f, indent=2)
             
             self.installed_apps = list(installed_apps)
-
-            # 6. Download logos for compatible apps
-            print("Downloading logos for compatible apps...")
-            for app in filtered_apps:
-                if 'logo_url' in app and app['logo_url']:
-                    app_logo_dir = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'])
-                    os.makedirs(app_logo_dir, exist_ok=True)
-                    logo_path = os.path.join(app_logo_dir, 'logo.png')
-
-                    if not os.path.exists(logo_path) or self.is_manual_refresh:
-                        print(f"Downloading logo for {app['app_name']}...")
-                        command = f"aria2c -x 16 -s 16 '{app['logo_url']}' -d '{app_logo_dir}' -o 'logo.png'"
-                        result = os.system(command)
-                        if result == 0 and os.path.exists(logo_path):
-                            if not validate_logo_size(logo_path):
-                                print(f"Invalid logo size for {app['app_name']}, removing...")
-                                os.remove(logo_path)
-                        else:
-                            print(f"Failed to download logo for {app['app_name']}")
 
             print("Refresh completed successfully!")
             

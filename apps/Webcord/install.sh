@@ -21,7 +21,7 @@ elif [[ "$selected_distro" == "fedora" ]]; then
 fi
 
 print_success "Creating desktop entry..."
-cat <<EOF | tee ${PREFIX}/share/applications/webcord.desktop >/dev/null
+cat <<EOF | tee ${PREFIX}/share/applications/pd_added/webcord.desktop >/dev/null
 [Desktop Entry]
 Name=Webcord
 Exec=pdrun ${run_cmd}

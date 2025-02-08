@@ -1,5 +1,22 @@
 [
   {
+    "app_name": "Atril",
+    "folder_name": "Atril",
+    "description": "Atril is a simple multi-page document viewer. It can display and print PostScript (PS), Encapsulated PostScript (EPS), DJVU, DVI, XPS and Portable Document Format (PDF) files",
+    "categories": [
+      "Accessories",
+      "Office"
+    ],
+    "app_type": "native",
+    "run_cmd": "atril",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "atril",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Atril/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Atril/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Atril/logo.png"
+  },
+  {
     "app_name": "Audacity",
     "folder_name": "Audacity",
     "description": "Audacity is a free, open-source digital audio editor and recording application.",
@@ -144,6 +161,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/icon-64.png"
   },
   {
+    "app_name": "Gnome font viewer",
+    "folder_name": "Gnome-font-viewer",
+    "description": "Fonts shows you the fonts installed on your computer for your use as thumbnails.",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "gnome-font-viewer",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "gnome-font-viewer",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gnome-font-viewer/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gnome-font-viewer/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gnome-font-viewer/logo.png"
+  },
+  {
     "app_name": "Handbrake",
     "folder_name": "Handbrake",
     "description": "Handbrake is an open-source tool for compressing and converting video files",
@@ -162,7 +195,7 @@
   {
     "app_name": "Hangover",
     "folder_name": "Hangover",
-    "description": "Hangover runs simple Win64 and Win32 applications on arm64 Linux. Only the application is emulated instead of a whole Wine installation.\n\nHangover can be used in place of the Wine app on Pi-Apps. It may be worth trying this to see if something that did not run on the emulated Wine will run here.\nFor example, one app (tested by Botspot) failed to launch the installer on emulated Wine (x64), got stuck installing on Hangover with the Box64 emulator, and successfully installed with the FEX emulator selected. (see how to select an emulator below)\n\nIf you have Wine installed already, clicking Install here will uninstall Wine first. Do note that installed applications and configuration left over from Wine in ~/.wine will need to be removed or renamed, as it appears Hangover cannot import it.\n\nExamples on how to run:\n$ wine your_x86_64_application.exe # Uses FEX for 64-bit apps\n$ wine your_x86_application.exe # To use Box64 for 32-bit apps\n$ HODLL=libwow64fex.dll wine your_x86_application.exe # To use FEX for 32-bit apps\n$ HODLL=xtajit.dll taskset -c 1 wine your_x86_application.exe # To use QEMU for 32-bit apps (limited to 1 core to workaround a bug)\n\nFor more information see https://github.com/AndreRH/hangover/blob/master/README.md",
+    "description": "Hangover runs simple Win64 and Win32 applications on arm64 Linux. Only the application is emulated instead of a whole Wine installation.",
     "categories": [
       "Accessories",
       "Games"
@@ -207,6 +240,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/icon-64.png"
+  },
+  {
+    "app_name": "Kvantum",
+    "folder_name": "Kvantum",
+    "description": "A Linux SVG-based theme engine for Qt and KDE",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "kvantummanager",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "kvantum",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kvantum/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kvantum/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kvantum/logo.png"
   },
   {
     "app_name": "LibreOffice",

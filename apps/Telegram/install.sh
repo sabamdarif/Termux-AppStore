@@ -16,7 +16,7 @@ elif [[ "$selected_distro" == "fedora" ]]; then
 fi
 
 if [[ "$selected_distro" == "debian" ]];then
-    fix_exec "org.telegram.desktop.desktop" "--no-sandbox"
+    fix_exec "pd_added/org.telegram.desktop.desktop" "--no-sandbox"
 else
-    fix_exec "telegram-desktop.desktop" "--no-sandbox"
+    fix_exec "pd_added/telegram-desktop.desktop" "--no-sandbox"
 fi

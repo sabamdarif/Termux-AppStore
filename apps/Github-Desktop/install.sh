@@ -30,5 +30,5 @@ else
     print_failed "Unsupported distro"
 fi
 
-cp ${distro_path}/usr/share/applications/github-desktop.desktop ${PREFIX}/share/applications/ || print_failed "Failed to move menu launcher file"
-fix_exec "github-desktop.desktop" "--no-sandbox"
+cp ${distro_path}/usr/share/applications/github-desktop.desktop ${PREFIX}/share/applications/pd_added || print_failed "Failed to move menu launcher file"
+fix_exec "pd_added/github-desktop.desktop" "--no-sandbox"

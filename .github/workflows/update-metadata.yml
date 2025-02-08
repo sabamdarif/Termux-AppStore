@@ -38,49 +38,29 @@ jobs:
             echo "changes=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create app data archive
+      - name: Create logos archive
         run: |
-          # Create directory structure
-          mkdir -p app_data/logos app_data/categories app_data/descriptions
-          
-          # Process each app directory
+          mkdir -p logos
           for app_dir in apps/*; do
             if [ -d "$app_dir" ]; then
               app_name=$(basename "$app_dir")
-              
-              # Handle logos
+              # First try logo.png, then icon-64.png
               if [ -f "$app_dir/logo.png" ]; then
-                cp "$app_dir/logo.png" "app_data/logos/${app_name}.png"
+                cp "$app_dir/logo.png" "logos/${app_name}.png"
               elif [ -f "$app_dir/icon-64.png" ]; then
-                cp "$app_dir/icon-64.png" "app_data/logos/${app_name}.png"
-              fi
-              
-              # Handle category files
-              if [ -f "$app_dir/category.txt" ]; then
-                cp "$app_dir/category.txt" "app_data/categories/${app_name}.txt"
-              elif [ -f "$app_dir/category" ]; then
-                cp "$app_dir/category" "app_data/categories/${app_name}.txt"
-              fi
-              
-              # Handle description files
-              if [ -f "$app_dir/description.txt" ]; then
-                cp "$app_dir/description.txt" "app_data/descriptions/${app_name}.txt"
-              elif [ -f "$app_dir/description" ]; then
-                cp "$app_dir/description" "app_data/descriptions/${app_name}.txt"
+                cp "$app_dir/icon-64.png" "logos/${app_name}.png"
               fi
             fi
           done
-          
-          # Create the unified archive
-          zip -r app_data.zip app_data/
+          zip -r logos.zip logos/
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: app_data.zip
-          tag_name: app_data
-          name: App Data
-          body: Archive containing all app logos, categories, and descriptions
+          files: logos.zip
+          tag_name: logos
+          name: App Logos
+          body: Archive of all app logos
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit and push if changed

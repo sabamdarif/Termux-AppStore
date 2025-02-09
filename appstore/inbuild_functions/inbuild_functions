@@ -120,6 +120,78 @@ function download_file() {
     fi
 }
 
+function extract() {
+    local archive="$1"
+    local output_dir="$2"
+    
+    if [[ ! -f "$archive" ]]; then
+        echo "Error: '$archive' does not exist!"
+        return 1
+    fi
+
+    # Prepare output directory argument if provided
+    local dir_arg=""
+    if [[ -n "$output_dir" ]]; then
+        check_and_create_directory "$output_dir"
+        dir_arg="-C $output_dir"
+    fi
+
+    case "$archive" in
+        *.tar.gz|*.tgz)
+            # Add --no-same-owner to prevent permission issues and -h to dereference hard links
+            tar xzf "$archive" $dir_arg --no-same-owner -h || true
+            ;;
+        *.tar.xz)
+            tar xJf "$archive" $dir_arg --no-same-owner -h || true
+            ;;
+        *.tar.bz2|*.tbz2)
+            tar xjf "$archive" $dir_arg --no-same-owner -h || true
+            ;;
+        *.tar)
+            tar xf "$archive" $dir_arg --no-same-owner -h || true
+            ;;
+        *.bz2)
+            if [[ -n "$output_dir" ]]; then
+                bunzip2 -c "$archive" > "$output_dir/$(basename "${archive%.bz2}")"
+            else
+                bunzip2 "$archive"
+            fi
+            ;;
+        *.gz)
+            if [[ -n "$output_dir" ]]; then
+                gunzip -c "$archive" > "$output_dir/$(basename "${archive%.gz}")"
+            else
+                gunzip -c "$archive" > "${archive%.gz}"
+            fi
+            ;;
+        *.7z)
+            if [[ -n "$output_dir" ]]; then
+                7z x "$archive" -o"$output_dir" -y
+            else
+                7z x "$archive" -y
+            fi
+            ;;
+        *.rar)
+            if [[ -n "$output_dir" ]]; then
+                unrar x -o+ "$archive" "$output_dir"
+            else
+                unrar x -o+ "$archive"
+            fi
+            ;;
+        *.zip)
+            if [[ -n "$output_dir" ]]; then
+                unzip -o "$archive" -d "$output_dir"
+            else
+                unzip -o "$archive"
+            fi
+            ;;
+        *)
+            echo "Unsupported archive format: $archive"
+            return 1
+            ;;
+    esac
+}
+
 # find a backup file which end with a number pattern and restore it
 function check_and_restore() {
     local target_path="$1"

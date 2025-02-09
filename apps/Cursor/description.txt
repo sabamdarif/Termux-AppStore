@@ -1,0 +1,1 @@
+Cursor is an AI-powered integrated development environment for Windows, macOS and Linux designed to enhance developer productivity by integrating advanced artificial intelligence features directly into the coding environment.

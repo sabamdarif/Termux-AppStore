@@ -20,11 +20,11 @@ install_appimage "$appimage_filename" "Obsidian"
 
 print_success "Downloading and installing icons..."
 download_file "https://raw.githubusercontent.com/Pi-Apps-Coders/files/main/obsidian-hicolor.tar.gz"
-tar -xf obsidian-hicolor.tar.gz -C ${distro_path}/usr/share/icons
+extract "obsidian-hicolor.tar.gz" "${distro_path}/usr/share/icons"
 check_and_delete "obsidian-hicolor.tar.gz"
 
 print_success "Creating desktop entry..."
-cat <<EOF | tee ${PREFIX}/share/applications/obsidian.desktop >/dev/null
+cat <<EOF | tee ${PREFIX}/share/applications/pd_added/obsidian.desktop >/dev/null
 [Desktop Entry]
 Name=Obsidian
 Exec=pdrun ${run_cmd}

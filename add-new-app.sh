@@ -79,6 +79,8 @@ create_install_script() {
     local package_name="$4"
     local run_cmd="$5"
     local supported_arch="$6"
+    local is_repo_pkg="$7"
+    local download_url="$8"
     
     cat > "$folder_path/install.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
@@ -86,34 +88,32 @@ create_install_script() {
 supported_arch="$supported_arch"
 package_name="$package_name"
 run_cmd="$run_cmd"
+version=$version
+app_type="$app_type"
 EOF
     
     if [ "$app_type" = "native" ]; then
         cat >> "$folder_path/install.sh" << 'EOF'
-version=termux_local_version
-app_type="native"
-
 package_install_and_check "$package_name"
 EOF
-    else
+    elif [ "$is_repo_pkg" = "yes" ]; then
         cat >> "$folder_path/install.sh" << EOF
-version=distro_local_version
-app_type="distro"
 supported_distro="$supported_distro"
 
 # Check if a distro is selected
 if [ -z "\$selected_distro" ]; then
-    echo "Error: No distro selected"
+    print_failed "Error: No distro selected"
     exit 1
 fi
 
 # Install based on distro type
 case "\$selected_distro" in
     "debian"|"ubuntu")
-        \$selected_distro update
+        \$selected_distro update -y
         \$selected_distro install $package_name -y
         ;;
     "fedora")
+        \$selected_distro update -y
         \$selected_distro install $package_name -y
         ;;
     *)
@@ -122,15 +122,80 @@ case "\$selected_distro" in
         ;;
 esac
 
-# Check if installation was successful
-if [ \$? -eq 0 ]; then
-    echo "Installation successful"
-    exit 0
-else
-    echo "Installation failed"
+fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
+EOF
+    else
+        # Extract the base URL (everything before /releases/download/)
+        local base_url=$(echo "$download_url" | sed 's|\(.*\)/releases/download/.*|\1|')
+        
+        if [[ "$download_url" =~ \.AppImage$ ]]; then
+            # For AppImage installations
+            cat >> "$folder_path/install.sh" << EOF
+supported_distro="$supported_distro"
+page_url="$base_url"
+run_cmd="/opt/AppImageLauncher/$package_name/$package_name --no-sandbox"
+
+cd \${TMPDIR}
+appimage_filename="${package_name}-\${version#v}-\${supported_arch}.AppImage"
+
+check_and_delete "\${TMPDIR}/\${appimage_filename} \${PREFIX}/share/applications/pd_added/$package_name.desktop"
+
+print_success "Downloading $package_name AppImage..."
+download_file "\${page_url}/releases/download/\${version}/${package_name}-\${version#v}-\${supported_arch}.AppImage"
+install_appimage "\$appimage_filename" "$package_name"
+
+print_success "Creating desktop entry..."
+cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
+[Desktop Entry]
+Name=${package_name^}
+Exec=pdrun \${run_cmd}
+Terminal=false
+Type=Application
+Icon=$package_name
+StartupWMClass=$package_name
+Comment=$package_name
+MimeType=x-scheme-handler/$package_name;
+Categories=${selected_categories[0]};
+DESKTOP_EOF
+EOF
+        else
+            # For tar/archive installations
+            cat >> "$folder_path/install.sh" << EOF
+page_url="$base_url"
+working_dir="\${distro_path}/opt"
+supported_distro="$supported_distro"
+
+# Check if a distro is selected
+if [ -z "\$selected_distro" ]; then
+    print_failed "Error: No distro selected"
     exit 1
 fi
+
+cd \$working_dir
+check_and_delete "$package_name"
+check_and_create_directory "$package_name"
+cd $package_name
+echo "\$(pwd)"
+download_file "\${page_url}/releases/download/\${version}/${package_name}_\${version#v}_linux_\${supported_arch}.tar.gz"
+extract "${package_name}_\${version#v}_linux_\${supported_arch}.tar.gz"
+check_and_delete "${package_name}_\${version#v}_linux_\${supported_arch}.tar.gz"
+
+print_success "Creating desktop entry..."
+cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
+[Desktop Entry]
+Name=${package_name^}
+Exec=pdrun \${run_cmd} --no-sandbox
+Terminal=false
+Type=Application
+Icon=$package_name
+StartupWMClass=$package_name
+Comment=$package_name
+MimeType=x-scheme-handler/$package_name;
+Categories=${selected_categories[0]};
+DESKTOP_EOF
+
 EOF
+        fi
     fi
     
     chmod 755 "$folder_path/install.sh"
@@ -139,12 +204,53 @@ EOF
 create_uninstall_script() {
     local folder_path="$1"
     local package_name="$2"
+    local is_repo_pkg="$3"
+    local download_url="$4"
     
-    cat > "$folder_path/uninstall.sh" << EOF
+    if [ "$app_type" = "native" ]; then
+        cat > "$folder_path/uninstall.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
 package_remove_and_check "$package_name"
 EOF
+    elif [ "$is_repo_pkg" = "yes" ]; then
+        cat > "$folder_path/uninstall.sh" << EOF
+#!/data/data/com.termux/files/usr/bin/bash
+
+case "\$selected_distro" in
+    "debian"|"ubuntu")
+        \$selected_distro remove $package_name -y
+        ;;
+    "fedora")
+        \$selected_distro remove $package_name -y
+        ;;
+    *)
+        echo "Unsupported distribution: \$selected_distro"
+        exit 1
+        ;;
+esac
+
+check_and_delete "\$PREFIX/share/applications/pd_added/$package_name.desktop"
+EOF
+    else
+        if [[ "$download_url" =~ \.AppImage$ ]]; then
+            # For AppImage uninstallation
+            cat > "$folder_path/uninstall.sh" << EOF
+#!/data/data/com.termux/files/usr/bin/bash
+
+check_and_delete "\${distro_path}/opt/AppImageLauncher/$package_name"
+check_and_delete "\${distro_path}/usr/share/icons/hicolor/*/apps/$package_name.png"
+check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
+EOF
+        else
+            cat > "$folder_path/uninstall.sh" << EOF
+#!/data/data/com.termux/files/usr/bin/bash
+
+check_and_delete "\${distro_path}/opt/$package_name"
+check_and_delete "\$PREFIX/share/applications/pd_added/$package_name.desktop"
+EOF
+        fi
+    fi
     
     chmod 755 "$folder_path/uninstall.sh"
 }
@@ -160,8 +266,34 @@ main() {
     app_type=$(get_valid_input "Enter app type (native/distro): " "native" "distro")
     
     supported_distro="all"
+    is_repo_pkg="yes"
+    download_url=""
+    version=""
+    
     if [ "$app_type" = "distro" ]; then
         supported_distro=$(get_valid_input "Enter supported distro (debian/ubuntu/fedora/all): " "debian" "ubuntu" "fedora" "all")
+        
+        read -p "Is it available in the distro's repository? (yes/no): " is_repo_pkg
+        is_repo_pkg=$(echo "$is_repo_pkg" | tr '[:upper:]' '[:lower:]')
+        
+        if [ "$is_repo_pkg" != "yes" ] && [ "$is_repo_pkg" != "y" ]; then
+            is_repo_pkg="no"
+            read -p "Enter the download URL for the tar file: " download_url
+            # Extract version from GitHub URL
+            if [[ $download_url =~ /releases/download/(v[0-9]+\.[0-9]+\.[0-9]+)/ ]]; then
+                version="${BASH_REMATCH[1]}"
+                echo "Detected version: $version"
+            else
+                read -p "Could not detect version from URL. Please enter version manually: " version
+            fi
+        else
+            is_repo_pkg="yes"
+            read -p "Enter version (press Enter for default): " version
+            version=${version:-${app_type}_local_version}
+        fi
+    else
+        read -p "Enter version (press Enter for default): " version
+        version=${version:-${app_type}_local_version}
     fi
     
     # Get package details
@@ -218,14 +350,12 @@ main() {
     (IFS=,; echo "${selected_categories[*]}") > "$app_dir/category.txt"
     
     # Create install and uninstall scripts
-    create_install_script "$app_dir" "$app_type" "$supported_distro" "$package_name" "$run_cmd" "$(echo $supported_archs | tr ' ' ',')"
-    create_uninstall_script "$app_dir" "$package_name"
+    create_install_script "$app_dir" "$app_type" "$supported_distro" "$package_name" "$run_cmd" "$(echo $supported_archs | tr ' ' ',')" "$is_repo_pkg" "$download_url"
+    create_uninstall_script "$app_dir" "$package_name" "$is_repo_pkg" "$download_url"
     
     # Handle logo
     while true; do
-        read -p $'\nEnter path to logo.png (or press Enter to skip): ' logo_path
-        
-        [ -z "$logo_path" ] && break
+        read -p $'\nEnter path to logo.png: ' logo_path
         
         # Remove quotes if present
         logo_path="${logo_path//[\'\"]/}"

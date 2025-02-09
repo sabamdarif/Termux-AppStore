@@ -8,12 +8,18 @@ working_dir="${distro_path}/opt"
 page_url="https://github.com/zen-browser/desktop"
 run_cmd="zen-browser"
 
+# Check if a distro is selected
+if [ -z "$selected_distro" ]; then
+    echo "Error: No distro selected"
+    exit 1
+fi
+
 # chown -R $(whoami):$(whoami) ${distro_path}
 cd $working_dir
 check_and_delete "zen zen-browser zen-browser-arm64-copr"
 echo "$(pwd)"
 download_file "${page_url}/releases/download/${version}/zen.linux-${supported_arch}.tar.bz2"
-tar -xvjf zen.linux-${supported_arch}.tar.bz2
+extract "zen.linux-${supported_arch}.tar.bz2"
 check_and_delete "zen.linux-${supported_arch}.tar.bz2"
 mv zen zen-browser
 git clone --depth 1 https://github.com/ArchitektApx/zen-browser-arm64-copr || exit 1

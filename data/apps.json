@@ -65,6 +65,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Code-oss/logo.png"
   },
   {
+    "app_name": "Cursor",
+    "folder_name": "Cursor",
+    "description": "Cursor is an AI-powered integrated development environment for Windows, macOS and Linux designed to enhance developer productivity by integrating advanced artificial intelligence features directly into the coding environment.",
+    "categories": [
+      "Development"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/opt/cursor/cursor",
+    "supported_arch": "aarch64,arm",
+    "version": "v0.44.0",
+    "supported_distro": "all",
+    "package_name": "cursor",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Cursor/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Cursor/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Cursor/logo.png"
+  },
+  {
     "app_name": "Darktable",
     "folder_name": "Darktable",
     "description": "Darktable is an advanced tool for editing and managing RAW image files.",
@@ -483,7 +500,7 @@
     "app_type": "distro",
     "run_cmd": "zen-browser",
     "supported_arch": "aarch64",
-    "version": "1.7.4b",
+    "version": "1.7.6b",
     "supported_distro": "all",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/uninstall.sh",

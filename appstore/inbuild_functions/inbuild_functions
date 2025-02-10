@@ -431,10 +431,6 @@ function fix_exec() {
     sed -i -E 's|^Exec=([^ ]+)(.*)|Exec=pdrun \1\2 '"$2"'|' "/data/data/com.termux/files/usr/share/applications/$1"
 }
 
-function distro_run() {
-    proot-distro login "$selected_distro" --shared-tmp -- /bin/bash -c "$1"
-}
-
 function install_appimage() {
     local appimage_file="$1"
     local appimage_name="$2"
@@ -475,6 +471,43 @@ function get_latest_version() {
         echo "$latest_version"
     fi
 
+}
+
+function create_shell_script() {
+    local script_path="$1"
+    local shell_setup_content="$2"
+
+    # Create directory if it doesn't exist
+    mkdir -p "$(dirname "$script_path")"
+
+cat << 'EOF' > "$script_path"
+#!/bin/bash
+
+termux_desktop_path="/data/data/com.termux/files/usr/etc/termux-desktop"
+config_file="$termux_desktop_path/configuration.conf"
+log_file="/data/data/com.termux/files/home/termux-desktop.log"
+
+EOF
+    typeset -f print_log print_success print_failed check_and_delete check_and_create_directory extract check_and_restore >> "$script_path"
+    echo "$shell_setup_content" >> "$script_path"
+    
+    # Make script executable
+    chmod +x "$script_path"
+    
+    # Verify script was created
+    if [[ ! -f "$script_path" ]]; then
+        print_failed "Failed to create script at $script_path"
+        return 1
+    fi
+}
+
+function distro_run() {
+    local command="$1"
+        # Multi-line command - create temporary script
+pd_setup_content="${command}"
+
+eval "create_shell_script '$distro_path/root/pd_setup.sh' '$pd_setup_content'"
+proot-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh
 }
 
 read_conf

@@ -12,16 +12,11 @@ cd ${TMPDIR}
 # Get the correct filename that will be downloaded
 appimage_filename="Obsidian-${version#v}-${supported_arch}.AppImage"
 
-check_and_delete "${TMPDIR}/${appimage_filename} ${PREFIX}/share/applications/obsidian.desktop ${TMPDIR}/obsidian-hicolor.tar.gz"
+check_and_delete "${TMPDIR}/${appimage_filename} ${PREFIX}/share/applications/obsidian.desktop"
 
 print_success "Downloading Obsidian AppImage..."
 download_file "${page_url}/releases/download/${version}/Obsidian-${version#v}-${supported_arch}.AppImage"
 install_appimage "$appimage_filename" "Obsidian"
-
-print_success "Downloading and installing icons..."
-download_file "https://raw.githubusercontent.com/Pi-Apps-Coders/files/main/obsidian-hicolor.tar.gz"
-extract "obsidian-hicolor.tar.gz" "${distro_path}/usr/share/icons"
-check_and_delete "obsidian-hicolor.tar.gz"
 
 print_success "Creating desktop entry..."
 cat <<EOF | tee ${PREFIX}/share/applications/pd_added/obsidian.desktop >/dev/null

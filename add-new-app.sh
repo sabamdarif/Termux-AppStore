@@ -160,6 +160,11 @@ DESKTOP_EOF
 EOF
         else
             # For tar/archive installations
+            # Extract the filename pattern from the download URL
+            local filename_pattern=$(basename "$download_url")
+            # Replace the version and arch in the pattern with variables
+            filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/$supported_arch/\${supported_arch}/g")
+
             cat >> "$folder_path/install.sh" << EOF
 page_url="$base_url"
 working_dir="\${distro_path}/opt"
@@ -171,20 +176,24 @@ if [ -z "\$selected_distro" ]; then
     exit 1
 fi
 
-cd \$working_dir
-check_and_delete "$package_name"
-check_and_create_directory "$package_name"
-cd $package_name
+distro_run "
+check_and_delete '/opt/${package_name}'
+check_and_create_directory '/opt/${package_name}'
+"
+cd \$working_dir/$package_name
 echo "\$(pwd)"
-download_file "\${page_url}/releases/download/\${version}/${package_name}_\${version#v}_linux_\${supported_arch}.tar.gz"
-extract "${package_name}_\${version#v}_linux_\${supported_arch}.tar.gz"
-check_and_delete "${package_name}_\${version#v}_linux_\${supported_arch}.tar.gz"
-
+download_file "\${page_url}/releases/download/\${version}/${filename_pattern}"
+distro_run '
+cd /opt/$package_name
+echo "\$(pwd)"
+extract "${filename_pattern}"
+check_and_delete "${filename_pattern}"
+'
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
-Exec=pdrun \${run_cmd} --no-sandbox
+Exec=pdrun \${run_cmd}
 Terminal=false
 Type=Application
 Icon=$package_name
@@ -246,8 +255,10 @@ EOF
             cat > "$folder_path/uninstall.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
-check_and_delete "\${distro_path}/opt/$package_name"
-check_and_delete "\$PREFIX/share/applications/pd_added/$package_name.desktop"
+distro_run "
+check_and_delete '${distro_path}/opt/$package_name'
+check_and_delete '$PREFIX/share/applications/pd_added/$package_name.desktop'
+"
 EOF
         fi
     fi
@@ -299,7 +310,12 @@ main() {
     # Get package details
     read -p "Enter package name: " package_name
     read -p "Enter run command: " run_cmd
-    
+
+    # For distro apps, append --no-sandbox if not present
+    if [ "$app_type" = "distro" ] && [[ ! "$run_cmd" =~ --no-sandbox$ ]]; then
+        run_cmd="$run_cmd --no-sandbox"
+    fi
+
     # Get description
     echo -e "\nEnter app description (press Ctrl+D twice to finish):"
     description=$(cat)

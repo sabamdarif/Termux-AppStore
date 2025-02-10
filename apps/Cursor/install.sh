@@ -2,7 +2,7 @@
 
 supported_arch="aarch64,arm"
 package_name="cursor"
-run_cmd="/opt/cursor/cursor"
+run_cmd="/opt/cursor/cursor --no-sandbox"
 version=v0.44.0
 app_type="distro"
 page_url="https://github.com/coder/cursor-arm"
@@ -22,20 +22,23 @@ aarch64) supported_arch="arm64" ;;
 armv7*|arm) supported_arch="arm32" ;;
 esac
 
-cd $working_dir
-check_and_delete "cursor"
-check_and_create_directory "cursor"
-cd cursor
+distro_run "check_and_delete /opt/cursor"
+distro_run "check_and_create_directory /opt/cursor"
+cd ${working_dir}/cursor
 echo "$(pwd)"
 download_file "${page_url}/releases/download/${version}/cursor_${version#v}_linux_${supported_arch}.tar.gz"
-extract "cursor_${version#v}_linux_${supported_arch}.tar.gz"
-check_and_delete "cursor_${version#v}_linux_${supported_arch}.tar.gz"
 
+distro_run '
+cd /opt/cursor
+echo "$(pwd)"
+extract "cursor_'${version#v}'_linux_'${supported_arch}'.tar.gz"
+check_and_delete "cursor_'${version#v}'_linux_'${supported_arch}'.tar.gz"
+'
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/cursor.desktop >/dev/null
 [Desktop Entry]
 Name=Cursor
-Exec=pdrun ${run_cmd} --no-sandbox
+Exec=pdrun ${run_cmd}
 Terminal=false
 Type=Application
 Icon=cursor

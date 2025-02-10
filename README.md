@@ -16,3 +16,8 @@ A simple app store for Termux.
 ## Installation
 
 ### Pre-Installed in [Termux-Desktop](https://github.com/sabamdarif/termux-desktop)
+
+## Acknowledgments:
+Special thanks to:
+- [Pi-Appps](https://github.com/Botspot/pi-apps)
+- [phoenixbyrd/App-Installer](https://github.com/phoenixbyrd/App-Installer)

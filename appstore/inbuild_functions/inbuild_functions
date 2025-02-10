@@ -139,16 +139,16 @@ function extract() {
     case "$archive" in
         *.tar.gz|*.tgz)
             # Add --no-same-owner to prevent permission issues and -h to dereference hard links
-            tar xzf "$archive" $dir_arg --no-same-owner -h || true
+            tar xvzf "$archive" $dir_arg --no-same-owner -h || true
             ;;
         *.tar.xz)
-            tar xJf "$archive" $dir_arg --no-same-owner -h || true
+            tar xvJf "$archive" $dir_arg --no-same-owner -h || true
             ;;
         *.tar.bz2|*.tbz2)
-            tar xjf "$archive" $dir_arg --no-same-owner -h || true
+            tar xvjf "$archive" $dir_arg --no-same-owner -h || true
             ;;
         *.tar)
-            tar xf "$archive" $dir_arg --no-same-owner -h || true
+            tar xvf "$archive" $dir_arg --no-same-owner -h || true
             ;;
         *.bz2)
             if [[ -n "$output_dir" ]]; then
@@ -432,29 +432,21 @@ function fix_exec() {
 }
 
 function install_appimage() {
-    local appimage_file="$1"
-    local appimage_name="$2"
-    local appimage_path="$distro_path/opt/AppImageLauncher/$appimage_name"
-    
-    check_and_create_directory "$distro_path/opt/AppImageLauncher/"
-    check_and_delete "$appimage_path"
-    echo ${pwd}
-    mv -f "$appimage_file" "$distro_path/opt/AppImageLauncher/"
-
-    cat << EOF > "$distro_path/opt/AppImageLauncher/install_appimage.sh"
-#!/bin/bash
-
+local appimage_file_name="$1"
+local appimage_directory_name="$2"
+distro_run '
+check_and_create_directory '/opt/AppImageLauncher/'
+check_and_delete '/opt/AppImageLauncher/$appimage_directory_name'
+'
+mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
+distro_run "
 cd /opt/AppImageLauncher
 ldconfig
-chmod +x "${appimage_file}"
-APPIMAGE_EXTRACT_AND_RUN=1 ./${appimage_file} --appimage-extract
-mv -f squashfs-root "$appimage_name"
-rm -f "${appimage_file}"
-EOF
-
-    distro_run "chmod +x /opt/AppImageLauncher/install_appimage.sh"
-    distro_run "bash /opt/AppImageLauncher/install_appimage.sh"
-    check_and_delete "$distro_path/opt/AppImageLauncher/install_appimage.sh"
+chmod +x '${appimage_file_name}'
+APPIMAGE_EXTRACT_AND_RUN=1 ./${appimage_file_name} --appimage-extract
+mv -f squashfs-root '$appimage_directory_name'
+check_and_delete '${appimage_file_name}'
+"
 }
 
 function get_latest_version() {

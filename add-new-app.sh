@@ -129,19 +129,23 @@ EOF
         local base_url=$(echo "$download_url" | sed 's|\(.*\)/releases/download/.*|\1|')
         
         if [[ "$download_url" =~ \.AppImage$ ]]; then
-            # For AppImage installations
+            # Extract the filename pattern from the download URL
+            local filename_pattern=$(basename "$download_url")
+            # Replace the version and arch in the pattern with variables
+            filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/$supported_arch/\${supported_arch}/g")
+            
             cat >> "$folder_path/install.sh" << EOF
 supported_distro="$supported_distro"
 page_url="$base_url"
 run_cmd="/opt/AppImageLauncher/$package_name/$package_name --no-sandbox"
 
 cd \${TMPDIR}
-appimage_filename="${package_name}-\${version#v}-\${supported_arch}.AppImage"
+appimage_filename="$filename_pattern"
 
 check_and_delete "\${TMPDIR}/\${appimage_filename} \${PREFIX}/share/applications/pd_added/$package_name.desktop"
 
 print_success "Downloading $package_name AppImage..."
-download_file "\${page_url}/releases/download/\${version}/${package_name}-\${version#v}-\${supported_arch}.AppImage"
+download_file "\${page_url}/releases/download/\${version}/$filename_pattern"
 install_appimage "\$appimage_filename" "$package_name"
 
 print_success "Creating desktop entry..."

@@ -155,7 +155,7 @@ Name=${package_name^}
 Exec=pdrun \${run_cmd}
 Terminal=false
 Type=Application
-Icon=$package_name
+Icon=\${HOME}/.appstore/logo/$folder_name/logo.png
 StartupWMClass=$package_name
 Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
@@ -187,12 +187,12 @@ check_and_create_directory '/opt/${package_name}'
 cd \$working_dir/$package_name
 echo "\$(pwd)"
 download_file "\${page_url}/releases/download/\${version}/${filename_pattern}"
-distro_run '
+distro_run "
 cd /opt/$package_name
 echo "\$(pwd)"
 extract "${filename_pattern}"
 check_and_delete "${filename_pattern}"
-'
+"
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
@@ -200,7 +200,7 @@ Name=${package_name^}
 Exec=pdrun \${run_cmd}
 Terminal=false
 Type=Application
-Icon=$package_name
+Icon=\${HOME}/.appstore/logo/$folder_name/logo.png
 StartupWMClass=$package_name
 Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
@@ -313,7 +313,13 @@ main() {
     
     # Get package details
     read -p "Enter package name: " package_name
-    read -p "Enter run command: " run_cmd
+    
+    if [ "$app_type" = "distro" ] && [ "$is_repo_pkg" = "no" ] && [[ ! "$download_url" =~ \.AppImage$ ]]; then
+        # For tar archives, set default run command
+        run_cmd="/opt/$package_name/$package_name"
+    else
+        read -p "Enter run command: " run_cmd
+    fi
 
     # For distro apps, append --no-sandbox if not present
     if [ "$app_type" = "distro" ] && [[ ! "$run_cmd" =~ --no-sandbox$ ]]; then

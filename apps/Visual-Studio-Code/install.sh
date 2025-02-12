@@ -7,7 +7,7 @@ app_type="distro"
 supported_distro="all"
 # working_dir="${distro_path}"
 package_name="code"
-run_cmd="pdrun /usr/share/code/code --no-sandbox"
+run_cmd="/usr/share/code/code --no-sandbox"
 
 if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]];then
 

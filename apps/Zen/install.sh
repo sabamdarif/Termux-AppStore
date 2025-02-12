@@ -41,7 +41,7 @@ cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/cursor.desktop >/d
 Name=Zen Browser
 Comment=Experience tranquillity while browsing the web without people tracking you!
 Exec=pdrun ${run_cmd}
-Icon=zen-browser
+Icon=${HOME}/.appstore/logo/Zen/logo.png
 Type=Application
 MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;application/x-xpinstall;application/pdf;application/json;
 StartupWMClass=zen-beta

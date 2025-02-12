@@ -446,7 +446,7 @@
       "Development"
     ],
     "app_type": "distro",
-    "run_cmd": "pdrun /usr/share/code/code --no-sandbox",
+    "run_cmd": "/usr/share/code/code --no-sandbox",
     "supported_arch": "aarch64,arm",
     "version": "distro_local_version",
     "supported_distro": "all",

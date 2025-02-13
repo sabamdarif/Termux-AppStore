@@ -325,6 +325,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Obsidian/icon-64.png"
   },
   {
+    "app_name": "Rclone",
+    "folder_name": "Rclone",
+    "description": "Rclone is an open source, multi threaded, command line computer program to manage or migrate content on cloud and other high latency storage.",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "",
+    "supported_arch": "aarch64,arm",
+    "version": "native_local_version",
+    "package_name": "rclone",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rclone/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rclone/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rclone/logo.png"
+  },
+  {
     "app_name": "Rhythmbox",
     "folder_name": "Rhythmbox",
     "description": "Rhythmbox is a music management and playback application.",
@@ -371,6 +387,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/logo.png"
+  },
+  {
+    "app_name": "Spotify qt",
+    "folder_name": "Spotify-qt",
+    "description": "Lightweight Spotify client using Qt",
+    "categories": [
+      "Multimedia"
+    ],
+    "app_type": "native",
+    "run_cmd": "spotofy-qt",
+    "supported_arch": "aarch64,arm",
+    "version": "native_local_version",
+    "package_name": "spotofy-qt",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotify-qt/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotify-qt/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotify-qt/logo.png"
   },
   {
     "app_name": "Telegram",

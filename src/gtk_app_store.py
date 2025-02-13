@@ -811,15 +811,34 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if os.path.exists(termux_desktop_config):
                 try:
                     with open(termux_desktop_config, 'r') as f:
-                        for line in f:
+                        config_lines = f.readlines()
+                        # Read from bottom up to get the last occurrence of each setting
+                        for line in reversed(config_lines):
+                            line = line.strip()
+                            if line.startswith('#') or not line:
+                                continue
                             if line.startswith('distro_add_answer='):
-                                distro_enabled = line.strip().split('=')[1].lower() == 'y'
+                                value = line.split('=')[1].strip().strip('"')
+                                distro_enabled = value.lower() == 'y'
+                                print(f"Found distro_add_answer: {value} -> enabled: {distro_enabled}")
                             elif line.startswith('selected_distro='):
-                                selected_distro = line.strip().split('=')[1].lower()
+                                selected_distro = line.split('=')[1].strip().strip('"').lower()
+                                print(f"Found selected_distro: {selected_distro}")
+                            
+                            # Break if we found both values
+                            if distro_enabled is not None and selected_distro:
+                                break
+                            
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
+                    import traceback
+                    traceback.print_exc()
             else:
-                print("Warning: Termux Desktop not installed")
+                print("Warning: Termux Desktop configuration file not found")
+
+            print(f"\nConfiguration status:")
+            print(f"Distro enabled: {distro_enabled}")
+            print(f"Selected distro: {selected_distro}")
 
             with open(APPSTORE_JSON) as f:
                 all_apps = json.load(f)

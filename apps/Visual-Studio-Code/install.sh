@@ -44,4 +44,4 @@ sudo dnf check-update -y
 '
     $selected_distro install code -y
 fi
-sed -i 's|Exec=pdrun code|Exec=pdrun /usr/share/code/code --no-sandbox|g' "/data/data/com.termux/files/usr/share/applications/pd_added/code.desktop"
+sed -i 's|^Exec=.*|Exec=pdrun /usr/share/code/code --no-sandbox|g' "/data/data/com.termux/files/usr/share/applications/pd_added/code.desktop"

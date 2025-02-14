@@ -78,143 +78,149 @@ class AppStoreApplication(Gtk.Application):
 
 class AppStoreWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        Gtk.ApplicationWindow.__init__(
-            self,
-            application=app,
-            title="Termux AppStore"
-        )
-        
-        # Set window properties
-        self.set_wmclass("termux-appstore", "Termux AppStore")
-        self.set_role("termux-appstore")
-        self.set_default_size(1000, 600)
-        self.set_position(Gtk.WindowPosition.CENTER)
-        
-        # Initialize installation flags
-        self.installation_cancelled = False
-        self.uninstallation_cancelled = False
+        try:
+            Gtk.ApplicationWindow.__init__(
+                self,
+                application=app,
+                title="Termux AppStore"
+            )
+            
+            # Set window properties
+            self.set_wmclass("termux-appstore", "Termux AppStore")
+            self.set_role("termux-appstore")
+            self.set_default_size(1000, 600)
+            self.set_position(Gtk.WindowPosition.CENTER)
+            
+            # Initialize installation flags
+            self.installation_cancelled = False
+            self.uninstallation_cancelled = False
 
-        # Get system architecture
-        self.system_arch = platform.machine().lower()
-        print(f"System architecture: {self.system_arch}")
-        
-        # Define architecture compatibility groups
-        self.arch_compatibility = {
-            'arm64': ['arm64', 'aarch64'],
-            'aarch64': ['arm64', 'aarch64'],
-            'arm': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-            'armv7l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-            'armhf': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-            'armv8l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l']
-        }
+            # Get system architecture
+            self.system_arch = platform.machine().lower()
+            print(f"System architecture: {self.system_arch}")
+            
+            # Define architecture compatibility groups
+            self.arch_compatibility = {
+                'arm64': ['arm64', 'aarch64'],
+                'aarch64': ['arm64', 'aarch64'],
+                'arm': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+                'armv7l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+                'armhf': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+                'armv8l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l']
+            }
 
-        # Add keyboard accelerators
-        accel = Gtk.AccelGroup()
-        self.add_accel_group(accel)
-        
-        # Add Ctrl+Q shortcut
-        key, mod = Gtk.accelerator_parse("<Control>Q")
-        accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
+            # Add keyboard accelerators
+            accel = Gtk.AccelGroup()
+            self.add_accel_group(accel)
+            
+            # Add Ctrl+Q shortcut
+            key, mod = Gtk.accelerator_parse("<Control>Q")
+            accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
 
-        # Initialize stop flag for background tasks
-        self.stop_background_tasks = False
+            # Initialize stop flag for background tasks
+            self.stop_background_tasks = False
 
-        # Initialize task queue and current task
-        self.task_queue = queue.Queue()
-        self.current_task = None
+            # Initialize task queue and current task
+            self.task_queue = queue.Queue()
+            self.current_task = None
 
-        # Start task processor
-        self.start_task_processor()
+            # Start task processor
+            self.start_task_processor()
 
-        # Connect the delete-event to handle window closing
-        self.connect("delete-event", self.on_delete_event)
+            # Connect the delete-event to handle window closing
+            self.connect("delete-event", self.on_delete_event)
 
-        # Initialize paths and create directories
-        self.setup_directories()
+            # Initialize paths and create directories
+            self.setup_directories()
 
-        # Initialize installed apps tracking
-        self.installed_apps_file = Path(os.path.expanduser("~/.termux_appstore/installed_apps.json"))
-        self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
-        self.load_installed_apps()
+            # Initialize installed apps tracking
+            self.installed_apps_file = Path(os.path.expanduser("~/.termux_appstore/installed_apps.json"))
+            self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
+            self.load_installed_apps()
 
-        # Initialize categories and apps data
-        self.categories = []
-        self.apps_data = []
+            # Initialize categories and apps data
+            self.categories = []
+            self.apps_data = []
 
-        # Load CSS
-        css_provider = Gtk.CssProvider()
-        # css_file = Path(__file__).parent / 'style' / 'style.css'
-        css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
-        css_provider.load_from_path(str(css_file))
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
+            # Load CSS
+            css_provider = Gtk.CssProvider()
+            css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
+            css_provider.load_from_path(str(css_file))
+            Gtk.StyleContext.add_provider_for_screen(
+                Gdk.Screen.get_default(),
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
 
-        # Create main container with overlay
-        self.overlay = Gtk.Overlay()
-        self.add(self.overlay)
+            # Create main container with overlay
+            self.overlay = Gtk.Overlay()
+            self.add(self.overlay)
 
-        # Create main content box
-        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.overlay.add(self.main_box)
+            # Create main content box
+            self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.overlay.add(self.main_box)
 
-        # Create spinner for initial load
-        self.spinner = Gtk.Spinner()
-        self.spinner.set_size_request(64, 64)
+            # Create spinner for initial load
+            self.spinner = Gtk.Spinner()
+            self.spinner.set_size_request(64, 64)
 
-        # Create a label for the loading message
-        self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
-        self.loading_label.set_halign(Gtk.Align.CENTER)
-        self.loading_label.hide()  # Initially hide the loading label
+            # Create a label for the loading message
+            self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
+            self.loading_label.set_halign(Gtk.Align.CENTER)
+            self.loading_label.hide()
 
-        spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        spinner_box.pack_start(self.spinner, True, True, 0)
-        spinner_box.pack_start(self.loading_label, True, True, 0)  # Add label to the spinner box
-        spinner_box.set_valign(Gtk.Align.CENTER)
-        spinner_box.set_halign(Gtk.Align.CENTER)
-        self.overlay.add_overlay(spinner_box)
+            spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            spinner_box.pack_start(self.spinner, True, True, 0)
+            spinner_box.pack_start(self.loading_label, True, True, 0)
+            spinner_box.set_valign(Gtk.Align.CENTER)
+            spinner_box.set_halign(Gtk.Align.CENTER)
+            self.overlay.add_overlay(spinner_box)
 
-        # Create header bar
-        header = Gtk.HeaderBar()
-        header.set_show_close_button(True)
-        header.props.title = "Termux App Store"
-        self.set_titlebar(header)
+            # Create header bar
+            header = Gtk.HeaderBar()
+            header.set_show_close_button(True)
+            header.props.title = "Termux App Store"
+            self.set_titlebar(header)
 
-        # Add update system button to header bar (left side)
-        self.update_button = Gtk.Button(label="Update System")
-        self.update_button.get_style_context().add_class('system-update-button')
-        self.update_button.connect("clicked", self.on_update_system)
-        header.pack_start(self.update_button)
+            # Add update system button to header bar (left side)
+            self.update_button = Gtk.Button(label="Update System")
+            self.update_button.get_style_context().add_class('system-update-button')
+            self.update_button.connect("clicked", self.on_update_system)
+            header.pack_start(self.update_button)
 
-        # Add refresh button to header (right side)
-        self.refresh_button = Gtk.Button()
-        self.refresh_button.set_tooltip_text("Refresh App List")
-        refresh_icon = Gtk.Image.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
-        self.refresh_button.add(refresh_icon)
-        self.refresh_button.connect("clicked", self.on_refresh_clicked)
-        header.pack_end(self.refresh_button)
+            # Add refresh button to header (right side)
+            self.refresh_button = Gtk.Button()
+            self.refresh_button.set_tooltip_text("Refresh App List")
+            refresh_icon = Gtk.Image.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
+            self.refresh_button.add(refresh_icon)
+            self.refresh_button.connect("clicked", self.on_refresh_clicked)
+            header.pack_end(self.refresh_button)
 
-        # Create content box for app list
-        self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.main_box.pack_start(self.content_box, True, True, 0)
+            # Create content box for app list
+            self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            self.main_box.pack_start(self.content_box, True, True, 0)
 
-        # Show all widgets
-        self.show_all()
+            # Show all widgets
+            self.show_all()
 
-        # Start the initial data load
-        self.check_for_updates()
+            # Start the initial data load
+            self.check_for_updates()
 
-        # Initialize updates tracking
-        self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
-        os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
-        self.pending_updates = self.load_pending_updates()
+            # Initialize updates tracking
+            self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
+            os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
+            self.pending_updates = self.load_pending_updates()
 
-        # Create the 'Update System' button
-        self.update_system_button = Gtk.Button(label='Update System')
-        self.update_system_button.connect('clicked', self.on_update_system)
-        self.main_box.pack_start(self.update_system_button, False, False, 0)
+            # Create the 'Update System' button
+            self.update_system_button = Gtk.Button(label='Update System')
+            self.update_system_button.connect('clicked', self.on_update_system)
+            self.main_box.pack_start(self.update_system_button, False, False, 0)
+
+        except Exception as e:
+            print(f"Error initializing AppStoreWindow: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
 
     def setup_directories(self):
         """Create necessary directories for the app store"""
@@ -1496,27 +1502,49 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def show_apps(self, category=None):
         """Display apps based on category"""
-        # Clear current list
-        for child in self.app_list_box.get_children():
-            child.destroy()
+        try:
+            # Clear current list safely
+            GLib.idle_add(self.clear_app_list_box)
 
-        # Filter apps based on category and search query
-        filtered_apps = self.apps_data
-        if category and category != "All Apps":
-            filtered_apps = [app for app in filtered_apps if category in app['categories']]
+            # Filter apps based on category and search query
+            filtered_apps = self.apps_data
+            if category and category != "All Apps":
+                filtered_apps = [app for app in filtered_apps if category in app['categories']]
 
-        # Apply search filter if search entry has text
-        search_text = self.search_entry.get_text().lower()
-        if search_text:
-            filtered_apps = [
-                app for app in filtered_apps
-                if search_text in app['app_name'].lower()
-                or search_text in app['description'].lower()
-                or any(search_text in cat.lower() for cat in app['categories'])
-            ]
+            # Apply search filter if search entry has text
+            search_text = self.search_entry.get_text().lower()
+            if search_text:
+                filtered_apps = [
+                    app for app in filtered_apps
+                    if search_text in app['app_name'].lower()
+                    or search_text in app['description'].lower()
+                    or any(search_text in cat.lower() for cat in app['categories'])
+                ]
 
-        # Add filtered apps to the list
-        for app in filtered_apps:
+            # Add filtered apps to the list using idle_add
+            for app in filtered_apps:
+                GLib.idle_add(lambda a=app: self.add_app_card(a))
+
+            GLib.idle_add(self.app_list_box.show_all)
+        except Exception as e:
+            print(f"Error in show_apps: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def clear_app_list_box(self):
+        """Safely clear the app list box"""
+        try:
+            for child in self.app_list_box.get_children():
+                self.app_list_box.remove(child)
+                child.destroy()
+            return False
+        except Exception as e:
+            print(f"Error clearing app list box: {e}")
+            return False
+
+    def add_app_card(self, app):
+        """Add a single app card to the list box"""
+        try:
             # Create app card
             app_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             app_card.get_style_context().add_class('app-card')
@@ -1528,16 +1556,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             card_box.set_margin_top(12)
             card_box.set_margin_bottom(12)
 
-            # App logo
+            # App logo with error handling
             logo_path = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'], 'logo.png')
             if os.path.exists(logo_path):
                 try:
-                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(logo_path, 64, 64, True)
-                    logo_image = Gtk.Image.new_from_pixbuf(pixbuf)
-                    logo_image.set_margin_end(12)
-                    card_box.pack_start(logo_image, False, False, 0)
+                    # Load image in a safer way
+                    pixbuf = None
+                    try:
+                        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(logo_path, 64, 64, True)
+                    except GLib.Error as e:
+                        print(f"Error loading logo for {app['app_name']}: {e}")
+                    except Exception as e:
+                        print(f"Unexpected error loading logo for {app['app_name']}: {e}")
+
+                    if pixbuf:
+                        logo_image = Gtk.Image.new_from_pixbuf(pixbuf)
+                        logo_image.set_margin_end(12)
+                        card_box.pack_start(logo_image, False, False, 0)
                 except Exception as e:
-                    print(f"Error loading logo for {app['app_name']}: {str(e)}")
+                    print(f"Error creating logo image for {app['app_name']}: {e}")
 
             # App info
             info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -1547,7 +1584,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # App name
             name_label = Gtk.Label()
-            name_label.set_markup(f"<b>{app['app_name']}</b>")
+            name_label.set_markup(f"<b>{GLib.markup_escape_text(app['app_name'])}</b>")
             name_label.set_halign(Gtk.Align.START)
             top_row.pack_start(name_label, False, False, 0)
             
@@ -1557,7 +1594,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Source type label
             source_label = Gtk.Label()
             source_type = app.get('app_type', 'unknown').capitalize()
-            source_label.set_markup(f"Source: {source_type}")
+            source_label.set_markup(f"Source: {GLib.markup_escape_text(source_type)}")
             source_label.get_style_context().add_class("metadata-label")
             source_label.set_size_request(120, -1)
             source_label.set_halign(Gtk.Align.CENTER)
@@ -1566,8 +1603,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             info_box.pack_start(top_row, False, False, 0)
 
-            # App description
-            desc_label = Gtk.Label(label=app['description'][:100] + "..." if len(app['description']) > 100 else app['description'])
+            # App description with proper escaping
+            desc_text = app['description'][:100] + "..." if len(app['description']) > 100 else app['description']
+            desc_label = Gtk.Label(label=GLib.markup_escape_text(desc_text))
             desc_label.set_line_wrap(True)
             desc_label.set_halign(Gtk.Align.START)
             info_box.pack_start(desc_label, False, False, 0)
@@ -1583,11 +1621,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             version_label = Gtk.Label()
             version = app.get('version', '')
             if version and isinstance(version, str):
-                # Remove duplicate versions and clean up
-                version = version.split(',')[0].strip()  # Take only first version
-                # Remove any duplicate version numbers that might be in the string
-                version = version.split()[0].strip()  # Take only first word to avoid duplicates
-            version_label.set_text(version if version else "Unavailable")
+                version = version.split(',')[0].strip()
+                version = version.split()[0].strip()
+            version_label.set_text(GLib.markup_escape_text(version if version else "Unavailable"))
             version_label.get_style_context().add_class("metadata-label")
             version_label.set_size_request(120, -1)
             version_label.set_halign(Gtk.Align.CENTER)
@@ -1614,24 +1650,29 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 uninstall_button = Gtk.Button(label="Uninstall")
                 uninstall_button.get_style_context().add_class("uninstall-button")
                 uninstall_button.connect("clicked", self.on_uninstall_clicked, app)
-                uninstall_button.set_size_request(120, -1)  # Match metadata label size
+                uninstall_button.set_size_request(120, -1)
                 button_box.pack_start(uninstall_button, False, False, 0)
             else:
                 install_button = Gtk.Button(label="Install")
                 install_button.get_style_context().add_class("install-button")
                 install_button.connect("clicked", self.on_install_clicked, app)
-                install_button.set_size_request(120, -1)  # Match metadata label size
+                install_button.set_size_request(120, -1)
                 button_box.pack_start(install_button, False, False, 0)
 
             bottom_box.pack_start(button_box, False, False, 0)
-            bottom_box.pack_end(version_label, False, False, 0)  # Version label at bottom right
+            bottom_box.pack_end(version_label, False, False, 0)
             info_box.pack_start(bottom_box, False, False, 0)
             
             card_box.pack_start(info_box, True, True, 0)
             app_card.add(card_box)
             self.app_list_box.pack_start(app_card, False, True, 0)
 
-        self.app_list_box.show_all()
+            return False
+        except Exception as e:
+            print(f"Error adding app card for {app['app_name']}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def on_search_changed(self, entry):
         """Handle search entry changes"""

@@ -1563,10 +1563,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Version label (right side of bottom row)
             version_label = Gtk.Label()
             version = app.get('version', '')
-            if version in ['termux_local_version', 'distro_local_version']:
-                version_label.set_text("Unavailable")
-            else:
-                version_label.set_text(version)
+            if version and isinstance(version, str):
+                # Remove duplicate versions and clean up
+                version = version.split(',')[0].strip()  # Take only first version
+                # Remove any duplicate version numbers that might be in the string
+                version = version.split()[0].strip()  # Take only first word to avoid duplicates
+            version_label.set_text(version if version else "Unavailable")
             version_label.get_style_context().add_class("metadata-label")
             version_label.set_size_request(120, -1)
             version_label.set_halign(Gtk.Align.CENTER)

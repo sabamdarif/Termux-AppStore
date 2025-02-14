@@ -803,6 +803,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def load_app_metadata(self):
         """Load app metadata from the centralized JSON file"""
         try:
+            # Show spinner and loading label during metadata loading
+            GLib.idle_add(lambda: self.spinner.show())
+            GLib.idle_add(lambda: self.spinner.start())
+            GLib.idle_add(lambda: self.loading_label.set_text("Loading app metadata..."))
+            GLib.idle_add(lambda: self.loading_label.show())
+            
             # First check Termux Desktop configuration
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
             distro_enabled = False
@@ -845,6 +851,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 
             # Update versions for distro apps if distro is enabled
             if distro_enabled and selected_distro:
+                GLib.idle_add(lambda: self.loading_label.set_text(f"Loading {selected_distro} app versions..."))
                 for app in all_apps:
                     if (app.get('app_type') == 'distro' and 
                         app.get('version') == 'distro_local_version' and
@@ -858,6 +865,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 continue
 
                         print(f"Checking version for {app['app_name']}...")
+                        GLib.idle_add(lambda app_name=app['app_name']: self.loading_label.set_text(f"Checking version for {app_name}..."))
 
                         # Prepare command based on distro type
                         cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
@@ -950,14 +958,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             print(f"Loaded {len(self.apps_data)} compatible apps out of {len(all_apps)} total apps")
             
+            # Hide spinner and loading label after completion
+            GLib.idle_add(lambda: self.spinner.stop())
+            GLib.idle_add(lambda: self.spinner.hide())
+            GLib.idle_add(lambda: self.loading_label.hide())
+            
         except FileNotFoundError:
             self.apps_data = []
             self.categories = []
             print("No apps.json file found")
+            GLib.idle_add(lambda: self.spinner.stop())
+            GLib.idle_add(lambda: self.spinner.hide())
+            GLib.idle_add(lambda: self.loading_label.hide())
         except Exception as e:
             print(f"Error loading app metadata: {e}")
             self.apps_data = []
             self.categories = []
+            GLib.idle_add(lambda: self.spinner.stop())
+            GLib.idle_add(lambda: self.spinner.hide())
+            GLib.idle_add(lambda: self.loading_label.hide())
 
     def setup_app_list_ui(self):
         """Set up the main app list UI"""

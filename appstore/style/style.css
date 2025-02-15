@@ -1,7 +1,7 @@
 /* Global styles */
 window {
-    background-color: #2d2d2d;
-    color: #ffffff;
+    background-color: @theme_bg_color;
+    color: @theme_fg_color;
 }
 
 /* Search entry */
@@ -9,13 +9,13 @@ window {
     border-radius: 20px;
     padding: 8px 12px;
     margin: 10px;
-    background: #3d3d3d;
-    color: #ffffff;
+    background: alpha(@theme_fg_color, 0.1);
+    color: @theme_fg_color;
     border: none;
 }
 
 .search-box entry:focus {
-    background: #454545;
+    background: alpha(@theme_fg_color, 0.15);
 }
 
 .search-box entry > image.left {
@@ -25,26 +25,26 @@ window {
 /* Category list */
 .category-list {
     background: transparent;
-    color: #ffffff;
+    color: @theme_fg_color;
 }
 
 .category-list row {
     padding: 8px;
     background-color: transparent;
-    color: #ffffff;
+    color: @theme_fg_color;
 }
 
 .category-list row:selected {
-    background-color: #3d3d3d;
+    background-color: alpha(@theme_fg_color, 0.1);
 }
 
 .category-list row:hover {
-    background-color: #353535;
+    background-color: alpha(@theme_fg_color, 0.05);
 }
 
 .category-button {
-    background: #3d3d3d;
-    color: #ffffff;
+    background: alpha(@theme_fg_color, 0.1);
+    color: @theme_fg_color;
     border: none;
     border-radius: 6px;
     padding: 8px 16px;
@@ -53,11 +53,12 @@ window {
 }
 
 .category-button:hover {
-    background: #4d4d4d;
+    background: alpha(@theme_fg_color, 0.15);
 }
 
-.category-button:active {
-    background: #5d5d5d;
+.category-button.selected {
+    background: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
 }
 
 /* App cards */
@@ -134,15 +135,16 @@ window {
 
 /* Progress overlay */
 .progress-overlay {
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: alpha(@theme_bg_color, 0.9);
     border-radius: 10px;
     padding: 20px;
     margin: 20px;
-    color: white;
+    color: @theme_fg_color;
+    border: 1px solid alpha(@theme_fg_color, 0.1);
 }
 
 .progress-overlay label {
-    color: white;
+    color: @theme_fg_color;
     font-size: 14px;
     margin-bottom: 10px;
 }
@@ -152,13 +154,11 @@ window {
 }
 
 .progress-overlay progressbar trough {
-    background-color: rgba(255, 255, 255, 0.1);
-    border: none;
+    background-color: alpha(@theme_fg_color, 0.1);
 }
 
 .progress-overlay progressbar progress {
-    background-color: #4a90d9;
-    border: none;
+    background-color: @theme_selected_bg_color;
 }
 
 .progress-overlay button {
@@ -175,58 +175,50 @@ window {
 
 /* App card styling */
 .app-card {
-    background: #353535;
+    background-color: @theme_base_color;
     border-radius: 8px;
     margin: 6px 24px;
-    border: none;
+    border: 1px solid alpha(@theme_fg_color, 0.1);
+    box-shadow: 0 1px 3px alpha(black, 0.1);
 }
 
 .app-card label {
-    color: white;
+    color: @theme_text_color;
 }
 
 /* App type labels */
-.app-type-distro {
-    background-color: #2ecc71;
+.app-type-distro, .app-type-native, .app-type-both, .app-type-unknown {
     color: white;
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 12px;
+}
+
+.app-type-distro {
+    background-color: #2ecc71;
 }
 
 .app-type-native {
     background-color: #3498db;
-    color: white;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 12px;
 }
 
 .app-type-both {
     background-color: #9b59b6;
-    color: white;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 12px;
 }
 
 .app-type-unknown {
     background-color: #95a5a6;
-    color: white;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 12px;
 }
 
 /* Metadata labels (for both version and source type) */
 .metadata-label {
-    color: #888888;
+    color: @theme_text_color;
     font-size: 12px;
     padding: 4px 8px;
-    border: 1px solid #444444;
+    border: 1px solid alpha(@theme_fg_color, 0.2);
     border-radius: 4px;
-    background-color: #333333;
-    min-width: 120px;  /* Ensure minimum width */
+    background-color: @theme_base_color;
+    min-width: 120px;
 }
 
 /* Remove the old source-type-label class as it's replaced by metadata-label */
@@ -268,7 +260,13 @@ window {
 }
 
 .updating {
-    background-image: linear-gradient(to right, #2ecc71 0%, #2ecc71 0%, transparent 0%);
+    background-image: linear-gradient(to right, @theme_selected_bg_color 0%, @theme_selected_bg_color 0%, transparent 0%);
     background-repeat: no-repeat;
     transition: background-image 0.3s ease-in-out;
+}
+
+/* App description */
+.app-description {
+    color: alpha(@theme_text_color, 0.8);
+    font-size: 14px;
 }

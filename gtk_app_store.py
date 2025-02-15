@@ -182,12 +182,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             header.props.title = "Termux App Store"
             self.set_titlebar(header)
 
-            # Add update system button to header bar (left side)
-            self.update_button = Gtk.Button(label="Update System")
-            self.update_button.get_style_context().add_class('system-update-button')
-            self.update_button.connect("clicked", self.on_update_system)
-            header.pack_start(self.update_button)
-
+            # Remove the update system button from header bar
             # Add refresh button to header (right side)
             self.refresh_button = Gtk.Button()
             self.refresh_button.set_tooltip_text("Refresh App List")
@@ -1027,6 +1022,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         sidebar.set_margin_start(10)
         sidebar.set_margin_end(10)
         sidebar.set_margin_top(10)
+        sidebar.set_margin_bottom(10)  # Add bottom margin
         self.content_box.pack_start(sidebar, False, True, 0)
 
         # Category list
@@ -1043,6 +1039,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         all_button.connect("clicked", self.on_category_clicked)
         all_button.set_size_request(-1, 40)
         all_button.get_style_context().add_class("category-button")
+        all_button.get_style_context().add_class("selected")
         sidebar.pack_start(all_button, False, True, 0)
 
         # Category buttons
@@ -1055,9 +1052,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             sidebar.pack_start(button, False, True, 0)
             self.category_buttons.append(button)
 
+        # Add spacer to push update button to bottom
+        spacer = Gtk.Box()
+        sidebar.pack_start(spacer, True, True, 0)
+
+        # Add Update System button at the bottom of sidebar
+        self.update_button = Gtk.Button(label="Update System")
+        self.update_button.get_style_context().add_class('system-update-button')
+        self.update_button.connect("clicked", self.on_update_system)
+        self.update_button.set_margin_top(10)
+        sidebar.pack_end(self.update_button, False, False, 0)
+
         # Right panel - App list
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_vexpand(True)  # Add this line to allow vertical expansion
         self.content_box.pack_start(scrolled, True, True, 0)
 
         # Container for search and app list
@@ -1079,10 +1088,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # App list box
         self.app_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.app_list_box.set_vexpand(True)  # Add this line to allow vertical expansion
         right_panel.pack_start(self.app_list_box, True, True, 0)
 
-        # Show all apps initially
-        self.show_apps()
+        # Show all apps initially with "All Apps" selected
+        self.show_apps(None)  # Pass None to show all apps
         self.content_box.show_all()
 
     def on_category_clicked(self, button):

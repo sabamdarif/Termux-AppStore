@@ -823,24 +823,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if os.path.exists(termux_desktop_config):
                 try:
                     with open(termux_desktop_config, 'r') as f:
-                        config_lines = f.readlines()
-                        # Read from bottom up to get the last occurrence of each setting
-                        for line in reversed(config_lines):
+                        for line in f:
                             line = line.strip()
                             if line.startswith('#') or not line:
                                 continue
                             if line.startswith('distro_add_answer='):
-                                value = line.split('=')[1].strip().strip('"')
-                                distro_enabled = value.lower() == 'y'
+                                value = line.split('=')[1].strip().lower()
+                                distro_enabled = value == 'y'  # Direct comparison with 'y'
                                 print(f"Found distro_add_answer: {value} -> enabled: {distro_enabled}")
                             elif line.startswith('selected_distro='):
-                                selected_distro = line.split('=')[1].strip().strip('"').lower()
+                                selected_distro = line.split('=')[1].strip().lower()
                                 print(f"Found selected_distro: {selected_distro}")
-                            
-                            # Break if we found both values
-                            if distro_enabled is not None and selected_distro:
-                                break
-                            
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
                     import traceback
@@ -855,7 +848,30 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             with open(APPSTORE_JSON) as f:
                 all_apps = json.load(f)
                 
-            # Update versions for distro apps if distro is enabled
+            # First update versions for native apps
+            GLib.idle_add(lambda: self.loading_label.set_text("Loading native app versions..."))
+            for app in all_apps:
+                if (app.get('app_type') == 'native' and 
+                    app.get('version') == 'termux_local_version' and 
+                    app.get('package_name')):
+                    cmd = f"source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                    cmd += f"if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                    cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
+                    cmd += f"elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                    cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
+                    
+                    try:
+                        result = subprocess.run(['bash', '-c', cmd], 
+                                             capture_output=True, 
+                                             text=True, 
+                                             timeout=10)
+                        if result.returncode == 0 and result.stdout.strip():
+                            app['version'] = result.stdout.strip()
+                            print(f"Updated version for {app['app_name']}: {app['version']}")
+                    except Exception as e:
+                        print(f"Error getting version for {app['app_name']}: {e}")
+                    
+            # Then update versions for distro apps if distro is enabled
             if distro_enabled and selected_distro:
                 GLib.idle_add(lambda: self.loading_label.set_text(f"Loading {selected_distro} app versions..."))
                 for app in all_apps:
@@ -1621,9 +1637,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             version_label = Gtk.Label()
             version = app.get('version', '')
             if version and isinstance(version, str):
-                version = version.split(',')[0].strip()
-                version = version.split()[0].strip()
-            version_label.set_text(GLib.markup_escape_text(version if version else "Unavailable"))
+                if version in ['termux_local_version', 'distro_local_version']:
+                    version = 'Unavailable'
+                else:
+                    version = version.split(',')[0].strip()
+                    version = version.split()[0].strip()
+            else:
+                version = 'Unavailable'
+            version_label.set_text(GLib.markup_escape_text(version))
             version_label.get_style_context().add_class("metadata-label")
             version_label.set_size_request(120, -1)
             version_label.set_halign(Gtk.Align.CENTER)

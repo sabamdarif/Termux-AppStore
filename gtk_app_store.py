@@ -863,9 +863,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if result.returncode == 0 and result.stdout.strip():
                             app['version'] = result.stdout.strip()
                             print(f"Updated version for {app['app_name']}: {app['version']}")
+                        else:
+                            app['version'] = 'Unavailable'
+                            print(f"Could not get version for {app['app_name']}, setting to Unavailable")
                     except Exception as e:
+                        app['version'] = 'Unavailable'
                         print(f"Error getting version for {app['app_name']}: {e}")
-                    
+
             # Then update versions for distro apps if distro is enabled
             if distro_enabled and selected_distro:
                 GLib.idle_add(lambda: self.loading_label.set_text(f"Loading {selected_distro} app versions..."))
@@ -1671,7 +1675,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     update_button.connect("clicked", self.on_update_clicked, app)
                     update_button.set_size_request(120, -1)
                     button_box.pack_start(update_button, False, False, 0)
-                elif app.get('run_cmd') is not None:
+                elif app.get('run_cmd') and app.get('run_cmd').strip():  # Check if run_cmd exists and is not empty
                     open_button = Gtk.Button(label="Open")
                     open_button.get_style_context().add_class("open-button")
                     open_button.connect("clicked", self.on_open_clicked, app)

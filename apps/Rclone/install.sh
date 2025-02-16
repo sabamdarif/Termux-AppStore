@@ -2,7 +2,6 @@
 
 supported_arch="aarch64,arm"
 package_name="rclone"
-run_cmd=""
 version=native_local_version
 app_type="native"
 package_install_and_check "$package_name"

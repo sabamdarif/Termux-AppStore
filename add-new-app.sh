@@ -308,7 +308,7 @@ main() {
         fi
     else
         read -p "Enter version (press Enter for default): " version
-        version=${version:-${app_type}_local_version}
+        version=${version:-termux_local_version}
     fi
     
     # Get package details

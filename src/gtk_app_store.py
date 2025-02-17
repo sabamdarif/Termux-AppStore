@@ -279,6 +279,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def update_app_versions(self):
         """Update versions for all apps in the background"""
         try:
+            print("\n=== Starting Version Update Process ===")
+            
             # Step 1: Load old apps.json data before backing up
             old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
             old_apps_data = []
@@ -293,11 +295,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 with open(APPSTORE_JSON, 'r') as f:
                     current_apps_data = json.load(f)
                     print("Loaded current apps data")
-                    
-            # Check Termux Desktop configuration first
+
+            # Get default distro for version checking
+            default_distro = self.get_default_distro()
+            print(f"\nDefault distro for version checking: {default_distro}")
+
+            # Check Termux Desktop configuration
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
             distro_enabled = False
-            selected_distro = None
             
             if os.path.exists(termux_desktop_config):
                 try:
@@ -305,125 +310,113 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         for line in f:
                             if line.startswith('distro_add_answer='):
                                 distro_enabled = line.strip().split('=')[1].lower() == 'y'
-                            elif line.startswith('selected_distro='):
-                                selected_distro = line.strip().split('=')[1].lower()
+                                print(f"Distro support enabled: {distro_enabled}")
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
-            else:
-                print("Warning: Termux Desktop not installed")
 
-            # Step 3: Get actual versions for native apps
-            for app in current_apps_data:
-                if (app['app_type'] == 'native' and 
-                    app.get('version') == 'termux_local_version' and 
-                    app.get('package_name')):
-                    cmd = f"source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
-                    cmd += f"if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
-                    cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
-                    cmd += f"elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
-                    cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
-                    
-                    try:
-                        result = subprocess.run(['bash', '-c', cmd], 
-                                             capture_output=True, 
-                                             text=True, 
-                                             timeout=10)
-                        if result.returncode == 0 and result.stdout.strip():
-                            app['version'] = result.stdout.strip()
-                            print(f"Got version for {app['app_name']}: {app['version']}")
-                    except Exception as e:
-                        print(f"Error getting version for {app['app_name']}: {e}")
-
-            # Step 4: Get actual versions for distro apps if distro is enabled
-            if distro_enabled and selected_distro:
-                # First check if proot-distro is working correctly
-                test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
+            # First check if proot-distro is working correctly
+            if distro_enabled and default_distro:
+                print(f"\nTesting proot-distro with {default_distro}...")
+                test_cmd = f"proot-distro login {default_distro} --shared-tmp -- /bin/bash -c 'echo test'"
                 try:
                     test_result = subprocess.run(['bash', '-c', test_cmd],
                                               capture_output=True,
                                               text=True,
                                               timeout=10)
-                    if test_result.returncode != 0:
-                        print(f"Error: proot-distro test failed for {selected_distro}")
-                        print(f"Stderr: {test_result.stderr}")
-                        return
+                    if test_result.returncode == 0:
+                        print("proot-distro test successful")
+                        
+                        # Update versions for distro apps
+                        print("\n=== Updating Distro App Versions ===")
+                        for app in current_apps_data:
+                            if app.get('app_type') == 'distro':
+                                print(f"\nProcessing {app['app_name']}:")
+                                print(f"Current version: {app.get('version')}")
+                                print(f"Supported distros: {app.get('supported_distro')}")
+                                
+                                # Mark all distro apps for version checking
+                                app['from_local_version'] = True
+                                
+                                # Check if app supports the default distro
+                                supported_distro = app.get('supported_distro', '').lower()
+                                if supported_distro == 'all' or default_distro in supported_distro.split(','):
+                                    # Get package name for the distro
+                                    package_name = app.get(f"{default_distro}_package_name") or app.get('package_name')
+                                    if package_name:
+                                        print(f"Checking version using package: {package_name}")
+                                        
+                                        # Build version check command based on distro
+                                        cmd = f"proot-distro login {default_distro} --shared-tmp -- /bin/bash -c "
+                                        if default_distro in ['ubuntu', 'debian']:
+                                            cmd += f"'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
+                                        elif default_distro == 'fedora':
+                                            cmd += f"'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
+                                        elif default_distro == 'archlinux':
+                                            cmd += f"'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
+
+                                        try:
+                                            print(f"Running command: {cmd}")
+                                            result = subprocess.run(['bash', '-c', cmd], 
+                                                                 capture_output=True, 
+                                                                 text=True, 
+                                                                 timeout=30)
+                                            
+                                            print(f"Command output: {result.stdout}")
+                                            print(f"Command error: {result.stderr}")
+                                            
+                                            if result.returncode == 0 and result.stdout.strip():
+                                                new_version = result.stdout.strip()
+                                                print(f"Found version: {new_version}")
+                                                app['version'] = new_version
+                                                app['selected_distro'] = default_distro
+                                            else:
+                                                print("Failed to get version")
+                                                app['version'] = 'Unavailable'
+                                        except Exception as e:
+                                            print(f"Error getting version: {e}")
+                                            app['version'] = 'Unavailable'
+                                    else:
+                                        print("No package name found")
+                                        app['version'] = 'Unavailable'
+                                else:
+                                    print(f"App does not support {default_distro}")
+                                    app['version'] = 'Unavailable'
+                                
+                                print(f"Final version: {app.get('version')}")
+                    else:
+                        print(f"proot-distro test failed: {test_result.stderr}")
                 except Exception as e:
                     print(f"Error testing proot-distro: {e}")
-                    return
 
-                # Process all distro apps
-                for app in current_apps_data:
-                    if (app.get('app_type') == 'distro' and 
-                        app.get('version') == 'distro_local_version'):
-                        
-                        supported_distro = app.get('supported_distro')
-                        if supported_distro and supported_distro != 'all':
-                            supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
-                            if selected_distro not in supported_distros:
-                                print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
-                                continue
-
-                        package_name = app.get(f"{selected_distro}_run_cmd")
-                        if not package_name:
-                            package_name = app.get('run_cmd')
-                            if package_name:
-                                package_name = package_name.split()[0]
-                        
-                        if not package_name:
-                            package_name = app.get('package_name')
-
-                        if not package_name:
-                            print(f"Skipping {app['app_name']}: no package name or run command found")
-                            continue
-
-                        print(f"Checking version for {app['app_name']} using package name: {package_name}...")
-                        cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
-                        
-                        if selected_distro in ['ubuntu', 'debian']:
-                            cmd += f"'latest_version=$(apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\") && echo \"$latest_version\"'"
-                        elif selected_distro == 'fedora':
-                            cmd += f"'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \") && echo \"$latest_version\"'"
-                        elif selected_distro == 'archlinux':
-                            cmd += f"'latest_version=$(pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\") && echo \"$latest_version\"'"
-
-                        try:
-                            result = subprocess.run(['bash', '-c', cmd], 
-                                                 capture_output=True, 
-                                                 text=True, 
-                                                 timeout=30)
-                            if result.returncode == 0 and result.stdout.strip():
-                                app['version'] = result.stdout.strip()
-                                print(f"Got version for distro app {app['app_name']}: {app['version']}")
-                            else:
-                                print(f"Failed to get version for {app['app_name']}")
-                                if result.stderr:
-                                    print(f"Error: {result.stderr}")
-                        except Exception as e:
-                            print(f"Error getting version for distro app {app['app_name']}: {e}")
-                            continue
-
-            # Step 5: Save updated versions to new apps.json
+            # Save updated versions
+            print("\n=== Saving Updated Versions ===")
             with open(APPSTORE_JSON, 'w') as f:
                 json.dump(current_apps_data, f, indent=2)
                 print("Saved updated versions to apps.json")
 
-            # Step 6: Compare versions and update pending_updates
+            # Compare versions and update pending_updates
+            print("\n=== Checking for Updates ===")
             for app in current_apps_data:
-                if app['folder_name'] in self.installed_apps:  # Only check installed apps
+                if app['folder_name'] in self.installed_apps:
                     old_app = next((a for a in old_apps_data if a['folder_name'] == app['folder_name']), None)
                     if old_app:
                         old_version = old_app.get('version')
                         new_version = app.get('version')
-                        if old_version and new_version and old_version != new_version:
-                            print(f"Update found for {app['app_name']}: {old_version} -> {new_version}")
+                        print(f"\nComparing versions for {app['app_name']}:")
+                        print(f"Old version: {old_version}")
+                        print(f"New version: {new_version}")
+                        
+                        if (old_version and new_version and 
+                            old_version != new_version and 
+                            old_version != 'distro_local_version' and 
+                            new_version != 'distro_local_version' and
+                            new_version != 'Unavailable'):
+                            print(f"Update found: {old_version} -> {new_version}")
                             self.pending_updates[app['folder_name']] = new_version
 
-            # Step 7: Save pending updates
+            # Save pending updates
             self.save_pending_updates()
-            print("Saved pending updates")
-
-            # Refresh the UI to show updated versions
-            GLib.idle_add(self.show_apps)
+            print("\n=== Version Update Process Complete ===")
 
         except Exception as e:
             print(f"Error updating app versions: {e}")
@@ -854,16 +847,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def load_app_metadata(self):
         """Load app metadata from the centralized JSON file"""
         try:
-            # Show spinner and loading label during metadata loading
-            GLib.idle_add(lambda: self.spinner.show())
-            GLib.idle_add(lambda: self.spinner.start())
-            GLib.idle_add(lambda: self.loading_label.set_text("Loading app metadata..."))
-            GLib.idle_add(lambda: self.loading_label.show())
+            print("\n=== Loading App Metadata ===")
             
             # First check Termux Desktop configuration
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
             distro_enabled = False
-            selected_distro = None
+            installed_distros = []
             
             if os.path.exists(termux_desktop_config):
                 try:
@@ -874,22 +863,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 continue
                             if line.startswith('distro_add_answer='):
                                 value = line.split('=')[1].strip().lower()
-                                distro_enabled = value == 'y'  # Direct comparison with 'y'
+                                distro_enabled = value == 'y'
                                 print(f"Found distro_add_answer: {value} -> enabled: {distro_enabled}")
                             elif line.startswith('selected_distro='):
-                                selected_distro = line.split('=')[1].strip().lower()
-                                print(f"Found selected_distro: {selected_distro}")
+                                installed_distros = [d.strip().lower() for d in line.split('=')[1].split(',')]
+                                print(f"Found installed distros: {installed_distros}")
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
-                    import traceback
-                    traceback.print_exc()
-            else:
-                print("Warning: Termux Desktop configuration file not found")
+            
+            # Get default distro based on priority
+            default_distro = None
+            if distro_enabled and installed_distros:
+                priority_order = ['debian', 'ubuntu', 'fedora', 'archlinux']
+                for distro in priority_order:
+                    if distro in installed_distros:
+                        default_distro = distro
+                        print(f"Selected default distro: {default_distro}")
+                        break
+                if not default_distro:
+                    default_distro = installed_distros[0]
+                    print(f"No priority distro found, using first available: {default_distro}")
 
             print(f"\nConfiguration status:")
             print(f"Distro enabled: {distro_enabled}")
-            print(f"Selected distro: {selected_distro}")
+            print(f"Installed distros: {installed_distros}")
+            print(f"Default distro: {default_distro}")
 
+            # Load apps data
             with open(APPSTORE_JSON) as f:
                 all_apps = json.load(f)
                 
@@ -898,7 +898,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print(f"System architecture: {self.system_arch}")
             print(f"Compatible architectures: {compatible_archs}")
             
-            # Filter apps based on architecture compatibility and distro settings
+            # Filter apps and update versions
             self.apps_data = []
             for app in all_apps:
                 # Check architecture compatibility first
@@ -923,49 +923,67 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         print(f"Skipping distro app {app['app_name']}: distro support disabled")
                         continue
                         
-                    # Check distro compatibility
-                    supported_distro = app.get('supported_distro')
-                    if supported_distro == 'all':
+                    # Check distro compatibility and get version
+                    supported_distro = app.get('supported_distro', '').lower()
+                    if supported_distro == 'all' or default_distro in supported_distro.split(','):
+                        # Only mark apps for version checking if they use distro_local_version
+                        if app.get('version') == 'distro_local_version':
+                            app['from_local_version'] = True
+                            
+                            # Get package name for the default distro
+                            package_name = app.get(f"{default_distro}_package_name") or app.get('package_name')
+                            if package_name:
+                                print(f"\nGetting version for {app['app_name']} using {default_distro}...")
+                                cmd = f"proot-distro login {default_distro} --shared-tmp -- /bin/bash -c "
+                                
+                                if default_distro in ['ubuntu', 'debian']:
+                                    cmd += f"'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
+                                elif default_distro == 'fedora':
+                                    cmd += f"'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
+                                elif default_distro == 'archlinux':
+                                    cmd += f"'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
+
+                                try:
+                                    result = subprocess.run(['bash', '-c', cmd], 
+                                                         capture_output=True, 
+                                                         text=True, 
+                                                         timeout=30)
+                                    if result.returncode == 0 and result.stdout.strip():
+                                        app['version'] = result.stdout.strip()
+                                        app['selected_distro'] = default_distro
+                                        print(f"Got version: {app['version']}")
+                                    else:
+                                        app['version'] = 'Unavailable'
+                                        print("Version check failed")
+                                except Exception as e:
+                                    app['version'] = 'Unavailable'
+                                    print(f"Error getting version: {e}")
+                        
                         self.apps_data.append(app)
-                        print(f"Added compatible app: {app['app_name']} ({app_arch})")
-                    elif supported_distro:
-                        # Split supported_distro into a list if it contains commas
-                        supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
-                        if selected_distro in supported_distros:
-                            self.apps_data.append(app)
-                            print(f"Added compatible app: {app['app_name']} ({app_arch})")
-                        else:
-                            print(f"Skipping incompatible distro app {app['app_name']}: requires one of {supported_distros}, but using {selected_distro}")
+                        print(f"Added compatible app: {app['app_name']} (using {default_distro})")
+                    else:
+                        print(f"Skipping incompatible distro app {app['app_name']}: does not support {default_distro}")
                 else:
                     print(f"Skipped incompatible app: {app['app_name']} ({app_arch})")
             
-            # Extract categories from filtered apps
+            # Save updated app data with versions
+            with open(APPSTORE_JSON, 'w') as f:
+                json.dump(all_apps, f, indent=2)
+            
+            print(f"\nLoaded {len(self.apps_data)} compatible apps")
+            
+            # Extract categories
             self.categories = sorted(list(set(
                 cat for app in self.apps_data
                 for cat in app['categories']
             )))
             
-            print(f"Loaded {len(self.apps_data)} compatible apps out of {len(all_apps)} total apps")
-            
-            # Hide spinner and loading label after completion
-            GLib.idle_add(lambda: self.spinner.stop())
-            GLib.idle_add(lambda: self.spinner.hide())
-            GLib.idle_add(lambda: self.loading_label.hide())
-            
-        except FileNotFoundError:
-            self.apps_data = []
-            self.categories = []
-            print("No apps.json file found")
-            GLib.idle_add(lambda: self.spinner.stop())
-            GLib.idle_add(lambda: self.spinner.hide())
-            GLib.idle_add(lambda: self.loading_label.hide())
         except Exception as e:
             print(f"Error loading app metadata: {e}")
+            import traceback
+            traceback.print_exc()
             self.apps_data = []
             self.categories = []
-            GLib.idle_add(lambda: self.spinner.stop())
-            GLib.idle_add(lambda: self.spinner.hide())
-            GLib.idle_add(lambda: self.loading_label.hide())
 
     def setup_app_list_ui(self):
         """Set up the main app list UI"""
@@ -1105,207 +1123,267 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_install_clicked(self, button, app):
         """Handle install button click"""
-        dialog = Gtk.MessageDialog(
-            transient_for=self,
-            modal=True,
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text=f"Install {app['app_name']}?"
-        )
-        response = dialog.run()
-        dialog.destroy()
-
-        if response == Gtk.ResponseType.YES:
-            # Create progress dialog with fixed width but expandable height
-            progress_dialog = Gtk.Dialog(
-                title="Installing...",
-                parent=self,
-                modal=True
-            )
-            progress_dialog.set_default_size(350, 150)  # Set initial size
-            progress_dialog.set_resizable(True)  # Allow resizing
-            
-            # Add minimize button to titlebar
-            header = Gtk.HeaderBar()
-            header.set_show_close_button(False)
-            minimize_button = Gtk.Button()
-            minimize_button.set_relief(Gtk.ReliefStyle.NONE)
-            minimize_icon = Gtk.Image.new_from_icon_name("window-minimize", Gtk.IconSize.MENU)
-            minimize_button.add(minimize_icon)
-            minimize_button.connect("clicked", lambda x: progress_dialog.iconify())
-            header.pack_end(minimize_button)
-            progress_dialog.set_titlebar(header)
-            
-            # Add cancel button and connect to response signal
-            cancel_button = progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            
-            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-            vbox.set_margin_start(10)
-            vbox.set_margin_end(10)
-            vbox.set_margin_top(10)
-            vbox.set_margin_bottom(10)
-            
-            # Status label with better text handling
-            status_label = Gtk.Label()
-            status_label.set_line_wrap(True)
-            status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-            status_label.set_justify(Gtk.Justification.LEFT)
-            status_label.set_halign(Gtk.Align.START)
-            status_label.set_text("Starting installation...")
-            
-            # Create a scrolled window for status label that expands
-            scroll = Gtk.ScrolledWindow()
-            scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            scroll.set_size_request(-1, 80)  # Minimum height
-            scroll.add(status_label)
-            vbox.pack_start(scroll, True, True, 0)  # Allow vertical expansion
-            
-            # Progress bar that expands horizontally
-            progress_bar = Gtk.ProgressBar()
-            progress_bar.set_show_text(True)
-            progress_bar.set_size_request(300, -1)
-            vbox.pack_start(progress_bar, False, True, 0)
-            
-            progress_dialog.get_content_area().add(vbox)
-            progress_dialog.show_all()
-
-            # Track current process and script path
-            current_process = {'process': None}
-            script_path = [None]  # Use list to allow modification in nested functions
-
-            def on_cancel_clicked(dialog, response_id):
-                if response_id == Gtk.ResponseType.CANCEL:
-                    # Set cancellation flag
-                    self.installation_cancelled = True
-                    
-                    # Terminate current process if it exists
-                    if current_process['process']:
-                        try:
-                            current_process['process'].terminate()
-                            current_process['process'].wait()
-                        except:
-                            pass  # Process might have already ended
-                    
-                    # Clean up script if it exists
-                    if script_path[0] and os.path.exists(script_path[0]):
-                        try:
-                            os.remove(script_path[0])
-                        except:
-                            pass
-                    
-                    dialog.destroy()
-
-            # Connect the response signal
-            progress_dialog.connect('response', on_cancel_clicked)
-
-            def update_progress(fraction, status_text):
-                if not status_text:
-                    return False
+        try:
+            # If this is a distro app and we have temporary version/distro info, save it
+            if app.get('app_type') == 'distro' and app.get('temp_version') and app.get('temp_distro'):
+                app['version'] = app.pop('temp_version')
+                app['selected_distro'] = app.pop('temp_distro')
                 
-                # Parse aria2c download progress format
-                if '[#' in status_text and ']' in status_text:
-                    # Extract progress details from aria2c output
-                    progress_part = status_text[status_text.find('['):status_text.find(']')+1]
-                    file_part = status_text[status_text.find(']')+1:].strip()
-                    
-                    # Format the status text to show both progress and file
-                    status_label.set_text(f"{progress_part}\n{file_part}")
-                elif isinstance(status_text, str) and status_text.strip() and not all(c in '-' for c in status_text.strip()):
-                    status_label.set_text(status_text)
-                
-                progress_bar.set_fraction(fraction)
-                progress_bar.set_text(f"{int(fraction * 100)}%")
-                return False
-
-            def install_thread():
+                # Update apps.json with the new version and selected distro
                 try:
-                    # Download script (20%)
-                    GLib.idle_add(update_progress, 0.2, "Downloading install script...")
-                    script_path[0] = self.download_script(app['install_url'])
-                    if not script_path[0] or self.installation_cancelled:
+                    with open(APPSTORE_JSON, 'r') as f:
+                        apps_data = json.load(f)
+                    for app_data in apps_data:
+                        if app_data['folder_name'] == app['folder_name']:
+                            app_data['version'] = app['version']
+                            app_data['selected_distro'] = app['selected_distro']
+                    with open(APPSTORE_JSON, 'w') as f:
+                        json.dump(apps_data, f, indent=2)
+                except Exception as e:
+                    print(f"Error updating app data in apps.json: {e}")
+
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.YES_NO,
+                text=f"Install {app['app_name']}?"
+            )
+            response = dialog.run()
+            dialog.destroy()
+
+            if response == Gtk.ResponseType.YES:
+                # Create progress dialog with fixed width but expandable height
+                progress_dialog = Gtk.Dialog(
+                    title="Installing...",
+                    parent=self,
+                    modal=True
+                )
+                progress_dialog.set_default_size(350, 150)  # Set initial size
+                progress_dialog.set_resizable(True)  # Allow resizing
+                
+                # Add minimize button to titlebar
+                header = Gtk.HeaderBar()
+                header.set_show_close_button(False)
+                minimize_button = Gtk.Button()
+                minimize_button.set_relief(Gtk.ReliefStyle.NONE)
+                minimize_icon = Gtk.Image.new_from_icon_name("window-minimize", Gtk.IconSize.MENU)
+                minimize_button.add(minimize_icon)
+                minimize_button.connect("clicked", lambda x: progress_dialog.iconify())
+                header.pack_end(minimize_button)
+                progress_dialog.set_titlebar(header)
+                
+                # Add cancel button and connect to response signal
+                cancel_button = progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+                
+                vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+                vbox.set_margin_start(10)
+                vbox.set_margin_end(10)
+                vbox.set_margin_top(10)
+                vbox.set_margin_bottom(10)
+                
+                # Status label with better text handling
+                status_label = Gtk.Label()
+                status_label.set_line_wrap(True)
+                status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+                status_label.set_justify(Gtk.Justification.LEFT)
+                status_label.set_halign(Gtk.Align.START)
+                status_label.set_text("Starting installation...")
+                
+                # Create a scrolled window for status label that expands
+                scroll = Gtk.ScrolledWindow()
+                scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+                scroll.set_size_request(-1, 80)  # Minimum height
+                scroll.add(status_label)
+                vbox.pack_start(scroll, True, True, 0)  # Allow vertical expansion
+                
+                # Progress bar that expands horizontally
+                progress_bar = Gtk.ProgressBar()
+                progress_bar.set_show_text(True)
+                progress_bar.set_size_request(300, -1)
+                vbox.pack_start(progress_bar, False, True, 0)
+                
+                progress_dialog.get_content_area().add(vbox)
+                progress_dialog.show_all()
+
+                # Track current process and script path
+                current_process = {'process': None}
+                script_path = [None]  # Use list to allow modification in nested functions
+
+                def on_cancel_clicked(dialog, response_id):
+                    if response_id == Gtk.ResponseType.CANCEL:
+                        # Set cancellation flag
+                        self.installation_cancelled = True
+                        
+                        # Terminate current process if it exists
+                        if current_process['process']:
+                            try:
+                                current_process['process'].terminate()
+                                current_process['process'].wait()
+                            except:
+                                pass  # Process might have already ended
+                        
+                        # Clean up script if it exists
                         if script_path[0] and os.path.exists(script_path[0]):
-                            os.remove(script_path[0])
-                        GLib.idle_add(progress_dialog.destroy)
-                        return
+                            try:
+                                os.remove(script_path[0])
+                            except:
+                                pass
+                        
+                        dialog.destroy()
 
-                    # Make script executable (30%)
-                    GLib.idle_add(update_progress, 0.3, "Preparing installation...")
-                    os.chmod(script_path[0], os.stat(script_path[0]).st_mode | stat.S_IEXEC)
+                # Connect the response signal
+                progress_dialog.connect('response', on_cancel_clicked)
 
-                    # Execute script with better progress tracking
-                    GLib.idle_add(update_progress, 0.4, "Starting installation...")
-                    process = subprocess.Popen(
-                        ['bash', script_path[0]],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        universal_newlines=True,
-                        bufsize=1
-                    )
+                def update_progress(fraction, status_text):
+                    if not status_text:
+                        return False
                     
-                    # Store process reference for cancellation
-                    current_process['process'] = process
+                    # Parse aria2c download progress format
+                    if '[#' in status_text and ']' in status_text:
+                        # Extract progress details from aria2c output
+                        progress_part = status_text[status_text.find('['):status_text.find(']')+1]
+                        file_part = status_text[status_text.find(']')+1:].strip()
+                        
+                        # Format the status text to show both progress and file
+                        status_label.set_text(f"{progress_part}\n{file_part}")
+                    elif isinstance(status_text, str) and status_text.strip() and not all(c in '-' for c in status_text.strip()):
+                        status_label.set_text(status_text)
+                    
+                    progress_bar.set_fraction(fraction)
+                    progress_bar.set_text(f"{int(fraction * 100)}%")
+                    return False
 
-                    for line in process.stdout:
-                        if self.installation_cancelled:
-                            process.terminate()
-                            process.wait()
+                def install_thread():
+                    try:
+                        # Download script (20%)
+                        GLib.idle_add(update_progress, 0.2, "Downloading install script...")
+                        script_path[0] = self.download_script(app['install_url'])
+                        if not script_path[0] or self.installation_cancelled:
+                            if script_path[0] and os.path.exists(script_path[0]):
+                                os.remove(script_path[0])
                             GLib.idle_add(progress_dialog.destroy)
                             return
 
-                        line = line.strip()
-                        progress = 0.4
+                        # Make script executable (30%)
+                        GLib.idle_add(update_progress, 0.3, "Preparing installation...")
+                        os.chmod(script_path[0], os.stat(script_path[0]).st_mode | stat.S_IEXEC)
 
-                        # Update progress based on specific actions
-                        if "download" in line.lower():
-                            progress = 0.5
-                        elif "extracting" in line.lower() or "tar" in line.lower():
-                            progress = 0.7
-                        elif "installing" in line.lower():
-                            progress = 0.8
-                        elif "creating desktop entry" in line.lower():
-                            progress = 0.9
-
-                        if line:  # Only update if line is not empty
-                            GLib.idle_add(update_progress, progress, line)
-
-                    process.wait()
-                    if process.returncode == 0 and not self.installation_cancelled:
-                        GLib.idle_add(update_progress, 0.95, "Finalizing installation...")
-                        GLib.idle_add(lambda: self.update_installation_status(app['folder_name'], True))
+                        # Execute script with better progress tracking
+                        GLib.idle_add(update_progress, 0.4, "Starting installation...")
                         
-                        # Remove from pending updates if this was an update
-                        if app['folder_name'] in self.pending_updates:
-                            del self.pending_updates[app['folder_name']]
-                            self.save_pending_updates()
+                        # For distro apps, set the selected distro before running install script
+                        if app.get('app_type') == 'distro' and app.get('selected_distro'):
+                            config_file = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+                            try:
+                                # Read current config
+                                with open(config_file, 'r') as f:
+                                    config_lines = f.readlines()
+                                
+                                # Update or add selected_distro line
+                                distro_line_found = False
+                                for i, line in enumerate(config_lines):
+                                    if line.startswith('selected_distro='):
+                                        config_lines[i] = f'selected_distro={app["selected_distro"]}\n'
+                                        distro_line_found = True
+                                        break
+                                
+                                if not distro_line_found:
+                                    config_lines.append(f'selected_distro={app["selected_distro"]}\n')
+                                
+                                # Write back config
+                                with open(config_file, 'w') as f:
+                                    f.writelines(config_lines)
+                                
+                                print(f"Set selected distro to: {app['selected_distro']}")
+                            except Exception as e:
+                                print(f"Error setting selected distro: {e}")
+                            
+                            process = subprocess.Popen(
+                                ['bash', script_path[0]],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                universal_newlines=True,
+                                bufsize=1
+                            )
+                        else:
+                            process = subprocess.Popen(
+                                ['bash', script_path[0]],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                universal_newlines=True,
+                                bufsize=1
+                            )
                         
-                        time.sleep(0.5)
-                        GLib.idle_add(update_progress, 1.0, "Installation complete!")
-                        time.sleep(1)
-                        GLib.idle_add(progress_dialog.destroy)
-                        GLib.idle_add(self.show_apps)  # Refresh the UI
-                    else:
-                        GLib.idle_add(update_progress, 1.0, "Installation failed!")
+                        # Store process reference for cancellation
+                        current_process['process'] = process
+
+                        for line in process.stdout:
+                            if self.installation_cancelled:
+                                process.terminate()
+                                process.wait()
+                                GLib.idle_add(progress_dialog.destroy)
+                                return
+
+                            line = line.strip()
+                            progress = 0.4
+
+                            # Update progress based on specific actions
+                            if "download" in line.lower():
+                                progress = 0.5
+                            elif "extracting" in line.lower() or "tar" in line.lower():
+                                progress = 0.7
+                            elif "installing" in line.lower():
+                                progress = 0.8
+                            elif "creating desktop entry" in line.lower():
+                                progress = 0.9
+
+                            if line:  # Only update if line is not empty
+                                GLib.idle_add(update_progress, progress, line)
+
+                        process.wait()
+                        if process.returncode == 0 and not self.installation_cancelled:
+                            GLib.idle_add(update_progress, 0.95, "Finalizing installation...")
+                            GLib.idle_add(lambda: self.update_installation_status(app['folder_name'], True))
+                            
+                            # Remove from pending updates if this was an update
+                            if app['folder_name'] in self.pending_updates:
+                                del self.pending_updates[app['folder_name']]
+                                self.save_pending_updates()
+                            
+                            time.sleep(0.5)
+                            GLib.idle_add(update_progress, 1.0, "Installation complete!")
+                            time.sleep(1)
+                            GLib.idle_add(progress_dialog.destroy)
+                            GLib.idle_add(self.show_apps)  # Refresh the UI
+                        else:
+                            GLib.idle_add(update_progress, 1.0, "Installation failed!")
+                            time.sleep(2)
+                            GLib.idle_add(progress_dialog.destroy)
+
+                    except Exception as e:
+                        print(f"Installation error: {str(e)}")
+                        GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
                         time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
+                    
+                    finally:
+                        current_process['process'] = None
+                        if script_path[0] and os.path.exists(script_path[0]):
+                            try:
+                                os.remove(script_path[0])
+                                print(f"Cleaned up script: {script_path[0]}")
+                            except Exception as e:
+                                print(f"Error cleaning up script: {e}")
 
-                except Exception as e:
-                    print(f"Installation error: {str(e)}")
-                    GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
-                    time.sleep(2)
-                    GLib.idle_add(progress_dialog.destroy)
-                
-                finally:
-                    current_process['process'] = None
-                    if script_path[0] and os.path.exists(script_path[0]):
-                        try:
-                            os.remove(script_path[0])
-                            print(f"Cleaned up script: {script_path[0]}")
-                        except Exception as e:
-                            print(f"Error cleaning up script: {e}")
+                thread = threading.Thread(target=install_thread)
+                thread.daemon = True
+                thread.start()
 
-            thread = threading.Thread(target=install_thread)
-            thread.daemon = True
-            thread.start()
+        except Exception as e:
+            print(f"Error in on_install_clicked: {e}")
+            import traceback
+            traceback.print_exc()
 
     def modify_script(self, script_path):
         """Add source line for common functions after shebang"""
@@ -1561,15 +1639,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             logo_path = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'], 'logo.png')
             if os.path.exists(logo_path):
                 try:
-                    # Load image in a safer way
-                    pixbuf = None
-                    try:
-                        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(logo_path, 64, 64, True)
-                    except GLib.Error as e:
-                        print(f"Error loading logo for {app['app_name']}: {e}")
-                    except Exception as e:
-                        print(f"Unexpected error loading logo for {app['app_name']}: {e}")
-
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(logo_path, 64, 64, True)
                     if pixbuf:
                         logo_image = Gtk.Image.new_from_pixbuf(pixbuf)
                         logo_image.set_margin_end(12)
@@ -1592,16 +1662,60 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Spacer
             top_row.pack_start(Gtk.Label(), True, True, 0)
             
-            # Source type label
+            # Source type label with distro selector for distro apps
             source_label = Gtk.Label()
             source_type = app.get('app_type', 'unknown').capitalize()
-            source_label.set_markup(f"Source: {GLib.markup_escape_text(source_type)}")
-            source_label.get_style_context().add_class("metadata-label")
-            source_label.set_size_request(120, -1)
-            source_label.set_halign(Gtk.Align.CENTER)
-            source_label.set_margin_end(6)
-            top_row.pack_end(source_label, False, False, 0)
             
+            if source_type.lower() == 'distro':
+                # Get current distro if set, otherwise use first available
+                current_distro = app.get('selected_distro', None)
+                if not current_distro:
+                    try:
+                        with open("/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf", 'r') as f:
+                            for line in f:
+                                if line.startswith('selected_distro='):
+                                    current_distro = line.split('=')[1].split(',')[0].strip()
+                                    app['selected_distro'] = current_distro
+                                    break
+                    except Exception as e:
+                        print(f"Error reading default distro: {e}")
+                        current_distro = "unknown"
+                
+                source_label.set_markup(f"Source: Distro ({current_distro.capitalize()})")
+                
+                # Make the label clickable
+                event_box = Gtk.EventBox()
+                event_box.add(source_label)
+                event_box.set_above_child(True)
+                
+                # Create and connect popover
+                popover = self.create_distro_selector(app, source_label)
+                if popover:
+                    def on_button_press(widget, event):
+                        popover.set_relative_to(widget)
+                        popover.popup()
+                        return True
+                    
+                    event_box.connect("button-press-event", on_button_press)
+                    source_label.get_style_context().add_class("metadata-label")
+                    source_label.get_style_context().add_class("clickable")
+                else:
+                    # If no popover (no supported distros), make it look disabled
+                    source_label.get_style_context().add_class("metadata-label")
+                    source_label.get_style_context().add_class("disabled")
+                
+                source_label.set_size_request(120, -1)
+                source_label.set_halign(Gtk.Align.CENTER)
+                source_label.set_margin_end(6)
+                top_row.pack_end(event_box, False, False, 0)
+            else:
+                source_label.set_markup(f"Source: {GLib.markup_escape_text(source_type)}")
+                source_label.get_style_context().add_class("metadata-label")
+                source_label.set_size_request(120, -1)
+                source_label.set_halign(Gtk.Align.CENTER)
+                source_label.set_margin_end(6)
+                top_row.pack_end(source_label, False, False, 0)
+
             info_box.pack_start(top_row, False, False, 0)
 
             # App description with proper escaping
@@ -2528,6 +2642,154 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def queue_ui_update(self, update_func):
         """Queue a UI update to be processed"""
         self.ui_update_queue.put(update_func)
+
+    def get_default_distro(self):
+        """Get default distro based on priority: debian > ubuntu > fedora > archlinux"""
+        priority_order = ['debian', 'ubuntu', 'fedora', 'archlinux']
+        available_distros = []
+        
+        try:
+            with open("/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf", 'r') as f:
+                for line in f:
+                    if line.startswith('selected_distro='):
+                        available_distros = [d.strip().lower() for d in line.split('=')[1].split(',')]
+                        break
+        except Exception as e:
+            print(f"Error reading available distros: {e}")
+            return None
+            
+        # Return first available distro based on priority
+        for distro in priority_order:
+            if distro in available_distros:
+                return distro
+        
+        # If none of the priority distros are available, return the first available
+        return available_distros[0] if available_distros else None
+
+    def update_distro_version(self, app, version_label, distro):
+        """Update version for selected distro in background"""
+        try:
+            # Only check version if app needs local version checking
+            if not app.get('from_local_version'):
+                print(f"Skipping version check for {app['app_name']} - not marked for local version checking")
+                return
+
+            package_name = app.get(f"{distro}_package_name")
+            if not package_name:
+                package_name = app.get('package_name')
+            
+            if not package_name:
+                GLib.idle_add(lambda: self.update_version_label(version_label, "Unavailable"))
+                return
+
+            cmd = f"proot-distro login {distro} --shared-tmp -- /bin/bash -c "
+            
+            if distro in ['ubuntu', 'debian']:
+                cmd += f"'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
+            elif distro == 'fedora':
+                cmd += f"'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
+            elif distro == 'archlinux':
+                cmd += f"'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
+
+            result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                version = result.stdout.strip()
+                GLib.idle_add(lambda: self.update_version_label(version_label, version))
+                
+                # Store version temporarily in app object
+                app['temp_version'] = version
+                app['temp_distro'] = distro
+            else:
+                GLib.idle_add(lambda: self.update_version_label(version_label, "Unavailable"))
+        except Exception as e:
+            print(f"Error getting version: {e}")
+            GLib.idle_add(lambda: self.update_version_label(version_label, "Error"))
+
+    def create_distro_selector(self, app, source_label):
+        """Create a popover for distro selection"""
+        popover = Gtk.Popover()
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        vbox.set_margin_start(5)
+        vbox.set_margin_end(5)
+        vbox.set_margin_top(5)
+        vbox.set_margin_bottom(5)
+
+        # Get supported distros from app configuration
+        supported_distros = []
+        if app.get('supported_distro'):
+            if app['supported_distro'].lower() == 'all':
+                # If app supports all distros, get available ones from system
+                try:
+                    with open("/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf", 'r') as f:
+                        for line in f:
+                            if line.startswith('selected_distro='):
+                                supported_distros = [d.strip().lower() for d in line.split('=')[1].split(',')]
+                                break
+                except Exception as e:
+                    print(f"Error reading distros: {e}")
+                    return None
+            else:
+                # Use the specifically supported distros
+                supported_distros = [d.strip().lower() for d in app['supported_distro'].split(',')]
+
+        if not supported_distros:
+            print("No supported distros found")
+            return None
+
+        # Get current distro for this app
+        current_distro = app.get('selected_distro')
+        if not current_distro:
+            current_distro = self.get_default_distro()
+            if current_distro:
+                app['selected_distro'] = current_distro
+
+        # Create radio buttons for each distro
+        first_button = None
+        for distro in supported_distros:
+            radio = Gtk.RadioButton.new_with_label_from_widget(first_button, distro.capitalize())
+            if not first_button:
+                first_button = radio
+            vbox.pack_start(radio, False, False, 2)
+            
+            if distro == current_distro:
+                radio.set_active(True)
+            
+            radio.connect('toggled', self.on_distro_selected, app, source_label, distro, popover)
+
+        popover.add(vbox)
+        popover.set_position(Gtk.PositionType.BOTTOM)
+        vbox.show_all()  # Make sure all widgets are visible
+        return popover
+
+    def on_distro_selected(self, button, app, source_label, distro, popover):
+        """Handle distro selection"""
+        if button.get_active():
+            app['selected_distro'] = distro
+            source_label.set_markup(f"Source: Distro ({distro.capitalize()})")
+            popover.popdown()
+            
+            # Only check version if app is marked for local version checking
+            if app.get('from_local_version'):
+                # Find the version label in the card
+                card_box = source_label.get_parent().get_parent()
+                bottom_box = card_box.get_children()[2]  # Get the bottom box
+                version_label = bottom_box.get_children()[-1]  # Get the version label
+                
+                # Update version label to show loading state
+                version_label.set_text("Loading...")
+                version_label.get_style_context().add_class("loading")
+                
+                # Start background thread to get version
+                thread = threading.Thread(target=self.update_distro_version, args=(app, version_label, distro))
+                thread.daemon = True
+                thread.start()
+
+    def update_version_label(self, version_label, text):
+        """Update version label and remove loading state"""
+        version_label.set_text(text)
+        version_label.get_style_context().remove_class("loading")
+        return False
 
 def main():
     app = AppStoreApplication()

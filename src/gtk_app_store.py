@@ -1998,14 +1998,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             
                             # Remove from pending updates
                             if app['folder_name'] in self.pending_updates:
-                                self.pending_updates.remove(app['folder_name'])
+                                del self.pending_updates[app['folder_name']]
                                 self.save_pending_updates()
+                                print(f"Removed {app['app_name']} from pending updates")
+                            
+                            # Update the app's version in apps.json
+                            try:
+                                with open(APPSTORE_JSON, 'r') as f:
+                                    apps_data = json.load(f)
+                                for app_data in apps_data:
+                                    if app_data['folder_name'] == app['folder_name']:
+                                        app_data['version'] = self.pending_updates.get(app['folder_name'], app_data['version'])
+                                with open(APPSTORE_JSON, 'w') as f:
+                                    json.dump(apps_data, f, indent=2)
+                            except Exception as e:
+                                print(f"Error updating version in apps.json: {e}")
                             
                             time.sleep(0.5)
                             GLib.idle_add(update_progress, 1.0, "Update complete!")
                             time.sleep(1)
                             GLib.idle_add(progress_dialog.destroy)
-                            GLib.idle_add(self.show_apps)  # Refresh the UI
+                            
+                            # Refresh both the main app list and updates list
+                            def refresh_ui():
+                                self.load_app_metadata()  # Reload app data
+                                if self.updates_button.get_style_context().has_class('selected'):
+                                    self.show_update_apps()  # Refresh updates view if we're in it
+                                else:
+                                    self.show_apps()  # Otherwise refresh main view
+                            GLib.idle_add(refresh_ui)
                         else:
                             GLib.idle_add(update_progress, 1.0, "Update failed!")
                             time.sleep(2)

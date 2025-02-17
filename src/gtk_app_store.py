@@ -182,7 +182,32 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             header.props.title = "Termux App Store"
             self.set_titlebar(header)
 
-            # Remove the update system button from header bar
+            # Create section buttons box
+            section_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            section_box.get_style_context().add_class('linked')  # This makes buttons appear connected
+            
+            # Explore button
+            self.explore_button = Gtk.Button(label="Explore")
+            self.explore_button.connect("clicked", self.on_section_clicked, "explore")
+            self.explore_button.get_style_context().add_class('section-button')
+            self.explore_button.get_style_context().add_class('selected')
+            section_box.pack_start(self.explore_button, False, False, 0)
+            
+            # Installed button
+            self.installed_button = Gtk.Button(label="Installed")
+            self.installed_button.connect("clicked", self.on_section_clicked, "installed")
+            self.installed_button.get_style_context().add_class('section-button')
+            section_box.pack_start(self.installed_button, False, False, 0)
+            
+            # Updates button
+            self.updates_button = Gtk.Button(label="Updates")
+            self.updates_button.connect("clicked", self.on_section_clicked, "updates")
+            self.updates_button.get_style_context().add_class('section-button')
+            section_box.pack_start(self.updates_button, False, False, 0)
+            
+            # Add section buttons to center of header
+            header.set_custom_title(section_box)
+
             # Add refresh button to header (right side)
             self.refresh_button = Gtk.Button()
             self.refresh_button.set_tooltip_text("Refresh App List")
@@ -1021,13 +1046,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             warning_bar.show_all()
 
         # Left panel - Categories
-        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        sidebar.set_size_request(200, -1)
-        sidebar.set_margin_start(10)
-        sidebar.set_margin_end(10)
-        sidebar.set_margin_top(10)
-        sidebar.set_margin_bottom(10)  # Add bottom margin
-        self.content_box.pack_start(sidebar, False, True, 0)
+        self.sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.sidebar.set_size_request(200, -1)
+        self.sidebar.set_margin_start(10)
+        self.sidebar.set_margin_end(10)
+        self.sidebar.set_margin_top(10)
+        self.sidebar.set_margin_bottom(10)  # Add bottom margin
+        self.content_box.pack_start(self.sidebar, False, True, 0)
 
         # Category list
         categories_label = Gtk.Label()
@@ -1036,7 +1061,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         categories_label.set_margin_start(10)
         categories_label.set_margin_top(10)
         categories_label.set_margin_bottom(10)
-        sidebar.pack_start(categories_label, False, True, 0)
+        self.sidebar.pack_start(categories_label, False, True, 0)
 
         # Add "All Apps" button first
         all_button = Gtk.Button(label="All Apps")
@@ -1044,7 +1069,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         all_button.set_size_request(-1, 40)
         all_button.get_style_context().add_class("category-button")
         all_button.get_style_context().add_class("selected")
-        sidebar.pack_start(all_button, False, True, 0)
+        self.sidebar.pack_start(all_button, False, True, 0)
 
         # Category buttons
         self.category_buttons = [all_button]
@@ -1053,47 +1078,49 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             button.connect("clicked", self.on_category_clicked)
             button.set_size_request(-1, 40)
             button.get_style_context().add_class("category-button")
-            sidebar.pack_start(button, False, True, 0)
+            self.sidebar.pack_start(button, False, True, 0)
             self.category_buttons.append(button)
 
         # Add spacer to push update button to bottom
         spacer = Gtk.Box()
-        sidebar.pack_start(spacer, True, True, 0)
+        self.sidebar.pack_start(spacer, True, True, 0)
 
         # Add Update System button at the bottom of sidebar
         self.update_button = Gtk.Button(label="Update System")
         self.update_button.get_style_context().add_class('system-update-button')
         self.update_button.connect("clicked", self.on_update_system)
         self.update_button.set_margin_top(10)
-        sidebar.pack_end(self.update_button, False, False, 0)
+        self.sidebar.pack_end(self.update_button, False, False, 0)
 
-        # Right panel - App list
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_vexpand(True)  # Add this line to allow vertical expansion
-        self.content_box.pack_start(scrolled, True, True, 0)
-
-        # Container for search and app list
-        right_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        right_panel.set_margin_start(10)
-        right_panel.set_margin_end(10)
-        right_panel.set_margin_top(10)
-        right_panel.set_margin_bottom(10)
-        scrolled.add(right_panel)
+        # Right panel container
+        self.right_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.content_box.pack_start(self.right_panel, True, True, 0)
 
         # Add search entry at the top of app list
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        search_box.set_margin_start(10)
+        search_box.set_margin_end(10)
+        search_box.set_margin_top(10)
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.set_placeholder_text("Search apps...")
         self.search_entry.connect("search-changed", self.on_search_changed)
         self.search_entry.set_size_request(-1, 40)
         search_box.pack_start(self.search_entry, True, True, 0)
-        right_panel.pack_start(search_box, False, True, 0)
+        self.right_panel.pack_start(search_box, False, True, 0)
+
+        # Scrolled window for app list
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_vexpand(True)
+        self.right_panel.pack_start(scrolled, True, True, 0)
 
         # App list box
         self.app_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.app_list_box.set_vexpand(True)  # Add this line to allow vertical expansion
-        right_panel.pack_start(self.app_list_box, True, True, 0)
+        self.app_list_box.set_margin_start(10)
+        self.app_list_box.set_margin_end(10)
+        self.app_list_box.set_margin_top(10)
+        self.app_list_box.set_margin_bottom(10)
+        scrolled.add(self.app_list_box)
 
         # Show all apps initially with "All Apps" selected
         self.show_apps(None)  # Pass None to show all apps
@@ -1711,18 +1738,30 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_search_changed(self, entry):
         """Handle search entry changes"""
-        # Get the currently selected category
-        selected_category = None
-        for button in self.category_buttons:
-            if button.get_style_context().has_class('selected'):
-                selected_category = button.get_label()
-                break
-
-        if selected_category == "All Apps":
+        # Get the currently selected section
+        selected_section = None
+        if self.explore_button.get_style_context().has_class('selected'):
+            selected_section = "explore"
+        elif self.installed_button.get_style_context().has_class('selected'):
+            selected_section = "installed"
+        elif self.updates_button.get_style_context().has_class('selected'):
+            selected_section = "updates"
+        
+        # Update the appropriate view
+        if selected_section == "explore":
+            # Get the currently selected category
             selected_category = None
-
-        # Update the app list with current category and search text
-        self.show_apps(selected_category)
+            for button in self.category_buttons:
+                if button.get_style_context().has_class('selected'):
+                    selected_category = button.get_label()
+                    break
+            if selected_category == "All Apps":
+                selected_category = None
+            self.show_apps(selected_category)
+        elif selected_section == "installed":
+            self.show_installed_apps()
+        elif selected_section == "updates":
+            self.show_update_apps()
 
     def on_delete_event(self, widget, event):
         """Handle window closing"""
@@ -2187,6 +2226,107 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.update_button.get_style_context().remove_class('updating')
         self.update_progress(0)
         return False
+
+    def on_section_clicked(self, button, section):
+        """Handle section button clicks"""
+        # Update button states
+        for btn in [self.explore_button, self.installed_button, self.updates_button]:
+            btn.get_style_context().remove_class('selected')
+        button.get_style_context().add_class('selected')
+        
+        # Clear search entry
+        self.search_entry.set_text("")
+        
+        # Show/hide category buttons based on section
+        if section == "explore":
+            # Show categories
+            self.sidebar.show()
+            # Show all apps
+            self.show_apps()
+        elif section == "installed":
+            # Hide categories but keep search
+            self.sidebar.hide()
+            # Show installed apps
+            self.show_installed_apps()
+        else:  # updates
+            # Hide categories and search
+            self.sidebar.hide()
+            # Show update apps
+            self.show_update_apps()
+
+    def show_installed_apps(self):
+        """Show only installed apps"""
+        # Clear current content
+        for child in self.app_list_box.get_children():
+            self.app_list_box.remove(child)
+        
+        # Get installed apps
+        installed_apps = [app for app in self.apps_data if app['folder_name'] in self.installed_apps]
+        
+        # Apply search filter if search entry has text
+        search_text = self.search_entry.get_text().lower()
+        if search_text:
+            installed_apps = [
+                app for app in installed_apps
+                if search_text in app['app_name'].lower()
+                or search_text in app['description'].lower()
+                or any(search_text in cat.lower() for cat in app['categories'])
+            ]
+        
+        if not installed_apps:
+            # Create message for no installed apps
+            message_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            message_box.set_valign(Gtk.Align.CENTER)
+            message_box.set_halign(Gtk.Align.CENTER)
+            
+            # Add an icon
+            icon = Gtk.Image.new_from_icon_name("dialog-information", Gtk.IconSize.DIALOG)
+            message_box.pack_start(icon, False, False, 0)
+            
+            # Add message label
+            message = Gtk.Label()
+            message.set_markup("<span size='larger'>No installed apps found</span>")
+            message.get_style_context().add_class('no-apps-message')
+            message_box.pack_start(message, False, False, 0)
+            
+            self.app_list_box.pack_start(message_box, True, True, 0)
+        else:
+            for app in installed_apps:
+                self.add_app_card(app)
+        
+        self.app_list_box.show_all()
+
+    def show_update_apps(self):
+        """Show only apps with updates"""
+        # Clear current content
+        for child in self.app_list_box.get_children():
+            self.app_list_box.remove(child)
+        
+        # Add apps with updates
+        update_apps = [app for app in self.apps_data if app['folder_name'] in self.pending_updates]
+        
+        if not update_apps:
+            # Create message for no updates
+            message_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            message_box.set_valign(Gtk.Align.CENTER)
+            message_box.set_halign(Gtk.Align.CENTER)
+            
+            # Add an icon
+            icon = Gtk.Image.new_from_icon_name("software-update-available", Gtk.IconSize.DIALOG)
+            message_box.pack_start(icon, False, False, 0)
+            
+            # Add message label
+            message = Gtk.Label()
+            message.set_markup("<span size='larger'>All apps are up to date</span>")
+            message.get_style_context().add_class('no-apps-message')
+            message_box.pack_start(message, False, False, 0)
+            
+            self.app_list_box.pack_start(message_box, True, True, 0)
+        else:
+            for app in update_apps:
+                self.add_app_card(app)
+        
+        self.app_list_box.show_all()
 
 def main():
     app = AppStoreApplication()

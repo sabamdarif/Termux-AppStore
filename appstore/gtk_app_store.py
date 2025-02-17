@@ -191,7 +191,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Create header bar
             header = Gtk.HeaderBar()
             header.set_show_close_button(True)
-            header.props.title = "Termux App Store"
+            header.props.title = "Termux AppStore"
+            
+            # Add refresh button to header bar
+            self.refresh_button = Gtk.Button()
+            refresh_icon = Gio.ThemedIcon(name="view-refresh-symbolic")
+            refresh_image = Gtk.Image.new_from_gicon(refresh_icon, Gtk.IconSize.BUTTON)
+            self.refresh_button.add(refresh_image)
+            self.refresh_button.connect("clicked", lambda x: self.start_refresh(is_manual=True))
+            header.pack_start(self.refresh_button)
+            
             self.set_titlebar(header)
 
             # Create section buttons box

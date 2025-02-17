@@ -923,46 +923,62 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         print(f"Skipping distro app {app['app_name']}: distro support disabled")
                         continue
                         
-                    # Check distro compatibility and get version
+                    # Check distro compatibility
                     supported_distro = app.get('supported_distro', '').lower()
-                    if supported_distro == 'all' or default_distro in supported_distro.split(','):
-                        # Only mark apps for version checking if they use distro_local_version
-                        if app.get('version') == 'distro_local_version':
-                            app['from_local_version'] = True
-                            
-                            # Get package name for the default distro
-                            package_name = app.get(f"{default_distro}_package_name") or app.get('package_name')
-                            if package_name:
-                                print(f"\nGetting version for {app['app_name']} using {default_distro}...")
-                                cmd = f"proot-distro login {default_distro} --shared-tmp -- /bin/bash -c "
-                                
-                                if default_distro in ['ubuntu', 'debian']:
-                                    cmd += f"'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
-                                elif default_distro == 'fedora':
-                                    cmd += f"'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
-                                elif default_distro == 'archlinux':
-                                    cmd += f"'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
-
-                                try:
-                                    result = subprocess.run(['bash', '-c', cmd], 
-                                                         capture_output=True, 
-                                                         text=True, 
-                                                         timeout=30)
-                                    if result.returncode == 0 and result.stdout.strip():
-                                        app['version'] = result.stdout.strip()
-                                        app['selected_distro'] = default_distro
-                                        print(f"Got version: {app['version']}")
-                                    else:
-                                        app['version'] = 'Unavailable'
-                                        print("Version check failed")
-                                except Exception as e:
-                                    app['version'] = 'Unavailable'
-                                    print(f"Error getting version: {e}")
-                        
-                        self.apps_data.append(app)
-                        print(f"Added compatible app: {app['app_name']} (using {default_distro})")
+                    if supported_distro == 'all':
+                        # If app supports all distros, use the default distro
+                        app['selected_distro'] = default_distro
                     else:
-                        print(f"Skipping incompatible distro app {app['app_name']}: does not support {default_distro}")
+                        # Get list of supported distros that are installed
+                        app_supported_distros = [d.strip() for d in supported_distro.split(',')]
+                        available_distros = [d for d in app_supported_distros if d in installed_distros]
+                        
+                        if not available_distros:
+                            print(f"Skipping {app['app_name']}: no supported distros installed")
+                            continue
+                            
+                        # If app only supports one installed distro, use that
+                        if len(available_distros) == 1:
+                            app['selected_distro'] = available_distros[0]
+                        else:
+                            # Use the default distro if supported, otherwise use the first available
+                            app['selected_distro'] = default_distro if default_distro in available_distros else available_distros[0]
+                    
+                    # Only mark apps for version checking if they use distro_local_version
+                    if app.get('version') == 'distro_local_version':
+                        app['from_local_version'] = True
+                        
+                        # Get package name for the selected distro
+                        selected_distro = app['selected_distro']
+                        package_name = app.get(f"{selected_distro}_package_name") or app.get('package_name')
+                        if package_name:
+                            print(f"\nGetting version for {app['app_name']} using {selected_distro}...")
+                            cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
+                            
+                            if selected_distro in ['ubuntu', 'debian']:
+                                cmd += f"'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
+                            elif selected_distro == 'fedora':
+                                cmd += f"'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
+                            elif selected_distro == 'archlinux':
+                                cmd += f"'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
+
+                            try:
+                                result = subprocess.run(['bash', '-c', cmd], 
+                                                     capture_output=True, 
+                                                     text=True, 
+                                                     timeout=30)
+                                if result.returncode == 0 and result.stdout.strip():
+                                    app['version'] = result.stdout.strip()
+                                    print(f"Got version: {app['version']}")
+                                else:
+                                    app['version'] = 'Unavailable'
+                                    print("Version check failed")
+                            except Exception as e:
+                                app['version'] = 'Unavailable'
+                                print(f"Error getting version: {e}")
+                    
+                    self.apps_data.append(app)
+                    print(f"Added compatible app: {app['app_name']} (using {app['selected_distro']})")
                 else:
                     print(f"Skipped incompatible app: {app['app_name']} ({app_arch})")
             
@@ -2730,8 +2746,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     print(f"Error reading distros: {e}")
                     return None
             else:
-                # Use the specifically supported distros
-                supported_distros = [d.strip().lower() for d in app['supported_distro'].split(',')]
+                # Get intersection of supported and installed distros
+                try:
+                    with open("/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf", 'r') as f:
+                        installed_distros = []
+                        for line in f:
+                            if line.startswith('selected_distro='):
+                                installed_distros = [d.strip().lower() for d in line.split('=')[1].split(',')]
+                                break
+                    app_supported = [d.strip().lower() for d in app['supported_distro'].split(',')]
+                    supported_distros = [d for d in app_supported if d in installed_distros]
+                except Exception as e:
+                    print(f"Error reading distros: {e}")
+                    return None
 
         if not supported_distros:
             print("No supported distros found")
@@ -2739,10 +2766,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Get current distro for this app
         current_distro = app.get('selected_distro')
-        if not current_distro:
-            current_distro = self.get_default_distro()
-            if current_distro:
-                app['selected_distro'] = current_distro
+        if not current_distro and len(supported_distros) == 1:
+            current_distro = supported_distros[0]
+            app['selected_distro'] = current_distro
+
+        # If only one distro is supported, don't create a selector
+        if len(supported_distros) == 1:
+            return None
 
         # Create radio buttons for each distro
         first_button = None

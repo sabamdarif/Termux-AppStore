@@ -333,7 +333,7 @@
     ],
     "app_type": "native",
     "supported_arch": "aarch64,arm",
-    "version": "native_local_version",
+    "version": "termux_local_version",
     "package_name": "rclone",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rclone/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Rclone/uninstall.sh",

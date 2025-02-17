@@ -16,6 +16,7 @@ import queue
 import shutil
 from PIL import Image
 import platform
+from concurrent.futures import ThreadPoolExecutor
 
 # Termux-specific paths
 TERMUX_PREFIX = "/data/data/com.termux/files/usr"
@@ -84,6 +85,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 application=app,
                 title="Termux AppStore"
             )
+            
+            # Initialize thread pool and queues
+            self.thread_pool = ThreadPoolExecutor(max_workers=4)
+            self.ui_update_queue = queue.Queue()
+            
+            # Start UI update thread
+            self.ui_update_thread = threading.Thread(target=self.process_ui_updates, daemon=True)
+            self.ui_update_thread.start()
+            
+            # Add a timer for periodic UI updates
+            GLib.timeout_add(100, self.process_pending_ui_updates)
             
             # Set window properties
             self.set_wmclass("termux-appstore", "Termux AppStore")
@@ -208,14 +220,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Add section buttons to center of header
             header.set_custom_title(section_box)
 
-            # Add refresh button to header (right side)
-            self.refresh_button = Gtk.Button()
-            self.refresh_button.set_tooltip_text("Refresh App List")
-            refresh_icon = Gtk.Image.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
-            self.refresh_button.add(refresh_icon)
-            self.refresh_button.connect("clicked", self.on_refresh_clicked)
-            header.pack_end(self.refresh_button)
-
             # Create content box for app list
             self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             self.main_box.pack_start(self.content_box, True, True, 0)
@@ -230,11 +234,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
             os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
             self.pending_updates = self.load_pending_updates()
-
-            # Create the 'Update System' button
-            self.update_system_button = Gtk.Button(label='Update System')
-            self.update_system_button.connect('clicked', self.on_update_system)
-            self.main_box.pack_start(self.update_system_button, False, False, 0)
 
         except Exception as e:
             print(f"Error initializing AppStoreWindow: {e}")
@@ -280,9 +279,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def update_app_versions(self):
         """Update versions for all apps in the background"""
         try:
-            with open(APPSTORE_JSON, 'r') as f:
-                all_apps = json.load(f)
-            
+            # Step 1: Load old apps.json data before backing up
+            old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
+            old_apps_data = []
+            if os.path.exists(old_json_path):
+                with open(old_json_path, 'r') as f:
+                    old_apps_data = json.load(f)
+                    print("Loaded old apps data")
+
+            # Step 2: Load current apps.json data
+            current_apps_data = []
+            if os.path.exists(APPSTORE_JSON):
+                with open(APPSTORE_JSON, 'r') as f:
+                    current_apps_data = json.load(f)
+                    print("Loaded current apps data")
+                    
             # Check Termux Desktop configuration first
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
             distro_enabled = False
@@ -301,8 +312,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             else:
                 print("Warning: Termux Desktop not installed")
 
-            # Update native app versions
-            for app in all_apps:
+            # Step 3: Get actual versions for native apps
+            for app in current_apps_data:
                 if (app['app_type'] == 'native' and 
                     app.get('version') == 'termux_local_version' and 
                     app.get('package_name')):
@@ -319,11 +330,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                              timeout=10)
                         if result.returncode == 0 and result.stdout.strip():
                             app['version'] = result.stdout.strip()
-                            print(f"Updated version for {app['app_name']}: {app['version']}")
+                            print(f"Got version for {app['app_name']}: {app['version']}")
                     except Exception as e:
                         print(f"Error getting version for {app['app_name']}: {e}")
 
-            # Update distro app versions if distro is enabled
+            # Step 4: Get actual versions for distro apps if distro is enabled
             if distro_enabled and selected_distro:
                 # First check if proot-distro is working correctly
                 test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
@@ -341,27 +352,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     return
 
                 # Process all distro apps
-                for app in all_apps:
+                for app in current_apps_data:
                     if (app.get('app_type') == 'distro' and 
                         app.get('version') == 'distro_local_version'):
                         
                         supported_distro = app.get('supported_distro')
                         if supported_distro and supported_distro != 'all':
-                            # Split supported_distro into a list if it contains commas
                             supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
                             if selected_distro not in supported_distros:
                                 print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
                                 continue
 
-                        # First try distro-specific run command
                         package_name = app.get(f"{selected_distro}_run_cmd")
                         if not package_name:
-                            # Then try generic run command
                             package_name = app.get('run_cmd')
                             if package_name:
-                                package_name = package_name.split()[0]  # Get first word of run command
+                                package_name = package_name.split()[0]
                         
-                        # If still no package name, try the package_name field
                         if not package_name:
                             package_name = app.get('package_name')
 
@@ -386,7 +393,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                                  timeout=30)
                             if result.returncode == 0 and result.stdout.strip():
                                 app['version'] = result.stdout.strip()
-                                print(f"Updated version for distro app {app['app_name']}: {app['version']}")
+                                print(f"Got version for distro app {app['app_name']}: {app['version']}")
                             else:
                                 print(f"Failed to get version for {app['app_name']}")
                                 if result.stderr:
@@ -395,15 +402,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             print(f"Error getting version for distro app {app['app_name']}: {e}")
                             continue
 
-            # Save updated versions
+            # Step 5: Save updated versions to new apps.json
             with open(APPSTORE_JSON, 'w') as f:
-                json.dump(all_apps, f, indent=2)
+                json.dump(current_apps_data, f, indent=2)
+                print("Saved updated versions to apps.json")
+
+            # Step 6: Compare versions and update pending_updates
+            for app in current_apps_data:
+                if app['folder_name'] in self.installed_apps:  # Only check installed apps
+                    old_app = next((a for a in old_apps_data if a['folder_name'] == app['folder_name']), None)
+                    if old_app:
+                        old_version = old_app.get('version')
+                        new_version = app.get('version')
+                        if old_version and new_version and old_version != new_version:
+                            print(f"Update found for {app['app_name']}: {old_version} -> {new_version}")
+                            self.pending_updates[app['folder_name']] = new_version
+
+            # Step 7: Save pending updates
+            self.save_pending_updates()
+            print("Saved pending updates")
 
             # Refresh the UI to show updated versions
             GLib.idle_add(self.show_apps)
 
         except Exception as e:
             print(f"Error updating app versions: {e}")
+            import traceback
+            traceback.print_exc()
 
     def load_app_metadata_and_setup_ui(self):
         """Load app metadata and set up UI in the background"""
@@ -868,88 +893,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             with open(APPSTORE_JSON) as f:
                 all_apps = json.load(f)
                 
-            # First update versions for native apps
-            GLib.idle_add(lambda: self.loading_label.set_text("Loading native app versions..."))
-            for app in all_apps:
-                if (app.get('app_type') == 'native' and 
-                    app.get('version') == 'termux_local_version' and 
-                    app.get('package_name')):
-                    cmd = f"source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
-                    cmd += f"if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
-                    cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
-                    cmd += f"elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
-                    cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
-                    
-                    try:
-                        result = subprocess.run(['bash', '-c', cmd], 
-                                             capture_output=True, 
-                                             text=True, 
-                                             timeout=10)
-                        if result.returncode == 0 and result.stdout.strip():
-                            app['version'] = result.stdout.strip()
-                            print(f"Updated version for {app['app_name']}: {app['version']}")
-                        else:
-                            app['version'] = 'Unavailable'
-                            print(f"Could not get version for {app['app_name']}, setting to Unavailable")
-                    except Exception as e:
-                        app['version'] = 'Unavailable'
-                        print(f"Error getting version for {app['app_name']}: {e}")
-
-            # Then update versions for distro apps if distro is enabled
-            if distro_enabled and selected_distro:
-                GLib.idle_add(lambda: self.loading_label.set_text(f"Loading {selected_distro} app versions..."))
-                for app in all_apps:
-                    if (app.get('app_type') == 'distro' and 
-                        app.get('version') == 'distro_local_version' and
-                        app.get('package_name')):
-                        
-                        supported_distro = app.get('supported_distro')
-                        if supported_distro and supported_distro != 'all':
-                            # Split supported_distro into a list if it contains commas
-                            supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
-                            if selected_distro not in supported_distros:
-                                continue
-
-                        print(f"Checking version for {app['app_name']}...")
-                        GLib.idle_add(lambda app_name=app['app_name']: self.loading_label.set_text(f"Checking version for {app_name}..."))
-
-                        # Prepare command based on distro type
-                        cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
-                        
-                        if selected_distro in ['ubuntu', 'debian']:
-                            cmd += f"'latest_version=$(apt-cache policy {app['package_name']} | grep Candidate: | awk \"{{print \\$2}}\") && echo \"$latest_version\"'"
-                        elif selected_distro == 'fedora':
-                            cmd += f"'latest_version=$(dnf info {app['package_name']} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \") && echo \"$latest_version\"'"
-                        elif selected_distro == 'archlinux':
-                            cmd += f"'latest_version=$(pacman -Si {app['package_name']} 2>/dev/null | grep Version | awk \"{{print \\$3}}\") && echo \"$latest_version\"'"
-
-                        try:
-                            print(f"Running command: {cmd}")
-                            result = subprocess.run(['bash', '-c', cmd], 
-                                                 capture_output=True, 
-                                                 text=True, 
-                                                 timeout=30)  # Increased timeout to 30 seconds
-                            
-                            if result.returncode == 0 and result.stdout.strip():
-                                app['version'] = result.stdout.strip()
-                                print(f"Updated version for distro app {app['app_name']}: {app['version']}")
-                            else:
-                                print(f"Command failed for {app['app_name']}")
-                                print(f"Return code: {result.returncode}")
-                                print(f"Stdout: {result.stdout}")
-                                print(f"Stderr: {result.stderr}")
-                                
-                        except subprocess.TimeoutExpired:
-                            print(f"Command timed out for {app['app_name']} after 30 seconds")
-                            continue
-                        except Exception as e:
-                            print(f"Error getting version for distro app {app['app_name']}: {str(e)}")
-                            continue
-
-                # Save the updated metadata back to apps.json
-                with open(APPSTORE_JSON, 'w') as f:
-                    json.dump(all_apps, f, indent=2)
-                
             # Get compatible architectures for the system
             compatible_archs = self.arch_compatibility.get(self.system_arch, [self.system_arch])
             print(f"System architecture: {self.system_arch}")
@@ -1097,8 +1040,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         search_box.pack_start(self.search_entry, True, True, 0)
         self.right_panel.pack_start(search_box, False, True, 0)
 
-        # Create update repo button (initially hidden)
-        self.update_button = Gtk.Button(label="Update Repo")
+        # Create check for updates button (initially hidden)
+        self.update_button = Gtk.Button(label="Check for Updates")
         self.update_button.get_style_context().add_class('system-update-button')
         self.update_button.connect("clicked", self.on_update_system)
         self.update_button.set_margin_top(10)
@@ -2093,16 +2036,58 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             traceback.print_exc()
 
     def on_update_system(self, button):
-        """Handle system update button click"""
-        print("\n=== Starting Repository Update Process ===")
+        """Handle check for updates button click"""
+        print("\n=== Starting Update Check Process ===")
         button.set_sensitive(False)
         button.get_style_context().add_class('updating')
         
+        # Create spinner for version check
+        version_check_spinner = Gtk.Spinner()
+        version_check_spinner.set_size_request(16, 16)
+        version_check_spinner.start()
+        
+        # Create box for button content
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        button_box.pack_start(version_check_spinner, False, False, 0)
+        button_box.pack_start(Gtk.Label(label="Checking versions..."), False, False, 0)
+        button.remove(button.get_children()[0])  # Remove current label
+        button.add(button_box)
+        button.show_all()
+        
+        def update_progress_safe(progress, label=None):
+            def update():
+                if label:
+                    if "Checking versions" in label:
+                        # Keep spinner and label during version check
+                        if not isinstance(button.get_child(), Gtk.Box):
+                            # Create spinner box if not already present
+                            button.remove(button.get_child())
+                            spinner = Gtk.Spinner()
+                            spinner.set_size_request(16, 16)
+                            spinner.start()
+                            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                            box.pack_start(spinner, False, False, 0)
+                            box.pack_start(Gtk.Label(label=label), False, False, 0)
+                            button.add(box)
+                            button.show_all()
+                        else:
+                            # Just update the label text
+                            box = button.get_child()
+                            box.get_children()[1].set_text(label)
+                    else:
+                        # For non-version checking states, show progress bar
+                        button.remove(button.get_child())
+                        button.add(Gtk.Label(label=label))
+                        button.show_all()
+                        # Only update progress bar when not checking versions
+                        self.update_progress(progress)
+            GLib.idle_add(update)
+
         def update_system_thread():
             try:
-                # Update Termux packages
+                # Step 1: Update Repository (0-40%)
                 print("\n=== Checking Package Manager ===")
-                GLib.idle_add(lambda: self.update_button.set_label("Checking..."))
+                update_progress_safe(0)
                 
                 cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && echo $TERMUX_APP_PACKAGE_MANAGER"
                 result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True)
@@ -2110,7 +2095,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 print(f"Detected package manager: {pkg_manager}")
 
                 print("\n=== Updating Repository ===")
-                GLib.idle_add(lambda: self.update_button.set_label("Updating..."))
+                update_progress_safe(10, "Updating repository...")
                 
                 if pkg_manager == "apt":
                     print("Running apt update...")
@@ -2119,48 +2104,226 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                             stdout=subprocess.PIPE, 
                                             stderr=subprocess.STDOUT,
                                             universal_newlines=True)
+                    
                     for line in process.stdout:
                         print(line.strip())
                     process.wait()
                     
-                    print("\nRunning apt upgrade...")
-                    cmd = "apt upgrade -y"
                 elif pkg_manager == "pacman":
-                    print("Running pacman system update...")
-                    cmd = "pacman -Syu --noconfirm"
-                else:
-                    print(f"Unsupported package manager: {pkg_manager}")
-                    raise Exception(f"Unsupported package manager: {pkg_manager}")
+                    print("Running pacman update...")
+                    cmd = "pacman -Sy --noconfirm"
+                    process = subprocess.Popen(['bash', '-c', cmd], 
+                                            stdout=subprocess.PIPE, 
+                                            stderr=subprocess.STDOUT,
+                                            universal_newlines=True)
+                    
+                    for line in process.stdout:
+                        print(line.strip())
+                    process.wait()
+                
+                # Step 2: Download new app data (40-70%)
+                print("\n=== Downloading App Updates ===")
+                update_progress_safe(40, "Downloading updates...")
+                
+                # Load old apps.json data before backing up
+                old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
+                old_apps_data = []
+                if os.path.exists(old_json_path):
+                    with open(old_json_path, 'r') as f:
+                        old_apps_data = json.load(f)
+                
+                # Backup old apps.json
+                if os.path.exists(APPSTORE_JSON):
+                    os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
+                    shutil.copy2(APPSTORE_JSON, old_json_path)
+                    os.remove(APPSTORE_JSON)
+                
+                # Download new apps.json
+                command = f"aria2c -x 16 -s 16 {GITHUB_APPS_JSON} -d {APPSTORE_DIR} -o apps.json"
+                subprocess.run(command, shell=True, check=True)
+                
+                # Load new apps.json data
+                with open(APPSTORE_JSON, 'r') as f:
+                    new_apps_data = json.load(f)
 
-                process = subprocess.Popen(['bash', '-c', cmd], 
-                                        stdout=subprocess.PIPE, 
-                                        stderr=subprocess.STDOUT,
-                                        universal_newlines=True)
+                # First update versions for native apps
+                print("\n=== Getting Native App Versions ===")
+                for app in new_apps_data:
+                    if (app.get('app_type') == 'native' and 
+                        app.get('version') == 'termux_local_version' and 
+                        app.get('package_name')):
+                        cmd = f"source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                        cmd += f"if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                        cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
+                        cmd += f"elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                        cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
+                        
+                        try:
+                            result = subprocess.run(['bash', '-c', cmd], 
+                                                 capture_output=True, 
+                                                 text=True, 
+                                                 timeout=10)
+                            if result.returncode == 0 and result.stdout.strip():
+                                app['version'] = result.stdout.strip()
+                                print(f"Got version for {app['app_name']}: {app['version']}")
+                            else:
+                                app['version'] = 'Unavailable'
+                                print(f"Could not get version for {app['app_name']}, setting to Unavailable")
+                        except Exception as e:
+                            app['version'] = 'Unavailable'
+                            print(f"Error getting version for {app['app_name']}: {e}")
+
+                # Then update versions for distro apps if distro is enabled
+                print("\n=== Getting Distro App Versions ===")
+                termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+                distro_enabled = False
+                selected_distro = None
                 
-                progress = 0
-                for line in process.stdout:
-                    print(line.strip())
-                    progress = min(progress + 2, 50)
-                    GLib.idle_add(lambda p=progress: self.update_progress(p))
+                if os.path.exists(termux_desktop_config):
+                    try:
+                        with open(termux_desktop_config, 'r') as f:
+                            for line in f:
+                                if line.startswith('distro_add_answer='):
+                                    distro_enabled = line.strip().split('=')[1].lower() == 'y'
+                                elif line.startswith('selected_distro='):
+                                    selected_distro = line.strip().split('=')[1].lower()
+                    except Exception as e:
+                        print(f"Error reading Termux Desktop config: {e}")
+
+                if distro_enabled and selected_distro:
+                    # First check if proot-distro is working correctly
+                    test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
+                    try:
+                        test_result = subprocess.run(['bash', '-c', test_cmd],
+                                                  capture_output=True,
+                                                  text=True,
+                                                  timeout=10)
+                        if test_result.returncode == 0:
+                            print(f"proot-distro test successful for {selected_distro}")
+                            
+                            for app in new_apps_data:
+                                if (app.get('app_type') == 'distro' and 
+                                    app.get('version') == 'distro_local_version'):
+                                    
+                                    supported_distro = app.get('supported_distro')
+                                    if supported_distro and supported_distro != 'all':
+                                        supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                                        if selected_distro not in supported_distros:
+                                            print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
+                                            continue
+
+                                    package_name = app.get(f"{selected_distro}_package_name")
+                                    if not package_name:
+                                        package_name = app.get('package_name')
+                                    
+                                    if not package_name:
+                                        print(f"Skipping {app['app_name']}: no package name found")
+                                        continue
+
+                                    print(f"Getting version for {app['app_name']}...")
+                                    cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
+                                    
+                                    if selected_distro in ['ubuntu', 'debian']:
+                                        cmd += f"'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
+                                    elif selected_distro == 'fedora':
+                                        cmd += f"'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
+                                    elif selected_distro == 'archlinux':
+                                        cmd += f"'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
+
+                                    try:
+                                        result = subprocess.run(['bash', '-c', cmd], 
+                                                             capture_output=True, 
+                                                             text=True, 
+                                                             timeout=30)
+                                        if result.returncode == 0 and result.stdout.strip():
+                                            app['version'] = result.stdout.strip()
+                                            print(f"Got version for {app['app_name']}: {app['version']}")
+                                        else:
+                                            app['version'] = 'Unavailable'
+                                            print(f"Could not get version for {app['app_name']}, setting to Unavailable")
+                                    except Exception as e:
+                                        app['version'] = 'Unavailable'
+                                        print(f"Error getting version for {app['app_name']}: {e}")
+                        else:
+                            print(f"proot-distro test failed for {selected_distro}")
+                            print(f"Error: {test_result.stderr}")
+                    except Exception as e:
+                        print(f"Error testing proot-distro: {e}")
+
+                # Save updated versions to new apps.json
+                print("\n=== Saving Updated App Data ===")
+                print("Saving updated versions to apps.json...")
+                with open(APPSTORE_JSON, 'w') as f:
+                    json.dump(new_apps_data, f, indent=2)
+                print("Successfully saved updated app data")
+
+                # Now compare versions and update pending_updates
+                print("\n=== Comparing Versions ===")
+                for app in new_apps_data:
+                    print(f"\nChecking app: {app['app_name']}")
+                    print(f"Is installed? {app['folder_name'] in self.installed_apps}")
+                    
+                    if app['folder_name'] in self.installed_apps:  # Only check installed apps
+                        old_app = next((a for a in old_apps_data if a['folder_name'] == app['folder_name']), None)
+                        print(f"Found old app data? {old_app is not None}")
+                        
+                        if old_app:
+                            old_version = old_app.get('version')
+                            new_version = app.get('version')
+                            print(f"Old version: {old_version}")
+                            print(f"New version: {new_version}")
+                            
+                            # Skip comparison if either version is unavailable
+                            if old_version in ['termux_local_version', 'distro_local_version', 'Unavailable'] or \
+                               new_version in ['termux_local_version', 'distro_local_version', 'Unavailable']:
+                                print(f"Skipping {app['app_name']}: version unavailable")
+                                continue
+                                
+                            if old_version != new_version:
+                                print(f"Update found for {app['app_name']}: {old_version} -> {new_version}")
+                                self.pending_updates[app['folder_name']] = new_version
+                                print(f"Added to pending updates. Current updates: {self.pending_updates}")
+                            else:
+                                print(f"No update needed - versions match")
                 
-                process.wait()
-                print("\n=== Repository Update Complete ===")
+                # Save pending updates
+                print("\n=== Saving Updates ===")
+                print(f"Final pending updates: {self.pending_updates}")
+                self.save_pending_updates()
                 
-                print("\n=== Update Complete ===")
+                # Step 3: Update logos (70-90%)
+                print("\n=== Updating App Logos ===")
+                update_progress_safe(70, "Updating app logos...")
+                
+                if os.path.exists(APPSTORE_LOGO_DIR):
+                    shutil.rmtree(APPSTORE_LOGO_DIR)
+                self.download_and_extract_logos()
+                
+                # Step 4: Load new data and check for updates (90-100%)
+                print("\n=== Processing Updates ===")
+                update_progress_safe(90, "Checking versions...")  # Keep spinner during version checks
+                
+                # Load new app data and check for updates
+                self.load_app_metadata()
+                
+                print("\n=== Update Check Complete ===")
+                update_progress_safe(100, "Check for Updates")
+                
+                # Reset button and refresh display
                 GLib.idle_add(self.update_complete)
+                GLib.idle_add(self.show_update_apps)
                 
             except Exception as e:
-                print(f"\n=== Update Failed ===")
+                print(f"\n=== Update Check Failed ===")
                 print(f"Error: {str(e)}")
                 print(f"Stack trace:")
                 import traceback
                 traceback.print_exc()
-                GLib.idle_add(lambda: self.show_error_dialog(f"Update failed: {str(e)}"))
+                GLib.idle_add(lambda: self.show_error_dialog(f"Update check failed: {str(e)}"))
                 GLib.idle_add(self.update_complete)
 
-        thread = threading.Thread(target=update_system_thread)
-        thread.daemon = True
-        thread.start()
+        # Submit the update task to the thread pool
+        self.thread_pool.submit(update_system_thread)
 
     def update_progress(self, progress):
         """Update the progress bar effect on button"""
@@ -2179,7 +2342,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def update_complete(self):
         """Reset update button state after update completes"""
         self.update_button.set_sensitive(True)
-        self.update_button.set_label("Update Repo")
+        self.update_button.set_label("Check for Updates")
         self.update_button.get_style_context().remove_class('updating')
         self.update_progress(0)
         return False
@@ -2315,6 +2478,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.add_app_card(app)
         
         self.app_list_box.show_all()
+
+    def process_ui_updates(self):
+        """Process UI updates in a separate thread"""
+        while True:
+            try:
+                update_func = self.ui_update_queue.get()
+                if update_func is None:  # Shutdown signal
+                    break
+                GLib.idle_add(update_func)
+                self.ui_update_queue.task_done()
+            except Exception as e:
+                print(f"Error processing UI update: {e}")
+                continue
+
+    def process_pending_ui_updates(self):
+        """Process any pending UI updates"""
+        try:
+            while True:
+                update_func = self.ui_update_queue.get_nowait()
+                if update_func is not None:
+                    GLib.idle_add(update_func)
+                self.ui_update_queue.task_done()
+        except queue.Empty:
+            pass
+        return True  # Keep the timer active
+
+    def queue_ui_update(self, update_func):
+        """Queue a UI update to be processed"""
+        self.ui_update_queue.put(update_func)
 
 def main():
     app = AppStoreApplication()

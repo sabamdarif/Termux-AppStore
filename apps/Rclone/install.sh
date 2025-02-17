@@ -2,6 +2,6 @@
 
 supported_arch="aarch64,arm"
 package_name="rclone"
-version=native_local_version
+version=termux_local_version
 app_type="native"
 package_install_and_check "$package_name"

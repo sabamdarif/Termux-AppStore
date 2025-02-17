@@ -1081,17 +1081,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.sidebar.pack_start(button, False, True, 0)
             self.category_buttons.append(button)
 
-        # Add spacer to push update button to bottom
-        spacer = Gtk.Box()
-        self.sidebar.pack_start(spacer, True, True, 0)
-
-        # Add Update System button at the bottom of sidebar
-        self.update_button = Gtk.Button(label="Update System")
-        self.update_button.get_style_context().add_class('system-update-button')
-        self.update_button.connect("clicked", self.on_update_system)
-        self.update_button.set_margin_top(10)
-        self.sidebar.pack_end(self.update_button, False, False, 0)
-
         # Right panel container
         self.right_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.content_box.pack_start(self.right_panel, True, True, 0)
@@ -1107,6 +1096,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.search_entry.set_size_request(-1, 40)
         search_box.pack_start(self.search_entry, True, True, 0)
         self.right_panel.pack_start(search_box, False, True, 0)
+
+        # Create update repo button (initially hidden)
+        self.update_button = Gtk.Button(label="Update Repo")
+        self.update_button.get_style_context().add_class('system-update-button')
+        self.update_button.connect("clicked", self.on_update_system)
+        self.update_button.set_margin_top(10)
+        self.update_button.set_margin_start(10)
+        self.update_button.set_margin_end(10)
+        self.update_button.set_margin_bottom(10)
+        self.update_button.hide()  # Initially hidden
+        self.right_panel.pack_start(self.update_button, False, False, 0)
 
         # Scrolled window for app list
         scrolled = Gtk.ScrolledWindow()
@@ -1125,6 +1125,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Show all apps initially with "All Apps" selected
         self.show_apps(None)  # Pass None to show all apps
         self.content_box.show_all()
+        self.update_button.hide()  # Ensure update button is hidden initially
 
     def on_category_clicked(self, button):
         # Update selected state of category buttons
@@ -2093,7 +2094,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_update_system(self, button):
         """Handle system update button click"""
-        print("\n=== Starting System Update Process ===")
+        print("\n=== Starting Repository Update Process ===")
         button.set_sensitive(False)
         button.get_style_context().add_class('updating')
         
@@ -2108,8 +2109,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 pkg_manager = result.stdout.strip()
                 print(f"Detected package manager: {pkg_manager}")
 
-                print("\n=== Updating Termux Packages ===")
-                GLib.idle_add(lambda: self.update_button.set_label("Updating Termux..."))
+                print("\n=== Updating Repository ===")
+                GLib.idle_add(lambda: self.update_button.set_label("Updating..."))
                 
                 if pkg_manager == "apt":
                     print("Running apt update...")
@@ -2143,53 +2144,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(lambda p=progress: self.update_progress(p))
                 
                 process.wait()
-                print("\n=== Termux Update Complete ===")
+                print("\n=== Repository Update Complete ===")
                 
-                # Check for distro updates
-                print("\n=== Checking for Linux Distribution ===")
-                termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-                if os.path.exists(termux_desktop_config):
-                    print("Found Termux Desktop configuration")
-                    with open(termux_desktop_config, 'r') as f:
-                        config = f.read()
-                        if 'distro_add_answer=y' in config:
-                            for line in config.split('\n'):
-                                if line.startswith('selected_distro='):
-                                    selected_distro = line.split('=')[1].strip('"')
-                                    print(f"\n=== Updating {selected_distro} Distribution ===")
-                                    GLib.idle_add(lambda: self.update_button.set_label(f"Updating {selected_distro}..."))
-                                    
-                                    update_cmd = ""
-                                    if selected_distro in ['ubuntu', 'debian']:
-                                        print("Using apt package manager")
-                                        update_cmd = "apt update -y && apt upgrade -y"
-                                    elif selected_distro == 'fedora':
-                                        print("Using dnf package manager")
-                                        update_cmd = "dnf update -y"
-                                    elif selected_distro == 'archlinux':
-                                        print("Using pacman package manager")
-                                        update_cmd = "pacman -Syu --noconfirm"
-                                    
-                                    print(f"Running update command: {update_cmd}")
-                                    cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c '{update_cmd}'"
-                                    process = subprocess.Popen(['bash', '-c', cmd],
-                                                            stdout=subprocess.PIPE,
-                                                            stderr=subprocess.STDOUT,
-                                                            universal_newlines=True)
-                                    
-                                    for line in process.stdout:
-                                        print(line.strip())
-                                        progress = min(progress + 2, 100)
-                                        GLib.idle_add(lambda p=progress: self.update_progress(p))
-                                    
-                                    process.wait()
-                                    print(f"\n=== {selected_distro} Update Complete ===")
-                        else:
-                            print("No Linux distribution enabled in Termux Desktop")
-                else:
-                    print("Termux Desktop not installed")
-                
-                print("\n=== System Update Complete ===")
+                print("\n=== Update Complete ===")
                 GLib.idle_add(self.update_complete)
                 
             except Exception as e:
@@ -2222,7 +2179,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def update_complete(self):
         """Reset update button state after update completes"""
         self.update_button.set_sensitive(True)
-        self.update_button.set_label("Update System")
+        self.update_button.set_label("Update Repo")
         self.update_button.get_style_context().remove_class('updating')
         self.update_progress(0)
         return False
@@ -2237,20 +2194,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Clear search entry
         self.search_entry.set_text("")
         
-        # Show/hide category buttons based on section
+        # Show/hide UI elements based on section
         if section == "explore":
-            # Show categories
+            # Show categories, hide update button
             self.sidebar.show()
+            self.update_button.hide()
+            self.search_entry.show()
             # Show all apps
             self.show_apps()
         elif section == "installed":
-            # Hide categories but keep search
+            # Hide categories and update button
             self.sidebar.hide()
+            self.update_button.hide()
+            self.search_entry.show()
             # Show installed apps
             self.show_installed_apps()
         else:  # updates
-            # Hide categories and search
+            # Hide categories, show update button
             self.sidebar.hide()
+            self.update_button.show()
+            self.search_entry.show()
             # Show update apps
             self.show_update_apps()
 
@@ -2283,11 +2246,36 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             icon = Gtk.Image.new_from_icon_name("dialog-information", Gtk.IconSize.DIALOG)
             message_box.pack_start(icon, False, False, 0)
             
-            # Add message label
-            message = Gtk.Label()
-            message.set_markup("<span size='larger'>No installed apps found</span>")
-            message.get_style_context().add_class('no-apps-message')
-            message_box.pack_start(message, False, False, 0)
+            # Add message labels
+            title_label = Gtk.Label()
+            title_label.set_markup("<span size='larger' weight='bold'>No Apps Installed</span>")
+            title_label.get_style_context().add_class('no-apps-message')
+            message_box.pack_start(title_label, False, False, 0)
+            
+            if search_text:
+                # Show search-specific message
+                message = Gtk.Label()
+                message.set_markup(f"No installed apps match the search: <i>{GLib.markup_escape_text(search_text)}</i>")
+                message.get_style_context().add_class('no-apps-submessage')
+                message_box.pack_start(message, False, False, 10)
+            else:
+                # Show general message with instructions
+                message = Gtk.Label()
+                message.set_markup(
+                    "You haven't installed any apps yet.\n"
+                    "Go to the <b>Explore</b> tab to discover and install apps."
+                )
+                message.set_justify(Gtk.Justification.CENTER)
+                message.set_line_wrap(True)
+                message.get_style_context().add_class('no-apps-submessage')
+                message_box.pack_start(message, False, False, 10)
+                
+                # Add a button to go to Explore tab
+                explore_button = Gtk.Button(label="Go to Explore")
+                explore_button.get_style_context().add_class('suggested-action')  # Gives it a highlighted appearance
+                explore_button.connect("clicked", lambda btn: self.on_section_clicked(self.explore_button, "explore"))
+                explore_button.set_margin_top(10)
+                message_box.pack_start(explore_button, False, False, 0)
             
             self.app_list_box.pack_start(message_box, True, True, 0)
         else:

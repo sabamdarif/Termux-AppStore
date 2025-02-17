@@ -192,11 +192,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             header = Gtk.HeaderBar()
             header.set_show_close_button(True)
             header.props.title = "Termux App Store"
-            self.set_titlebar(header)
+            
+            # Add refresh button to header
+            self.refresh_button = Gtk.Button()
+            refresh_icon = Gio.ThemedIcon(name="view-refresh-symbolic")
+            refresh_image = Gtk.Image.new_from_gicon(refresh_icon, Gtk.IconSize.BUTTON)
+            self.refresh_button.add(refresh_image)
+            self.refresh_button.connect("clicked", lambda x: self.start_refresh(is_manual=True))
+            header.pack_end(self.refresh_button)
 
             # Create section buttons box
             section_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-            section_box.get_style_context().add_class('linked')  # This makes buttons appear connected
+            section_box.get_style_context().add_class('linked')
             
             # Explore button
             self.explore_button = Gtk.Button(label="Explore")
@@ -443,6 +450,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Store is_manual flag as instance variable
         self.is_manual_refresh = is_manual
         
+        # Only disable refresh button if it exists
+        if hasattr(self, 'refresh_button'):
+            self.refresh_button.set_sensitive(False)
+
         # Clear existing content
         for child in self.content_box.get_children():
             child.destroy()
@@ -451,7 +462,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.spinner.show()
         self.spinner.start()
         self.loading_label.show()
-        self.refresh_button.set_sensitive(False)
 
         # Start background thread for downloading
         thread = threading.Thread(target=self.refresh_data_background)

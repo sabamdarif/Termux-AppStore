@@ -193,14 +193,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             header.set_show_close_button(True)
             header.props.title = "Termux App Store"
             
-            # Add refresh button to header
-            self.refresh_button = Gtk.Button()
-            refresh_icon = Gio.ThemedIcon(name="view-refresh-symbolic")
-            refresh_image = Gtk.Image.new_from_gicon(refresh_icon, Gtk.IconSize.BUTTON)
-            self.refresh_button.add(refresh_image)
-            self.refresh_button.connect("clicked", lambda x: self.start_refresh(is_manual=True))
-            header.pack_end(self.refresh_button)
-
             # Create section buttons box
             section_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             section_box.get_style_context().add_class('linked')
@@ -226,6 +218,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # Add section buttons to center of header
             header.set_custom_title(section_box)
+
+            # Set the header bar as the window's titlebar
+            self.set_titlebar(header)
 
             # Create content box for app list
             self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -803,8 +798,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.spinner.stop()
         self.spinner.hide()
         self.loading_label.hide()
-        self.refresh_button.set_sensitive(True)
-
+        
         # Setup UI with the new data
         self.setup_app_list_ui()
         

@@ -84,9 +84,9 @@ window {
     color: white;
     border: none;
     border-radius: 4px;
-    padding: 4px 8px;  /* Reduced padding */
-    min-width: 120px;  /* Match metadata label size */
-    font-size: 12px;   /* Match metadata label font size */
+    padding: 4px 8px;
+    min-width: 120px;
+    font-size: 12px;
 }
 
 .install-button {
@@ -111,20 +111,6 @@ window {
 
 .open-button:hover {
     background: #27ae60;
-}
-
-/* Refresh button */
-.refresh-button {
-    background-color: #3498db;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 6px 12px;
-    margin: 8px;
-}
-
-.refresh-button:hover {
-    background-color: #2980b9;
 }
 
 /* Sidebar */

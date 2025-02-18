@@ -1144,23 +1144,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_install_clicked(self, button, app):
         """Handle install button click"""
         try:
-            # If this is a distro app and we have temporary version/distro info, save it
-            if app.get('app_type') == 'distro' and app.get('temp_version') and app.get('temp_distro'):
-                app['version'] = app.pop('temp_version')
-                app['selected_distro'] = app.pop('temp_distro')
-                
-                # Update apps.json with the new version and selected distro
-                try:
-                    with open(APPSTORE_JSON, 'r') as f:
-                        apps_data = json.load(f)
-                    for app_data in apps_data:
-                        if app_data['folder_name'] == app['folder_name']:
-                            app_data['version'] = app['version']
-                            app_data['selected_distro'] = app['selected_distro']
-                    with open(APPSTORE_JSON, 'w') as f:
-                        json.dump(apps_data, f, indent=2)
-                except Exception as e:
-                    print(f"Error updating app data in apps.json: {e}")
+            # Get the selected distro for distro apps
+            selected_distro = None
+            if app.get('app_type') == 'distro':
+                # First check if we have a temporary selected distro from the selector
+                if app.get('temp_distro'):
+                    selected_distro = app.pop('temp_distro')
+                # Otherwise use the default selected distro
+                elif app.get('selected_distro'):
+                    selected_distro = app['selected_distro']
 
             dialog = Gtk.MessageDialog(
                 transient_for=self,
@@ -1284,6 +1276,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 os.remove(script_path[0])
                             GLib.idle_add(progress_dialog.destroy)
                             return
+
+                        # If this is a distro app, add selected_distro to the script
+                        if selected_distro:
+                            with open(script_path[0], 'r') as f:
+                                script_content = f.read()
+                            
+                            # Add selected_distro export after the source line
+                            script_lines = script_content.split('\n')
+                            for i, line in enumerate(script_lines):
+                                if line.startswith('source '):
+                                    script_lines.insert(i + 1, f'export selected_distro="{selected_distro}"')
+                                    break
+                            
+                            with open(script_path[0], 'w') as f:
+                                f.write('\n'.join(script_lines))
 
                         # Make script executable (30%)
                         GLib.idle_add(update_progress, 0.3, "Preparing installation...")

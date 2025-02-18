@@ -33,6 +33,9 @@ GITHUB_APPS_JSON = "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore
 APPSTORE_OLD_JSON_DIR = os.path.join(APPSTORE_DIR, 'old_json')
 UPDATES_TRACKING_FILE = os.path.expanduser("~/.termux_appstore/updates.json")
 
+# Desktop files path
+DESKTOP_FILES = "/data/data/com.termux/files/usr/share/applications/pd_added"
+
 # Function to validate logo size
 def validate_logo_size(logo_path):
     """Check if the logo is within the required size range."""
@@ -1147,10 +1150,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Get the selected distro for distro apps
             selected_distro = None
             if app.get('app_type') == 'distro':
-                # First check if we have a temporary selected distro from the selector
                 if app.get('temp_distro'):
                     selected_distro = app.pop('temp_distro')
-                # Otherwise use the default selected distro
                 elif app.get('selected_distro'):
                     selected_distro = app['selected_distro']
 
@@ -1268,33 +1269,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 def install_thread():
                     try:
-                        # Download script (20%)
-                        GLib.idle_add(update_progress, 0.2, "Downloading install script...")
-                        script_path[0] = self.download_script(app['install_url'])
-                        if not script_path[0] or self.installation_cancelled:
-                            if script_path[0] and os.path.exists(script_path[0]):
-                                os.remove(script_path[0])
+                        inbuild_functions_path = Path(__file__).parent / 'inbuild_functions' / 'inbuild_functions'
+                        
+                        # Download and modify script
+                        script_path = self.download_script(app['install_url'])
+                        if not script_path or self.installation_cancelled:
+                            if script_path and os.path.exists(script_path):
+                                os.remove(script_path)
                             GLib.idle_add(progress_dialog.destroy)
                             return
 
-                        # If this is a distro app, add selected_distro to the script
                         if selected_distro:
-                            with open(script_path[0], 'r') as f:
-                                script_content = f.read()
-                            
-                            # Add selected_distro export after the source line
-                            script_lines = script_content.split('\n')
-                            for i, line in enumerate(script_lines):
-                                if line.startswith('source '):
-                                    script_lines.insert(i + 1, f'export selected_distro="{selected_distro}"')
-                                    break
-                            
-                            with open(script_path[0], 'w') as f:
-                                f.write('\n'.join(script_lines))
+                            if not self.modify_script(script_path, selected_distro, inbuild_functions_path):
+                                GLib.idle_add(progress_dialog.destroy)
+                                return
 
                         # Make script executable (30%)
                         GLib.idle_add(update_progress, 0.3, "Preparing installation...")
-                        os.chmod(script_path[0], os.stat(script_path[0]).st_mode | stat.S_IEXEC)
+                        os.chmod(script_path, os.stat(script_path).st_mode | stat.S_IEXEC)
 
                         # Execute script with better progress tracking
                         GLib.idle_add(update_progress, 0.4, "Starting installation...")
@@ -1327,7 +1319,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 print(f"Error setting selected distro: {e}")
                             
                             process = subprocess.Popen(
-                                ['bash', script_path[0]],
+                                ['bash', script_path],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT,
                                 universal_newlines=True,
@@ -1335,7 +1327,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             )
                         else:
                             process = subprocess.Popen(
-                                ['bash', script_path[0]],
+                                ['bash', script_path],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT,
                                 universal_newlines=True,
@@ -1388,8 +1380,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             time.sleep(2)
                             GLib.idle_add(progress_dialog.destroy)
 
+                        # Cleanup after installation
+                        try:
+                            self.cleanup_inbuild_functions(inbuild_functions_path)
+                        except Exception as e:
+                            print(f"Warning: Failed to cleanup inbuild_functions: {e}")
+
                     except Exception as e:
-                        print(f"Installation error: {str(e)}")
+                        print(f"Error in install thread: {e}")
                         GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
                         time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
@@ -1403,32 +1401,80 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             except Exception as e:
                                 print(f"Error cleaning up script: {e}")
 
+                        # If installation was successful and it's a distro app
+                        if process.returncode == 0 and not self.installation_cancelled:
+                            if selected_distro:
+                                # Update apps.json with installed_from information
+                                try:
+                                    with open(APPSTORE_JSON, 'r') as f:
+                                        apps_data = json.load(f)
+                                    
+                                    # Find and update the app entry
+                                    for app_entry in apps_data:
+                                        if app_entry['folder_name'] == app['folder_name']:
+                                            app_entry['installed_from'] = selected_distro
+                                            break
+                                    
+                                    # Save updated apps.json
+                                    with open(APPSTORE_JSON, 'w') as f:
+                                        json.dump(apps_data, f, indent=2)
+                                    
+                                    # Update the current app data
+                                    app['installed_from'] = selected_distro
+                                    
+                                    print(f"Updated apps.json: {app['app_name']} installed from {selected_distro}")
+                                except Exception as e:
+                                    print(f"Error updating apps.json with installed_from: {e}")
+
+                            GLib.idle_add(update_progress, 1.0, "Installation complete!")
+                            time.sleep(1)
+                            GLib.idle_add(progress_dialog.destroy)
+                            
+                            # Refresh the app list
+                            def refresh_ui():
+                                self.load_app_metadata()
+                                if self.installed_button.get_style_context().has_class('selected'):
+                                    self.show_installed_apps()
+                                else:
+                                    self.show_apps()
+                            GLib.idle_add(refresh_ui)
+                        else:
+                            GLib.idle_add(update_progress, 1.0, "Installation failed!")
+                            time.sleep(2)
+                            GLib.idle_add(progress_dialog.destroy)
+
                 thread = threading.Thread(target=install_thread)
                 thread.daemon = True
                 thread.start()
 
         except Exception as e:
-            print(f"Error in on_install_clicked: {e}")
+            print(f"Error in install process: {e}")
             import traceback
             traceback.print_exc()
 
-    def modify_script(self, script_path):
-        """Add source line for common functions after shebang"""
+    def modify_script(self, script_path, selected_distro, inbuild_functions_path):
+        """Add source line and selected_distro export to script and inbuild_functions"""
         try:
-            # Read the original script content
+            # First modify inbuild_functions file
+            with open(inbuild_functions_path, 'r') as f:
+                inbuild_content = f.read()
+            
+            # Add export line to inbuild_functions if not already present
+            export_line = f'export selected_distro="{selected_distro}"'
+            if export_line not in inbuild_content:
+                with open(inbuild_functions_path, 'a') as f:
+                    f.write(f'\n{export_line}\n')
+            
+            # Then modify the install/uninstall script
             with open(script_path, 'r') as f:
                 content = f.read()
             
-            # Get path to inbuild_functions
-            inbuild_functions_path = Path(__file__).parent / 'inbuild_functions' / 'inbuild_functions'
-            
-            # Add inbuild_functions source after shebang
-            # Try both common shebang variants
+            # Add inbuild_functions source and selected_distro after shebang
             for shebang in ['#!/data/data/com.termux/files/usr/bin/bash\n', '#!/bin/bash\n']:
                 if shebang in content:
                     new_content = content.replace(
                         shebang,
-                        f'{shebang}source {inbuild_functions_path}\n'
+                        f'{shebang}source {inbuild_functions_path}\n{export_line}\n'
                     )
                     
                     # Write modified content back
@@ -1440,8 +1486,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             return False
                 
         except Exception as e:
-            print(f"Error injecting common_functions source: {e}")
+            print(f"Error modifying script: {e}")
             return False
+
+    def cleanup_inbuild_functions(self, inbuild_functions_path):
+        """Remove selected_distro export from inbuild_functions"""
+        try:
+            with open(inbuild_functions_path, 'r') as f:
+                lines = f.readlines()
+            
+            # Remove export line if present
+            lines = [line for line in lines if not line.strip().startswith('export selected_distro=')]
+            
+            with open(inbuild_functions_path, 'w') as f:
+                f.writelines(lines)
+                
+        except Exception as e:
+            print(f"Error cleaning up inbuild_functions: {e}")
 
     def download_script(self, url):
         """Download a script from URL and return its local path"""
@@ -1491,120 +1552,147 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_uninstall_clicked(self, button, app):
         """Handle uninstall button click"""
-        dialog = Gtk.MessageDialog(
-            transient_for=self,
-            flags=0,
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text=f"Uninstall {app['app_name']}?"
-        )
-        response = dialog.run()
-        dialog.destroy()
+        try:
+            # Get the installed_from distro for uninstallation
+            selected_distro = app.get('installed_from') or app.get('selected_distro')
+            if not selected_distro:
+                self.show_error_dialog("No distro information found for uninstallation")
+                return
 
-        if response == Gtk.ResponseType.YES:
-            progress_dialog = Gtk.Dialog(
-                title="Uninstalling...",
-                parent=self,
-                flags=0
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                flags=0,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.YES_NO,
+                text=f"Uninstall {app['app_name']}?"
             )
-            progress_dialog.set_default_size(400, -1)
-            progress_dialog.set_resizable(False)
-            progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            
-            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-            vbox.set_margin_start(20)
-            vbox.set_margin_end(20)
-            vbox.set_margin_top(20)
-            vbox.set_margin_bottom(20)
-            
-            status_label = Gtk.Label()
-            status_label.set_line_wrap(True)
-            status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-            status_label.set_max_width_chars(50)
-            status_label.set_width_chars(50)
-            status_label.set_justify(Gtk.Justification.LEFT)
-            status_label.set_halign(Gtk.Align.START)
-            status_label.set_text("Starting uninstallation...")
-            vbox.pack_start(status_label, True, True, 0)
-            
-            progress_bar = Gtk.ProgressBar()
-            progress_bar.set_show_text(True)
-            progress_bar.set_size_request(360, -1)
-            vbox.pack_start(progress_bar, True, True, 0)
-            
-            progress_dialog.get_content_area().add(vbox)
-            progress_dialog.show_all()
+            response = dialog.run()
+            dialog.destroy()
 
-            def update_progress(fraction, status_text):
-                if status_text and not status_text.strip('-'):
-                    status_label.set_text(status_text)
-                progress_bar.set_fraction(fraction)
-                progress_bar.set_text(f"{int(fraction * 100)}%")
-                return False
+            if response == Gtk.ResponseType.YES:
+                # Create progress dialog
+                progress_dialog = Gtk.Dialog(
+                    title="Uninstalling...",
+                    parent=self,
+                    modal=True
+                )
+                progress_dialog.set_default_size(350, 100)
+                
+                vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+                vbox.set_margin_start(10)
+                vbox.set_margin_end(10)
+                vbox.set_margin_top(10)
+                vbox.set_margin_bottom(10)
+                
+                status_label = Gtk.Label(label="Uninstalling...")
+                vbox.pack_start(status_label, True, True, 0)
+                
+                progress_bar = Gtk.ProgressBar()
+                progress_bar.set_show_text(True)
+                vbox.pack_start(progress_bar, True, True, 0)
+                
+                progress_dialog.get_content_area().add(vbox)
+                progress_dialog.show_all()
 
-            def uninstall_thread():
-                script_path = None
-                try:
-                    # Download script
-                    GLib.idle_add(update_progress, 0.2, "Downloading uninstall script...")
-                    script_path = self.download_script(app['uninstall_url'])
-                    if not script_path or self.uninstallation_cancelled:
-                        if script_path and os.path.exists(script_path):
-                            os.remove(script_path)
-                        GLib.idle_add(progress_dialog.destroy)
-                        return
+                def update_progress(fraction, status_text):
+                    progress_bar.set_fraction(fraction)
+                    progress_bar.set_text(f"{int(fraction * 100)}%")
+                    if status_text:
+                        status_label.set_text(status_text)
+                    return False
 
-                    os.chmod(script_path, os.stat(script_path).st_mode | stat.S_IEXEC)
-
-                    process = subprocess.Popen(
-                        script_path,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        universal_newlines=True,
-                        bufsize=1
-                    )
-
-                    for line in process.stdout:
-                        if self.uninstallation_cancelled:
-                            process.terminate()
-                            process.wait()
+                def uninstall_thread():
+                    try:
+                        # Download uninstall script
+                        GLib.idle_add(update_progress, 0.2, "Downloading uninstall script...")
+                        script_path = self.download_script(app['uninstall_url'])
+                        if not script_path:
                             GLib.idle_add(progress_dialog.destroy)
                             return
-                        
-                        GLib.idle_add(update_progress, 0.5, line.strip())
 
-                    process.wait()
-                    if process.returncode == 0 and not self.uninstallation_cancelled:
-                        GLib.idle_add(update_progress, 0.95, "Finalizing uninstallation...")
-                        self.installed_apps.remove(app['folder_name'])
-                        self.save_installed_apps()
-                        GLib.idle_add(self.show_apps)
-                        GLib.idle_add(update_progress, 1.0, "Uninstallation complete!")
-                        time.sleep(1)
-                        GLib.idle_add(progress_dialog.destroy)
-                    else:
-                        GLib.idle_add(update_progress, 1.0, "Uninstallation failed!")
-                        time.sleep(2)
-                        GLib.idle_add(progress_dialog.destroy)
+                        # Modify script to include selected_distro
+                        if not self.modify_script(script_path, selected_distro):
+                            GLib.idle_add(progress_dialog.destroy)
+                            return
 
-                except Exception as e:
-                    print(f"Uninstallation error: {str(e)}")
-                    GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
-                    time.sleep(2)
-                    GLib.idle_add(progress_dialog.destroy)
-                
-                finally:
-                    # Clean up downloaded script
-                    if script_path and os.path.exists(script_path):
-                        try:
+                        # Make script executable
+                        os.chmod(script_path, os.stat(script_path).st_mode | stat.S_IEXEC)
+
+                        # Run uninstall script
+                        GLib.idle_add(update_progress, 0.3, "Running uninstall script...")
+                        process = subprocess.Popen(
+                            ['bash', script_path],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            universal_newlines=True
+                        )
+
+                        # Process output
+                        for line in process.stdout:
+                            GLib.idle_add(update_progress, 0.6, line.strip())
+
+                        process.wait()
+
+                        # Clean up script
+                        if os.path.exists(script_path):
                             os.remove(script_path)
-                            print(f"Cleaned up script: {script_path}")
-                        except Exception as e:
-                            print(f"Error cleaning up script: {e}")
 
-            thread = threading.Thread(target=uninstall_thread)
-            thread.daemon = True
-            thread.start()
+                        if process.returncode == 0:
+                            # Update apps.json and remove installed_from
+                            try:
+                                with open(APPSTORE_JSON, 'r') as f:
+                                    apps_data = json.load(f)
+                                
+                                for app_entry in apps_data:
+                                    if app_entry['folder_name'] == app['folder_name']:
+                                        if 'installed_from' in app_entry:
+                                            del app_entry['installed_from']
+                                        break
+                                
+                                with open(APPSTORE_JSON, 'w') as f:
+                                    json.dump(apps_data, f, indent=2)
+                                
+                                if 'installed_from' in app:
+                                    del app['installed_from']
+                                
+                                print(f"Removed installed_from for {app['app_name']}")
+                            except Exception as e:
+                                print(f"Error updating apps.json: {e}")
+
+                            # Remove from installed apps list
+                            if app['folder_name'] in self.installed_apps:
+                                self.installed_apps.remove(app['folder_name'])
+
+                            GLib.idle_add(update_progress, 1.0, "Uninstall complete!")
+                            time.sleep(1)
+                            GLib.idle_add(progress_dialog.destroy)
+                            
+                            # Refresh UI
+                            def refresh_ui():
+                                self.load_app_metadata()
+                                if self.installed_button.get_style_context().has_class('selected'):
+                                    self.show_installed_apps()
+                                else:
+                                    self.show_apps()
+                            GLib.idle_add(refresh_ui)
+                        else:
+                            GLib.idle_add(update_progress, 1.0, "Uninstall failed!")
+                            time.sleep(2)
+                            GLib.idle_add(progress_dialog.destroy)
+
+                    except Exception as e:
+                        print(f"Error during uninstall: {e}")
+                        GLib.idle_add(lambda: self.show_error_dialog(f"Uninstall failed: {str(e)}"))
+                        GLib.idle_add(progress_dialog.destroy)
+
+                thread = threading.Thread(target=uninstall_thread)
+                thread.daemon = True
+                thread.start()
+
+        except Exception as e:
+            print(f"Error in uninstall process: {e}")
+            import traceback
+            traceback.print_exc()
 
     def show_apps(self, category=None):
         """Display apps based on category"""
@@ -1872,9 +1960,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.show_error_dialog("No run command specified for this app")
                 return
 
-            # Prefix pdrun for distro apps
+            # Prefix pdrun for distro apps with the correct distro
             if app.get('app_type') == 'distro':
-                run_cmd = f"pdrun {run_cmd}"
+                # Use installed_from if available, otherwise fall back to selected_distro
+                distro = app.get('installed_from') or app.get('selected_distro')
+                if distro:
+                    run_cmd = f"pdrun --distro={distro} {run_cmd}"
+                else:
+                    run_cmd = f"pdrun {run_cmd}"
 
             subprocess.Popen(['bash', '-c', run_cmd])
         except Exception as e:

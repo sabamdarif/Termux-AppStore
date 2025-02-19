@@ -129,6 +129,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Firefox/logo.png"
   },
   {
+    "app_name": "Freetube",
+    "folder_name": "Freetube",
+    "description": "An Open Source YouTube app for privacy",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/opt/AppImageLauncher/FreeTube/freetube --no-sandbox",
+    "supported_arch": "aarch64,arm",
+    "version": "v0.23.1-beta",
+    "supported_distro": "all",
+    "package_name": "freetube",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Freetube/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Freetube/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Freetube/logo.png"
+  },
+  {
     "app_name": "GIMP",
     "folder_name": "GIMP",
     "description": "GIMP stands for \"GNU Image Manipulation Program\" and is used to create images and edit photographs.",

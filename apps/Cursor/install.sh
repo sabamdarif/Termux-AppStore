@@ -22,6 +22,16 @@ aarch64) supported_arch="arm64" ;;
 armv7*|arm) supported_arch="arm32" ;;
 esac
 
+if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]]; then
+distro_run "
+sudo apt update && sudo apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 libx11-xcb1  libxcomposite1  libxdamage1 libxrandr2  libdrm2 libxcb-dri3-0 libxshmfence1
+"
+elif [[ "$selected_distro" == "fedora" ]]; then
+distro_run "
+sudo dnf install -y nss atk at-spi2-atk gtk3 mesa-libgbm alsa-lib libX11-xcb libXcomposite libXdamage libXrandr libdrm  libxcb libXshmfence libxkbcommon
+"
+fi
+
 distro_run "check_and_delete /opt/cursor"
 distro_run "check_and_create_directory /opt/cursor"
 cd ${working_dir}/cursor

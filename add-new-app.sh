@@ -88,7 +88,7 @@ create_install_script() {
 supported_arch="$supported_arch"
 package_name="$package_name"
 run_cmd="$run_cmd"
-version=$version
+version="$version"
 app_type="$app_type"
 EOF
     

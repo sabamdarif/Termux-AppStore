@@ -28,7 +28,7 @@ sudo apt update && sudo apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 li
 "
 elif [[ "$selected_distro" == "fedora" ]]; then
 distro_run "
-sudo dnf install -y nss atk at-spi2-atk gtk3 mesa-libgbm alsa-lib libX11-xcb libXcomposite libXdamage libXrandr libdrm  libxcb libXshmfence libxkbcommon
+sudo dnf install -y nss atk at-spi2-atk gtk3 mesa-libgbm alsa-lib libX11-xcb libXcomposite libXdamage libXrandr libdrm  libxcb libxshmfence libxkbcommon --skip-unavailable
 "
 fi
 

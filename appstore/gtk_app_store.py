@@ -892,11 +892,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if line.startswith('#') or not line:
                                 continue
                             if line.startswith('distro_add_answer='):
-                                value = line.split('=')[1].strip().lower()
-                                distro_enabled = value == 'y'  # Direct comparison with 'y'
+                                value = line.split('=')[1].strip().strip('"').lower()  # Remove quotes
+                                self.distro_add_answer = value
                                 print(f"Found distro_add_answer: {value} -> enabled: {distro_enabled}")
                             elif line.startswith('selected_distro='):
-                                selected_distro = line.split('=')[1].strip().lower()
+                                selected_distro = line.split('=')[1].strip().strip('"').lower()  # Remove quotes
                                 print(f"Found selected_distro: {selected_distro}")
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
@@ -904,6 +904,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     traceback.print_exc()
             else:
                 print("Warning: Termux Desktop configuration file not found")
+
+            # Set distro_enabled based on the parsed value
+            if self.distro_add_answer in ["y", "yes"]:
+                distro_enabled = True
 
             print(f"\nConfiguration status:")
             print(f"Distro enabled: {distro_enabled}")

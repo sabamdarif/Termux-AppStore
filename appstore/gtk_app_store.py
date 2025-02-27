@@ -194,13 +194,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             header.props.title = "Termux AppStore"
             
             # Add refresh button to header bar
-            self.refresh_button = Gtk.Button()
-            refresh_icon = Gio.ThemedIcon(name="view-refresh-symbolic")
-            refresh_image = Gtk.Image.new_from_gicon(refresh_icon, Gtk.IconSize.BUTTON)
-            self.refresh_button.add(refresh_image)
-            self.refresh_button.connect("clicked", lambda x: self.start_refresh(is_manual=True))
-            header.pack_start(self.refresh_button)
-            
+            # self.refresh_button = Gtk.Button()
+            # refresh_icon = Gio.ThemedIcon(name="view-refresh-symbolic")
+            # refresh_image = Gtk.Image.new_from_gicon(refresh_icon, Gtk.IconSize.BUTTON)
+            # self.refresh_button.add(refresh_image)
+            # self.refresh_button.connect("clicked", lambda x: self.start_refresh(is_manual=True))
+            # header.pack_start(self.refresh_button)
+
+            # Handle refresh button click
+            # def on_refresh_clicked(self, button):
+            #     """Handle refresh button click"""
+            #     # Start the refresh process
+            #     self.start_refresh()
+
+            # Remove references to refresh_button
+            # self.refresh_button.set_sensitive(False)
+            # self.refresh_button.set_sensitive(True)
+
             self.set_titlebar(header)
 
             # Create section buttons box
@@ -467,7 +477,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.spinner.show()
         self.spinner.start()
         self.loading_label.show()
-        self.refresh_button.set_sensitive(False)
+        # self.refresh_button.set_sensitive(False)
 
         # Start background thread for downloading
         thread = threading.Thread(target=self.refresh_data_background)
@@ -809,7 +819,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.spinner.stop()
         self.spinner.hide()
         self.loading_label.hide()
-        self.refresh_button.set_sensitive(True)
+        # self.refresh_button.set_sensitive(True)
 
         # Setup UI with the new data
         self.setup_app_list_ui()
@@ -2130,15 +2140,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 if pkg_manager == "apt":
                     print("Running apt update...")
                     cmd = "apt update -y"
-                    process = subprocess.Popen(['bash', '-c', cmd], 
-                                            stdout=subprocess.PIPE, 
-                                            stderr=subprocess.STDOUT,
-                                            universal_newlines=True)
-                    
-                    for line in process.stdout:
-                        print(line.strip())
-                    process.wait()
-                    
+                    try:
+                        process = subprocess.Popen(['bash', '-c', cmd], 
+                                                    stdout=subprocess.PIPE, 
+                                                    stderr=subprocess.STDOUT,
+                                                    universal_newlines=True)
+                        # Set a timeout for the command
+                        output, _ = process.communicate(timeout=30)  # 30 seconds timeout
+                        print(output.strip())
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        print("Error: apt update command timed out.")
+                    except Exception as e:
+                        print(f"Error running apt update: {e}")
+
                 elif pkg_manager == "pacman":
                     print("Running pacman update...")
                     cmd = "pacman -Sy --noconfirm"

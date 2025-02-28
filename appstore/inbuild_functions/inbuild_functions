@@ -37,16 +37,19 @@ function print_log() {
 function print_success() {
     echo "[✓] $1"
     print_log "SUCCESS: $1"
+    return 0
 }
 
 function print_failed() {
     echo "[✗] $1"
     print_log "FAILED: $1"
+    return 1
 }
 
 function print_warn() {
     echo "[!] $1"
     print_log "WARNING: $1"
+    return 0
 }
 
 function wait_for_keypress() {
@@ -95,105 +98,111 @@ function check_and_backup() {
 function download_file() {
     local url="$1"
     local file_name="$(basename "$url")"
+    local max_retries=3
+    local attempt=0
 
     if ! command -v aria2c &> /dev/null; then
         package_install_and_check "aria2"
     fi
     check_and_delete "$file_name"
 
-    if command -v aria2c &> /dev/null; then
-        aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url"
-        if [[ $? -eq 0 && -f "$file_name" && -s "$file_name" ]]; then
-            print_success "Download completed: $file_name"
-            return 0
-        else
-            print_status "aria2c download failed, falling back to wget..."
+    while (( attempt < max_retries )); do
+        if command -v aria2c &> /dev/null; then
+            aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url"
+            if [[ $? -eq 0 && -f "$file_name" && -s "$file_name" ]]; then
+                print_success "Download completed: $file_name"
+                return 0
+            else
+                print_warn "Download failed, attempt $((attempt + 1)) of $max_retries."
+            fi
         fi
-    fi
+        ((attempt++))
+    done
 
-    # Fallback to wget if aria2c fails or isn't available
-    print_status "Falling back to wget..."
-    wget -O "$file_name" "$url"
-    if [[ $? -eq 0 && -f "$file_name" && -s "$file_name" ]]; then
-        print_success "Download completed: $file_name"
-        return 0
-    else
-        print_failed "Download failed: $file_name"
-        check_and_delete "$file_name"
-        return 1
-    fi
+    print_failed "Download failed after $max_retries attempts: $file_name"
 }
 
 function extract() {
     local archive="$1"
     local output_dir="$2"
-    
-    if [[ ! -f "$archive" ]]; then
-        echo "Error: '$archive' does not exist!"
-        return 1
-    fi
+    local max_retries=3
+    local attempt=0
 
-    # Prepare output directory argument if provided
-    local dir_arg=""
-    if [[ -n "$output_dir" ]]; then
-        check_and_create_directory "$output_dir"
-        dir_arg="-C $output_dir"
-    fi
-
-    case "$archive" in
-        *.tar.gz|*.tgz)
-            # Add --no-same-owner to prevent permission issues and -h to dereference hard links
-            tar xvzf "$archive" $dir_arg --no-same-owner -h || true
-            ;;
-        *.tar.xz)
-            tar xvJf "$archive" $dir_arg --no-same-owner -h || true
-            ;;
-        *.tar.bz2|*.tbz2)
-            tar xvjf "$archive" $dir_arg --no-same-owner -h || true
-            ;;
-        *.tar)
-            tar xvf "$archive" $dir_arg --no-same-owner -h || true
-            ;;
-        *.bz2)
-            if [[ -n "$output_dir" ]]; then
-                bunzip2 -c "$archive" > "$output_dir/$(basename "${archive%.bz2}")"
-            else
-                bunzip2 "$archive"
-            fi
-            ;;
-        *.gz)
-            if [[ -n "$output_dir" ]]; then
-                gunzip -c "$archive" > "$output_dir/$(basename "${archive%.gz}")"
-            else
-                gunzip -c "$archive" > "${archive%.gz}"
-            fi
-            ;;
-        *.7z)
-            if [[ -n "$output_dir" ]]; then
-                7z x "$archive" -o"$output_dir" -y
-            else
-                7z x "$archive" -y
-            fi
-            ;;
-        *.rar)
-            if [[ -n "$output_dir" ]]; then
-                unrar x -o+ "$archive" "$output_dir"
-            else
-                unrar x -o+ "$archive"
-            fi
-            ;;
-        *.zip)
-            if [[ -n "$output_dir" ]]; then
-                unzip -o "$archive" -d "$output_dir"
-            else
-                unzip -o "$archive"
-            fi
-            ;;
-        *)
-            echo "Unsupported archive format: $archive"
+    while (( attempt < max_retries )); do
+        if [[ ! -f "$archive" ]]; then
+            echo "Error: '$archive' does not exist!"
             return 1
-            ;;
-    esac
+        fi
+
+        # Prepare output directory argument if provided
+        local dir_arg=""
+        if [[ -n "$output_dir" ]]; then
+            check_and_create_directory "$output_dir"
+            dir_arg="-C $output_dir"
+        fi
+
+        case "$archive" in
+            *.tar.gz|*.tgz)
+                tar xvzf "$archive" $dir_arg --no-same-owner -h && break
+                ;;
+            *.tar.xz)
+                tar xvJf "$archive" $dir_arg --no-same-owner -h && break
+                ;;
+            *.tar.bz2|*.tbz2)
+                tar xvjf "$archive" $dir_arg --no-same-owner -h && break
+                ;;
+            *.tar)
+                tar xvf "$archive" $dir_arg --no-same-owner -h && break
+                ;;
+            *.bz2)
+                if [[ -n "$output_dir" ]]; then
+                    bunzip2 -c "$archive" > "$output_dir/$(basename "${archive%.bz2}")"
+                else
+                    bunzip2 "$archive"
+                fi
+                ;;
+            *.gz)
+                if [[ -n "$output_dir" ]]; then
+                    gunzip -c "$archive" > "$output_dir/$(basename "${archive%.gz}")"
+                else
+                    gunzip -c "$archive" > "${archive%.gz}"
+                fi
+                ;;
+            *.7z)
+                if [[ -n "$output_dir" ]]; then
+                    7z x "$archive" -o"$output_dir" -y
+                else
+                    7z x "$archive" -y
+                fi
+                ;;
+            *.rar)
+                if [[ -n "$output_dir" ]]; then
+                    unrar x -o+ "$archive" "$output_dir"
+                else
+                    unrar x -o+ "$archive"
+                fi
+                ;;
+            *.zip)
+                if [[ -n "$output_dir" ]]; then
+                    unzip -o "$archive" -d "$output_dir"
+                else
+                    unzip -o "$archive"
+                fi
+                ;;
+            *)
+                print_failed "Unsupported archive format: $archive"
+                ;;
+        esac
+
+        echo "Extraction failed, attempt $((attempt + 1)) of $max_retries."
+        ((attempt++))
+    done
+
+    if (( attempt == max_retries )); then
+        print_failed "Extraction failed after $max_retries attempts: $archive"
+    fi
+
+    print_success "Extraction completed: $archive"
 }
 
 # find a backup file which end with a number pattern and restore it

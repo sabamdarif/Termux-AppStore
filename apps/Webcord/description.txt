@@ -1,0 +1,1 @@
+Fast Discord client for ARM that mimics the official Discord client.

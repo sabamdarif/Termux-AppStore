@@ -140,12 +140,19 @@ page_url="$base_url"
 run_cmd="/opt/AppImageLauncher/$package_name/$package_name --no-sandbox"
 
 cd \${TMPDIR}
+
+app_arch=\$(uname -m)
+case " \$app_arch" in
+aarch64) archtype="arm64" ;;
+armv7*|arm) archtype="armv7l" ;;
+esac
+
 appimage_filename="$filename_pattern"
 
 check_and_delete "\${TMPDIR}/\${appimage_filename} \${PREFIX}/share/applications/pd_added/$package_name.desktop"
 
 print_success "Downloading $package_name AppImage..."
-download_file "\${page_url}/releases/download/\${version}/$filename_pattern"
+download_file "\${page_url}/releases/download/\${version}/\$appimage_filename"
 install_appimage "\$appimage_filename" "$package_name"
 
 print_success "Creating desktop entry..."

@@ -522,19 +522,20 @@
   {
     "app_name": "Webcord",
     "folder_name": "Webcord",
-    "description": "Fast Discord client for ARM that mimics the official Discord client.\nThe app runs independent to chromium and can be hidden to the system tray unlike other solutions out there.\nTo run: Menu -> Internet -> WebCord.\nTo run in a terminal: webcord\nThis client is not officially provided or supported by Discord and technically violates ToS, use at your own risk\nMade by SpacingBat3 on Github with care :)",
+    "description": "Fast Discord client for ARM that mimics the official Discord client.",
     "categories": [
       "Internet",
       "Multimedia"
     ],
     "app_type": "distro",
-    "run_cmd": "webcord --no-sandbox",
-    "supported_arch": "arm64",
-    "version": "v4.10.3",
-    "supported_distro": "fedora,ubuntu,debian",
+    "run_cmd": "/opt/AppImageLauncher/webcord/webcord --no-sandbox",
+    "supported_arch": "aarch64,arm",
+    "version": "v4.10.4",
+    "supported_distro": "all",
+    "package_name": "webcord",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/uninstall.sh",
-    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/icon-64.png"
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/logo.png"
   },
   {
     "app_name": "Xpdf Reader",

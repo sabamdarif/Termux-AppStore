@@ -315,19 +315,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     
             # Check Termux Desktop configuration first
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-            distro_enabled = False
-            selected_distro = None
+            # distro_enabled = False
+            # selected_distro = None
             
             if os.path.exists(termux_desktop_config):
                 try:
                     with open(termux_desktop_config, 'r') as f:
                         for line in f:
+                            print(f"Raw line: '{line.strip()}'")  # Debugging output
                             if line.startswith('distro_add_answer='):
-                                distro_enabled = line.strip().split('=')[1].lower() == 'y'
+                                # Handle both quoted and unquoted values
+                                value = line.strip().split('=')[1].strip().strip('"').strip("'")
+                                print(f"Parsed distro_add_answer: '{value}'")  # Debugging output
+                                # Set distro_enabled based on the value
+                                if value.lower() in ['y', 'yes']:
+                                    distro_enabled = True
+                                elif value.lower() in ['n', 'no']:
+                                    distro_enabled = False
+                                else:
+                                    print(f"Warning: Unrecognized value for distro_add_answer: '{value}'")
+                                    distro_enabled = False  # Default to False if unrecognized
                             elif line.startswith('selected_distro='):
-                                selected_distro = line.strip().split('=')[1].lower()
+                                # Handle both quoted and unquoted values
+                                selected_distro = line.strip().split('=')[1].strip().strip('"').strip("'").lower()
+                                print(f"Parsed selected_distro: '{selected_distro}'")  # Debugging output
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
+                    return  # Exit the method if there's an error
             else:
                 print("Warning: Termux Desktop not installed")
 
@@ -639,19 +653,29 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print("Checking installed packages and versions...")
             # Check Termux Desktop configuration
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-            distro_enabled = False
-            selected_distro = None
+            distro_enabled = False  # Initialize the variable
+            selected_distro = None  # Initialize the variable
             
             if os.path.exists(termux_desktop_config):
                 try:
                     with open(termux_desktop_config, 'r') as f:
                         for line in f:
+                            line = line.strip()
                             if line.startswith('distro_add_answer='):
-                                distro_enabled = line.strip().split('=')[1].lower() == 'y'
+                                value = line.split('=')[1].strip().strip('"').strip("'").lower()  # Remove quotes
+                                if value in ['y', 'yes']:
+                                    distro_enabled = True
+                                elif value in ['n', 'no']:
+                                    distro_enabled = False
+                                else:
+                                    print(f"Warning: Unrecognized value for distro_add_answer: '{value}'")
+                                print(f"Found distro_add_answer: {value} -> enabled: {distro_enabled}")
                             elif line.startswith('selected_distro='):
-                                selected_distro = line.strip().split('=')[1].lower()
+                                selected_distro = line.split('=')[1].strip().strip('"').strip("'").lower()  # Remove quotes
+                                print(f"Found selected_distro: {selected_distro}")
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
+                    return  # Exit the method if there's an error
             else:
                 print("Warning: Termux Desktop not installed")
 
@@ -700,7 +724,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         print(f"Checking installed packages for distro: {selected_distro}")
                         
                         for app in filtered_apps:
-                            if app['app_type'] == 'distro':
+                            if app['app_type'] == 'distro' and distro_enabled and selected_distro:
+                                # Add the check for distro apps
                                 supported_distro = app.get('supported_distro')
                                 if supported_distro and supported_distro != 'all':
                                     # Split supported_distro into a list if it contains commas
@@ -709,7 +734,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                         print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
                                         continue
 
-                                # Try distro-specific package name first
                                 package_name = app.get(f"{selected_distro}_package_name") or app.get('package_name')
                                 if not package_name:
                                     # Try distro-specific run command as fallback
@@ -881,8 +905,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # First check Termux Desktop configuration
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-            distro_enabled = False
-            selected_distro = None
+            distro_enabled = False  # Initialize the variable
+            selected_distro = None  # Initialize the variable
             
             if os.path.exists(termux_desktop_config):
                 try:
@@ -892,11 +916,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if line.startswith('#') or not line:
                                 continue
                             if line.startswith('distro_add_answer='):
-                                value = line.split('=')[1].strip().strip('"').lower()  # Remove quotes
+                                value = line.split('=')[1].strip().strip('"').strip("'").lower()  # Remove quotes
                                 self.distro_add_answer = value
+                                # Set distro_enabled based on the value
+                                if value in ['y', 'yes']:
+                                    distro_enabled = True
+                                elif value in ['n', 'no']:
+                                    distro_enabled = False
+                                else:
+                                    print(f"Warning: Unrecognized value for distro_add_answer: '{value}'")
                                 print(f"Found distro_add_answer: {value} -> enabled: {distro_enabled}")
                             elif line.startswith('selected_distro='):
-                                selected_distro = line.split('=')[1].strip().strip('"').lower()  # Remove quotes
+                                selected_distro = line.split('=')[1].strip().strip('"').strip("'").lower()  # Remove quotes
                                 print(f"Found selected_distro: {selected_distro}")
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
@@ -2019,23 +2050,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if process.returncode == 0 and not self.installation_cancelled:
                             GLib.idle_add(update_progress, 0.95, "Finalizing update...")
                             
+                            # Check if the app's version is 'distro_local_version'
+                            if app.get('version') == 'distro_local_version':
+                                # Logic to handle the update for distro apps
+                                print(f"Updating version for {app['app_name']} to the latest available version.")
+                                # Add your logic here to fetch and set the new version
+
                             # Remove from pending updates
                             if app['folder_name'] in self.pending_updates:
                                 del self.pending_updates[app['folder_name']]
                                 self.save_pending_updates()
                                 print(f"Removed {app['app_name']} from pending updates")
-                            
-                            # Update the app's version in apps.json
-                            try:
-                                with open(APPSTORE_JSON, 'r') as f:
-                                    apps_data = json.load(f)
-                                for app_data in apps_data:
-                                    if app_data['folder_name'] == app['folder_name']:
-                                        app_data['version'] = self.pending_updates.get(app['folder_name'], app_data['version'])
-                                with open(APPSTORE_JSON, 'w') as f:
-                                    json.dump(apps_data, f, indent=2)
-                            except Exception as e:
-                                print(f"Error updating version in apps.json: {e}")
                             
                             time.sleep(0.5)
                             GLib.idle_add(update_progress, 1.0, "Update complete!")
@@ -2225,19 +2250,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 # Then update versions for distro apps if distro is enabled
                 print("\n=== Getting Distro App Versions ===")
                 termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-                distro_enabled = False
-                selected_distro = None
+                distro_enabled = False  # Initialize the variable
+                selected_distro = None  # Initialize the variable
                 
                 if os.path.exists(termux_desktop_config):
                     try:
                         with open(termux_desktop_config, 'r') as f:
                             for line in f:
+                                line = line.strip()
                                 if line.startswith('distro_add_answer='):
-                                    distro_enabled = line.strip().split('=')[1].lower() == 'y'
+                                    value = line.split('=')[1].strip().strip('"').strip("'").lower()
+                                    distro_enabled = value in ['y', 'yes']
                                 elif line.startswith('selected_distro='):
-                                    selected_distro = line.strip().split('=')[1].lower()
+                                    selected_distro = line.split('=')[1].strip().strip('"').strip("'").lower()
                     except Exception as e:
                         print(f"Error reading Termux Desktop config: {e}")
+                        return  # Exit the method if there's an error
+
+                # Debugging output
+                print(f"distro_enabled: {distro_enabled}, selected_distro: {selected_distro}")
 
                 if distro_enabled and selected_distro:
                     # First check if proot-distro is working correctly

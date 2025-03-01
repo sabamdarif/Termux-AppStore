@@ -12,20 +12,27 @@ run_cmd="github-desktop --no-sandbox"
 app_arch=$(uname -m)
 case "$app_arch" in
 aarch64) archtype="arm64" ;;
-armv7*|arm) archtype="arm" ;;
+armv7*|arm) archtype="armv7l" ;;
+*) print_failed "Unsupported architectures" ;;
 esac
 
 
 if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]]; then
     cd $working_dir
-    download_file "${page_url}/download/release-${final_version}/GitHubDesktop-linux-${archtype}-${version}.deb"
-    distro_run "apt install ./GitHubDesktop-linux-${archtype}-${version}.deb -y"
-    check_and_delete "${working_dir}/GitHubDesktop-linux-${archtype}-${version}.deb"
+    filename="GitHubDesktop-linux-${archtype}-${final_version}.deb"
+    download_file "${page_url}/releases/download/${version}/${filename}"
+    distro_run "apt install ./${filename} -y"
+    check_and_delete "${working_dir}/${filename}"
 elif [[ "$selected_distro" == "fedora" ]]; then
     cd $working_dir
-    download_file "${page_url}/download/release-${final_version}/GitHubDesktop-linux-${app_arch}-${version}.rpm"
-    distro_run "dnf install ./GitHubDesktop-linux-${app_arch}-${version}.rpm -y"
-    check_and_delete "${working_dir}/GitHubDesktop-linux-${app_arch}-${version}.rpm"
+    if [[ "$archtype" == "armv7l" ]]; then
+    filename="GitHubDesktop-linux-${archtype}-${final_version}.rpm"
+    else
+    filename="GitHubDesktop-linux-${app_arch}-${final_version}.rpm"
+    fi
+    download_file "${page_url}/releases/download/${version}/${filename}"
+    distro_run "dnf install ./${filename} -y"
+    check_and_delete "${working_dir}/${filename}"
 else
     print_failed "Unsupported distro"
 fi

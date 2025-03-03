@@ -37,19 +37,19 @@ function print_log() {
 function print_success() {
     echo "[✓] $1"
     print_log "SUCCESS: $1"
-    return 0
+
 }
 
 function print_failed() {
     echo "[✗] $1"
     print_log "FAILED: $1"
-    return 1
+    exit 1
 }
 
 function print_warn() {
     echo "[!] $1"
     print_log "WARNING: $1"
-    return 0
+
 }
 
 function wait_for_keypress() {
@@ -111,7 +111,7 @@ function download_file() {
             aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url"
             if [[ $? -eq 0 && -f "$file_name" && -s "$file_name" ]]; then
                 print_success "Download completed: $file_name"
-                return 0
+            
             else
                 print_warn "Download failed, attempt $((attempt + 1)) of $max_retries."
             fi
@@ -131,7 +131,7 @@ function extract() {
     while (( attempt < max_retries )); do
         if [[ ! -f "$archive" ]]; then
             echo "Error: '$archive' does not exist!"
-            return 1
+            exit 1
         fi
 
         # Prepare output directory argument if provided
@@ -220,7 +220,7 @@ function check_and_restore() {
     if [[ -z "$latest_backup" ]]; then
         print_failed "No backup file found for ${target_path}."
 		echo
-        return 1
+        exit 1
     fi
 
     if [[ -e "$target_path" ]]; then
@@ -502,7 +502,7 @@ EOF
     # Verify script was created
     if [[ ! -f "$script_path" ]]; then
         print_failed "Failed to create script at $script_path"
-        return 1
+        exit 1
     fi
 }
 

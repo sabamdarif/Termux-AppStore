@@ -36,7 +36,7 @@ mv zen zen-browser
 '
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/cursor.desktop >/dev/null
+cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/zen-browser.desktop >/dev/null
 [Desktop Entry]
 Name=Zen Browser
 Comment=Experience tranquillity while browsing the web without people tracking you!

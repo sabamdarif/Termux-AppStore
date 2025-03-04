@@ -326,6 +326,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/icon-64.png"
   },
   {
+    "app_name": "Mousepad",
+    "folder_name": "Mousepad",
+    "description": "Simple text editor of the desktop environment Xfce",
+    "categories": [
+      "Accessories",
+      "Productivity"
+    ],
+    "app_type": "native",
+    "run_cmd": "mousepad",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "mousepad",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mousepad/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mousepad/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mousepad/logo.png"
+  },
+  {
     "app_name": "Neofetch",
     "folder_name": "Neofetch",
     "description": "Neofetch is an aesthetically pleasing bash script to show system information.",

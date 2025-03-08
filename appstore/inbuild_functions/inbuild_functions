@@ -99,24 +99,22 @@ function download_file() {
     local url="$1"
     local file_name="$(basename "$url")"
     local max_retries=3
-    local attempt=0
 
     if ! command -v aria2c &> /dev/null; then
         package_install_and_check "aria2"
     fi
     check_and_delete "$file_name"
 
-    while (( attempt < max_retries )); do
-        if command -v aria2c &> /dev/null; then
-            aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url"
-            if [[ $? -eq 0 && -f "$file_name" && -s "$file_name" ]]; then
-                print_success "Download completed: $file_name"
-            
-            else
-                print_warn "Download failed, attempt $((attempt + 1)) of $max_retries."
-            fi
+    for ((attempt = 1; attempt <= max_retries; attempt++)); do
+        aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url"
+
+        if [[ $? -eq 0 && -f "$file_name" && -s "$file_name" ]]; then
+            print_success "Download completed: $file_name"
+            return 0
         fi
-        ((attempt++))
+
+        print_warn "Download failed, attempt $attempt of $max_retries."
+        sleep 2
     done
 
     print_failed "Download failed after $max_retries attempts: $file_name"

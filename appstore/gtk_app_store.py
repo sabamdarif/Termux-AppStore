@@ -79,186 +79,180 @@ class AppStoreApplication(Gtk.Application):
 
 class AppStoreWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        try:
-            Gtk.ApplicationWindow.__init__(
-                self,
-                application=app,
-                title="Termux AppStore"
-            )
-            
-            # Initialize thread pool and queues
-            self.thread_pool = ThreadPoolExecutor(max_workers=4)
-            self.ui_update_queue = queue.Queue()
-            
-            # Start UI update thread
-            self.ui_update_thread = threading.Thread(target=self.process_ui_updates, daemon=True)
-            self.ui_update_thread.start()
-            
-            # Add a timer for periodic UI updates
-            GLib.timeout_add(100, self.process_pending_ui_updates)
-            
-            # Set window properties
-            self.set_wmclass("termux-appstore", "Termux AppStore")
-            self.set_role("termux-appstore")
-            self.set_default_size(1000, 600)
-            self.set_position(Gtk.WindowPosition.CENTER)
-            
-            # Initialize installation flags
-            self.installation_cancelled = False
-            self.uninstallation_cancelled = False
+        """Initialize the main window"""
+        super().__init__(application=app, title="Termux App Store")
+        
+        # Initialize installation state
+        self.installation_cancelled = False
+        self.current_installation = None
+        
+        # Initialize thread pool and queues
+        self.thread_pool = ThreadPoolExecutor(max_workers=4)
+        self.ui_update_queue = queue.Queue()
+        
+        # Start UI update thread
+        self.ui_update_thread = threading.Thread(target=self.process_ui_updates, daemon=True)
+        self.ui_update_thread.start()
+        
+        # Add a timer for periodic UI updates
+        GLib.timeout_add(100, self.process_pending_ui_updates)
+        
+        # Set window properties
+        self.set_wmclass("termux-appstore", "Termux AppStore")
+        self.set_role("termux-appstore")
+        self.set_default_size(1000, 600)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        
+        # Initialize installation flags
+        self.installation_cancelled = False
+        self.uninstallation_cancelled = False
 
-            # Get system architecture
-            self.system_arch = platform.machine().lower()
-            print(f"System architecture: {self.system_arch}")
-            
-            # Define architecture compatibility groups
-            self.arch_compatibility = {
-                'arm64': ['arm64', 'aarch64'],
-                'aarch64': ['arm64', 'aarch64'],
-                'arm': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-                'armv7l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-                'armhf': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-                'armv8l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l']
-            }
+        # Get system architecture
+        self.system_arch = platform.machine().lower()
+        print(f"System architecture: {self.system_arch}")
+        
+        # Define architecture compatibility groups
+        self.arch_compatibility = {
+            'arm64': ['arm64', 'aarch64'],
+            'aarch64': ['arm64', 'aarch64'],
+            'arm': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+            'armv7l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+            'armhf': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
+            'armv8l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l']
+        }
 
-            # Add keyboard accelerators
-            accel = Gtk.AccelGroup()
-            self.add_accel_group(accel)
-            
-            # Add Ctrl+Q shortcut
-            key, mod = Gtk.accelerator_parse("<Control>Q")
-            accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
+        # Add keyboard accelerators
+        accel = Gtk.AccelGroup()
+        self.add_accel_group(accel)
+        
+        # Add Ctrl+Q shortcut
+        key, mod = Gtk.accelerator_parse("<Control>Q")
+        accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
 
-            # Initialize stop flag for background tasks
-            self.stop_background_tasks = False
+        # Initialize stop flag for background tasks
+        self.stop_background_tasks = False
 
-            # Initialize task queue and current task
-            self.task_queue = queue.Queue()
-            self.current_task = None
+        # Initialize task queue and current task
+        self.task_queue = queue.Queue()
+        self.current_task = None
 
-            # Start task processor
-            self.start_task_processor()
+        # Start task processor
+        self.start_task_processor()
 
-            # Connect the delete-event to handle window closing
-            self.connect("delete-event", self.on_delete_event)
+        # Connect the delete-event to handle window closing
+        self.connect("delete-event", self.on_delete_event)
 
-            # Initialize paths and create directories
-            self.setup_directories()
+        # Initialize paths and create directories
+        self.setup_directories()
 
-            # Initialize installed apps tracking
-            self.installed_apps_file = Path(os.path.expanduser("~/.termux_appstore/installed_apps.json"))
-            self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
-            self.load_installed_apps()
+        # Initialize installed apps tracking
+        self.installed_apps_file = Path(os.path.expanduser("~/.termux_appstore/installed_apps.json"))
+        self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
+        self.load_installed_apps()
 
-            # Initialize categories and apps data
-            self.categories = []
-            self.apps_data = []
+        # Initialize categories and apps data
+        self.categories = []
+        self.apps_data = []
 
-            # Load CSS
-            css_provider = Gtk.CssProvider()
-            css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
-            css_provider.load_from_path(str(css_file))
-            Gtk.StyleContext.add_provider_for_screen(
-                Gdk.Screen.get_default(),
-                css_provider,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
+        # Load CSS
+        css_provider = Gtk.CssProvider()
+        css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
+        css_provider.load_from_path(str(css_file))
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
-            # Create main container with overlay
-            self.overlay = Gtk.Overlay()
-            self.add(self.overlay)
+        # Create main container with overlay
+        self.overlay = Gtk.Overlay()
+        self.add(self.overlay)
 
-            # Create main content box
-            self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            self.overlay.add(self.main_box)
+        # Create main content box
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.overlay.add(self.main_box)
 
-            # Create spinner for initial load
-            self.spinner = Gtk.Spinner()
-            self.spinner.set_size_request(64, 64)
+        # Create spinner for initial load
+        self.spinner = Gtk.Spinner()
+        self.spinner.set_size_request(64, 64)
 
-            # Create a label for the loading message
-            self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
-            self.loading_label.set_halign(Gtk.Align.CENTER)
-            self.loading_label.hide()
+        # Create a label for the loading message
+        self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
+        self.loading_label.set_halign(Gtk.Align.CENTER)
+        self.loading_label.hide()
 
-            spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            spinner_box.pack_start(self.spinner, True, True, 0)
-            spinner_box.pack_start(self.loading_label, True, True, 0)
-            spinner_box.set_valign(Gtk.Align.CENTER)
-            spinner_box.set_halign(Gtk.Align.CENTER)
-            self.overlay.add_overlay(spinner_box)
+        spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        spinner_box.pack_start(self.spinner, True, True, 0)
+        spinner_box.pack_start(self.loading_label, True, True, 0)
+        spinner_box.set_valign(Gtk.Align.CENTER)
+        spinner_box.set_halign(Gtk.Align.CENTER)
+        self.overlay.add_overlay(spinner_box)
 
-            # Create header bar
-            header = Gtk.HeaderBar()
-            header.set_show_close_button(True)
-            header.props.title = "Termux AppStore"
-            
-            # Add refresh button to header bar
-            # self.refresh_button = Gtk.Button()
-            # refresh_icon = Gio.ThemedIcon(name="view-refresh-symbolic")
-            # refresh_image = Gtk.Image.new_from_gicon(refresh_icon, Gtk.IconSize.BUTTON)
-            # self.refresh_button.add(refresh_image)
-            # self.refresh_button.connect("clicked", lambda x: self.start_refresh(is_manual=True))
-            # header.pack_start(self.refresh_button)
+        # Create header bar
+        header = Gtk.HeaderBar()
+        header.set_show_close_button(True)
+        header.props.title = "Termux AppStore"
+        
+        # Add refresh button to header bar
+        # self.refresh_button = Gtk.Button()
+        # refresh_icon = Gio.ThemedIcon(name="view-refresh-symbolic")
+        # refresh_image = Gtk.Image.new_from_gicon(refresh_icon, Gtk.IconSize.BUTTON)
+        # self.refresh_button.add(refresh_image)
+        # self.refresh_button.connect("clicked", lambda x: self.start_refresh(is_manual=True))
+        # header.pack_start(self.refresh_button)
 
-            # Handle refresh button click
-            # def on_refresh_clicked(self, button):
-            #     """Handle refresh button click"""
-            #     # Start the refresh process
-            #     self.start_refresh()
+        # Handle refresh button click
+        # def on_refresh_clicked(self, button):
+        #     """Handle refresh button click"""
+        #     # Start the refresh process
+        #     self.start_refresh()
 
-            # Remove references to refresh_button
-            # self.refresh_button.set_sensitive(False)
-            # self.refresh_button.set_sensitive(True)
+        # Remove references to refresh_button
+        # self.refresh_button.set_sensitive(False)
+        # self.refresh_button.set_sensitive(True)
 
-            self.set_titlebar(header)
+        self.set_titlebar(header)
 
-            # Create section buttons box
-            section_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-            section_box.get_style_context().add_class('linked')  # This makes buttons appear connected
-            
-            # Explore button
-            self.explore_button = Gtk.Button(label="Explore")
-            self.explore_button.connect("clicked", self.on_section_clicked, "explore")
-            self.explore_button.get_style_context().add_class('section-button')
-            self.explore_button.get_style_context().add_class('selected')
-            section_box.pack_start(self.explore_button, False, False, 0)
-            
-            # Installed button
-            self.installed_button = Gtk.Button(label="Installed")
-            self.installed_button.connect("clicked", self.on_section_clicked, "installed")
-            self.installed_button.get_style_context().add_class('section-button')
-            section_box.pack_start(self.installed_button, False, False, 0)
-            
-            # Updates button
-            self.updates_button = Gtk.Button(label="Updates")
-            self.updates_button.connect("clicked", self.on_section_clicked, "updates")
-            self.updates_button.get_style_context().add_class('section-button')
-            section_box.pack_start(self.updates_button, False, False, 0)
-            
-            # Add section buttons to center of header
-            header.set_custom_title(section_box)
+        # Create section buttons box
+        section_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        section_box.get_style_context().add_class('linked')  # This makes buttons appear connected
+        
+        # Explore button
+        self.explore_button = Gtk.Button(label="Explore")
+        self.explore_button.connect("clicked", self.on_section_clicked, "explore")
+        self.explore_button.get_style_context().add_class('section-button')
+        self.explore_button.get_style_context().add_class('selected')
+        section_box.pack_start(self.explore_button, False, False, 0)
+        
+        # Installed button
+        self.installed_button = Gtk.Button(label="Installed")
+        self.installed_button.connect("clicked", self.on_section_clicked, "installed")
+        self.installed_button.get_style_context().add_class('section-button')
+        section_box.pack_start(self.installed_button, False, False, 0)
+        
+        # Updates button
+        self.updates_button = Gtk.Button(label="Updates")
+        self.updates_button.connect("clicked", self.on_section_clicked, "updates")
+        self.updates_button.get_style_context().add_class('section-button')
+        section_box.pack_start(self.updates_button, False, False, 0)
+        
+        # Add section buttons to center of header
+        header.set_custom_title(section_box)
 
-            # Create content box for app list
-            self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-            self.main_box.pack_start(self.content_box, True, True, 0)
+        # Create content box for app list
+        self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.main_box.pack_start(self.content_box, True, True, 0)
 
-            # Show all widgets
-            self.show_all()
+        # Show all widgets
+        self.show_all()
 
-            # Start the initial data load
-            self.check_for_updates()
+        # Start the initial data load
+        self.check_for_updates()
 
-            # Initialize updates tracking
-            self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
-            os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
-            self.pending_updates = self.load_pending_updates()
-
-        except Exception as e:
-            print(f"Error initializing AppStoreWindow: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
+        # Initialize updates tracking
+        self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
+        os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
+        self.pending_updates = self.load_pending_updates()
 
     def setup_directories(self):
         """Create necessary directories for the app store"""
@@ -1159,6 +1153,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_install_clicked(self, button, app):
         """Handle install button click"""
+        # Reset installation state at the start
+        self.installation_cancelled = False
+        self.current_installation = None
         dialog = Gtk.MessageDialog(
             transient_for=self,
             modal=True,
@@ -1356,8 +1353,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             print(f"Cleaned up script: {script_path[0]}")
                         except Exception as e:
                             print(f"Error cleaning up script: {e}")
+                    
+                    # Clean up installation state
+                    GLib.idle_add(self.cleanup_installation_state)
 
             thread = threading.Thread(target=install_thread)
+            # Store current installation before starting it
+            self.current_installation = thread
             thread.daemon = True
             thread.start()
 
@@ -2587,6 +2589,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def queue_ui_update(self, update_func):
         """Queue a UI update to be processed"""
         self.ui_update_queue.put(update_func)
+
+    def cleanup_installation_state(self):
+        """Clean up installation state and UI"""
+        self.installation_cancelled = False
+        self.current_installation = None
+        self.hide_loading_indicators()
+        GLib.idle_add(self.refresh_complete)
+        GLib.idle_add(self.show_apps)
 
 def main():
     app = AppStoreApplication()

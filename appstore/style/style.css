@@ -288,6 +288,8 @@ textview.terminal-view {
 textview.terminal-view text {
     background-color: @terminal_bg_color;
     color: @terminal_fg_color;
+    margin: 0;
+    padding: 0;
 }
 
 button.terminal-toggle-button {
@@ -306,20 +308,34 @@ button.terminal-toggle-button:hover {
 window.progress-dialog {
     background-color: @theme_bg_color;
     border-radius: 8px;
-    padding: 16px;
+    padding: 12px;
+    min-width: 400px;  /* Reduced from 500px */
+    min-height: 200px; /* Reduced from 400px */
 }
 
 window.progress-dialog headerbar {
     background-color: @theme_bg_color;
     border-bottom: 1px solid alpha(@theme_fg_color, 0.1);
+    padding: 6px;  /* Reduced from 8px */
 }
 
 box.progress-view {
-    padding: 16px;
+    padding: 12px;  /* Reduced from 16px */
+    margin: 0;
+}
+
+/* Make scrolledwindow selector specific to terminal */
+.terminal-view scrolledwindow {
+    background-color: @terminal_bg_color;
+    border-radius: 6px;
+    margin: 0;
+    padding: 0;
+    min-height: 120px;  /* Added minimum height for terminal view */
 }
 
 progressbar {
-    min-height: 10px;
+    min-height: 6px;  /* Reduced from 10px */
+    margin: 6px 0;    /* Reduced from 8px */
 }
 
 progressbar trough {

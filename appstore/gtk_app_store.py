@@ -82,20 +82,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Initialize the main window"""
         super().__init__(application=app, title="Termux App Store")
         
+        # Initialize task queue and current task first
+        self.task_queue = queue.Queue()
+        self.current_task = None
+        self.stop_background_tasks = False
+        
         # Initialize installation state
         self.installation_cancelled = False
         self.current_installation = None
         
+        # Initialize distro state
+        self.distro_enabled = False
+        self.selected_distro = None
+        
         # Initialize thread pool and queues
-        self.thread_pool = ThreadPoolExecutor(max_workers=4)
         self.ui_update_queue = queue.Queue()
+        self.pending_ui_updates = []
         
-        # Start UI update thread
-        self.ui_update_thread = threading.Thread(target=self.process_ui_updates, daemon=True)
-        self.ui_update_thread.start()
-        
-        # Add a timer for periodic UI updates
-        GLib.timeout_add(100, self.process_pending_ui_updates)
+        # Initialize updates tracking
+        self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
+        self.pending_updates = {}
         
         # Set window properties
         self.set_wmclass("termux-appstore", "Termux AppStore")
@@ -129,22 +135,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         key, mod = Gtk.accelerator_parse("<Control>Q")
         accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
 
-        # Initialize stop flag for background tasks
-        self.stop_background_tasks = False
-
-        # Initialize task queue and current task
-        self.task_queue = queue.Queue()
-        self.current_task = None
-
-        # Start task processor
-        self.start_task_processor()
-
-        # Connect the delete-event to handle window closing
-        self.connect("delete-event", self.on_delete_event)
-
-        # Initialize paths and create directories
-        self.setup_directories()
-
         # Initialize installed apps tracking
         self.installed_apps_file = Path(os.path.expanduser("~/.termux_appstore/installed_apps.json"))
         self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
@@ -154,6 +144,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.categories = []
         self.apps_data = []
 
+        # Create main UI layout first
+        self.create_ui()
+
+        # Start task processor after UI creation
+        self.start_task_processor()
+
+        # Connect the delete-event to handle window closing
+        self.connect("delete-event", self.on_delete_event)
+
+        # Show all widgets
+        self.show_all()
+
+        # Initialize paths and create directories (after UI is ready)
+        self.setup_directories()
+
+        # Start the initial data load
+        self.check_for_updates()
+
+    def create_ui(self):
+        """Create the main UI layout"""
         # Load CSS
         css_provider = Gtk.CssProvider()
         css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
@@ -192,25 +202,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         header = Gtk.HeaderBar()
         header.set_show_close_button(True)
         header.props.title = "Termux AppStore"
-        
-        # Add refresh button to header bar
-        # self.refresh_button = Gtk.Button()
-        # refresh_icon = Gio.ThemedIcon(name="view-refresh-symbolic")
-        # refresh_image = Gtk.Image.new_from_gicon(refresh_icon, Gtk.IconSize.BUTTON)
-        # self.refresh_button.add(refresh_image)
-        # self.refresh_button.connect("clicked", lambda x: self.start_refresh(is_manual=True))
-        # header.pack_start(self.refresh_button)
-
-        # Handle refresh button click
-        # def on_refresh_clicked(self, button):
-        #     """Handle refresh button click"""
-        #     # Start the refresh process
-        #     self.start_refresh()
-
-        # Remove references to refresh_button
-        # self.refresh_button.set_sensitive(False)
-        # self.refresh_button.set_sensitive(True)
-
         self.set_titlebar(header)
 
         # Create section buttons box
@@ -243,28 +234,80 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.main_box.pack_start(self.content_box, True, True, 0)
 
-        # Show all widgets
-        self.show_all()
-
-        # Start the initial data load
-        self.check_for_updates()
-
-        # Initialize updates tracking
-        self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
-        os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
-        self.pending_updates = self.load_pending_updates()
-
     def setup_directories(self):
         """Create necessary directories for the app store"""
-        os.makedirs(APPSTORE_DIR, exist_ok=True)
-        os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
+        try:
+            # Create main directories
+            os.makedirs(APPSTORE_DIR, exist_ok=True)
+            os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
+            os.makedirs(os.path.expanduser("~/.termux_appstore"), exist_ok=True)
+            
+            # Check for distro configuration
+            self.check_distro_configuration()
+            
+            # Initialize apps.json if it doesn't exist
+            if not os.path.exists(APPSTORE_JSON):
+                print("First time setup: Initializing app store...")
+                self.start_refresh(is_manual=False)
+            
+            # Initialize updates tracking file if it doesn't exist
+            if not os.path.exists(self.updates_tracking_file):
+                with open(self.updates_tracking_file, 'w') as f:
+                    json.dump({}, f)
+                    
+        except Exception as e:
+            print(f"Error setting up directories: {e}")
+            self.show_error_dialog(f"Failed to initialize app store directories: {str(e)}")
+
+    def check_distro_configuration(self):
+        """Check and load distro configuration"""
+        try:
+            # Check for distro_add_answer file
+            answer_file = os.path.join(APPSTORE_DIR, "distro_add_answer")
+            if os.path.exists(answer_file):
+                with open(answer_file, 'r') as f:
+                    answer = f.read().strip()
+                print(f"Found distro_add_answer: {answer} -> enabled: {answer.lower() == 'y'}")
+                self.distro_enabled = answer.lower() == 'y'
+            else:
+                # Create the file with default answer 'n'
+                with open(answer_file, 'w') as f:
+                    f.write('n')
+                self.distro_enabled = False
+                print("Created distro_add_answer with default 'n'")
+
+            # Check for selected_distro file
+            distro_file = os.path.join(APPSTORE_DIR, "selected_distro")
+            if os.path.exists(distro_file):
+                with open(distro_file, 'r') as f:
+                    self.selected_distro = f.read().strip()
+            else:
+                self.selected_distro = None
+
+            print("\nConfiguration status:")
+            print(f"Distro enabled: {self.distro_enabled}")
+            print(f"Selected distro: {self.selected_distro}")
+
+        except Exception as e:
+            print(f"Error checking distro configuration: {e}")
+            self.distro_enabled = False
+            self.selected_distro = None
 
     def check_for_updates(self):
         print('Checking for updates...')
         try:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.expanduser("~/.termux_appstore"), exist_ok=True)
+            
             # Check when was the last version update
             last_version_check_file = os.path.expanduser("~/.termux_appstore/last_version_check")
             current_time = datetime.now()
+
+            # If apps.json doesn't exist, force a refresh
+            if not os.path.exists(APPSTORE_JSON):
+                print("No apps.json found, performing initial setup...")
+                self.start_refresh(is_manual=False)
+                return
 
             if os.path.exists(last_version_check_file):
                 with open(last_version_check_file, 'r') as f:

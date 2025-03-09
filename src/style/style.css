@@ -270,3 +270,67 @@ window {
     color: alpha(@theme_text_color, 0.8);
     font-size: 14px;
 }
+
+/* Terminal View */
+@define-color terminal_bg_color #000000;
+@define-color terminal_fg_color #ffffff;
+@define-color terminal_button_color #2c3e50;
+@define-color terminal_button_hover_color #34495e;
+
+textview.terminal-view {
+    font-family: monospace;
+    background-color: @terminal_bg_color;
+    color: @terminal_fg_color;
+    padding: 10px;
+    border-radius: 6px;
+}
+
+textview.terminal-view text {
+    background-color: @terminal_bg_color;
+    color: @terminal_fg_color;
+}
+
+button.terminal-toggle-button {
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: @terminal_button_color;
+    color: @terminal_fg_color;
+    border: none;
+}
+
+button.terminal-toggle-button:hover {
+    background-color: @terminal_button_hover_color;
+}
+
+/* Progress Dialog */
+window.progress-dialog {
+    background-color: @theme_bg_color;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+window.progress-dialog headerbar {
+    background-color: @theme_bg_color;
+    border-bottom: 1px solid alpha(@theme_fg_color, 0.1);
+}
+
+box.progress-view {
+    padding: 16px;
+}
+
+progressbar {
+    min-height: 10px;
+}
+
+progressbar trough {
+    background-color: alpha(@theme_fg_color, 0.1);
+}
+
+progressbar progress {
+    background-color: @theme_selected_bg_color;
+}
+
+label.status-label {
+    margin: 8px 0;
+    color: @theme_fg_color;
+}

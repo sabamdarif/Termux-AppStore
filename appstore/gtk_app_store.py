@@ -1927,6 +1927,119 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         print(f"Updates: {updates}")
         return updates
 
+    def create_update_dialog(self, title="Updating...", allow_cancel=True):
+        """Create a dialog for update progress with terminal view"""
+        # Create dialog
+        update_dialog = Gtk.Dialog(
+            title=title,
+            parent=self,
+            modal=True,
+            destroy_with_parent=True
+        )
+        
+        # Create and set custom header bar
+        header_bar = Gtk.HeaderBar()
+        header_bar.set_show_close_button(False)
+        header_bar.set_title(title)
+        
+        # Add terminal toggle button to header bar
+        terminal_button = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic", Gtk.IconSize.BUTTON)
+        terminal_button.set_tooltip_text("Toggle Terminal View")
+        header_bar.pack_end(terminal_button)
+        
+        # Set the header bar
+        update_dialog.set_titlebar(header_bar)
+        
+        # Add close button if cancellation is allowed
+        if allow_cancel:
+            cancel_button = update_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            cancel_button.get_style_context().add_class('destructive-action')
+        
+        # Create stack for switching between progress and terminal views
+        stack = Gtk.Stack()
+        stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        stack.set_transition_duration(150)
+        
+        # Progress view
+        progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        progress_box.set_margin_start(10)
+        progress_box.set_margin_end(10)
+        progress_box.set_margin_top(10)
+        progress_box.set_margin_bottom(10)
+        
+        # Status label with better text handling
+        status_label = Gtk.Label()
+        status_label.set_line_wrap(True)
+        status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        status_label.set_justify(Gtk.Justification.LEFT)
+        status_label.set_halign(Gtk.Align.START)
+        status_label.set_text("Starting update...")
+        
+        # Create a scrolled window for status label that expands
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_size_request(-1, 60)
+        scroll.add(status_label)
+        progress_box.pack_start(scroll, True, True, 0)
+        
+        # Progress bar that expands horizontally
+        progress_bar = Gtk.ProgressBar()
+        progress_bar.set_show_text(True)
+        progress_bar.set_size_request(-1, 20)
+        progress_box.pack_start(progress_bar, False, True, 0)
+        
+        # Terminal view
+        terminal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        terminal_box.set_margin_start(10)
+        terminal_box.set_margin_end(10)
+        terminal_box.set_margin_top(10)
+        terminal_box.set_margin_bottom(10)
+        
+        terminal_scroll = Gtk.ScrolledWindow()
+        terminal_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        terminal_scroll.set_size_request(400, 150)
+        terminal_scroll.set_vexpand(True)
+        terminal_scroll.set_hexpand(True)
+        
+        # Create terminal view with monospace font
+        terminal_view = Gtk.TextView()
+        terminal_view.set_editable(False)
+        terminal_view.set_cursor_visible(False)
+        terminal_view.set_monospace(True)
+        terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        
+        # Set terminal colors using CSS classes
+        terminal_view.get_style_context().add_class('terminal-view')
+        
+        # Add terminal view to scroll window
+        terminal_scroll.add(terminal_view)
+        terminal_box.pack_start(terminal_scroll, True, True, 0)
+        
+        # Add views to stack
+        stack.add_named(progress_box, "progress")
+        stack.add_named(terminal_box, "terminal")
+        stack.set_visible_child_name("progress")
+        
+        # Add stack to dialog's content area with margins
+        content_area = update_dialog.get_content_area()
+        content_area.add(stack)
+        
+        # Make the dialog resizable and set compact default size
+        update_dialog.set_resizable(True)
+        update_dialog.set_default_size(400, 200)
+        
+        def toggle_terminal(button):
+            current = stack.get_visible_child_name()
+            stack.set_visible_child_name("terminal" if current == "progress" else "progress")
+            button.set_tooltip_text("Show Progress" if current == "progress" else "Show Terminal")
+        
+        terminal_button.connect("clicked", toggle_terminal)
+        
+        # Show all widgets
+        update_dialog.show_all()
+        
+        return update_dialog, status_label, progress_bar, terminal_view
+
     def on_update_clicked(self, button, app):
         """Handle update button click"""
         try:
@@ -1941,62 +2054,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             dialog.destroy()
 
             if response == Gtk.ResponseType.YES:
-                # Create progress dialog with fixed width but expandable height
-                progress_dialog = Gtk.Dialog(
-                    title="Updating...",
-                    parent=self,
-                    modal=True
+                # Create update dialog with terminal functionality
+                update_dialog, status_label, progress_bar, terminal_view = self.create_update_dialog(
+                    title=f"Updating {app['app_name']}...",
+                    allow_cancel=True
                 )
-                progress_dialog.set_default_size(350, 150)  # Set initial size
-                progress_dialog.set_resizable(True)  # Allow resizing
-                
-                # Add minimize button to titlebar
-                header = Gtk.HeaderBar()
-                header.set_show_close_button(False)
-                minimize_button = Gtk.Button()
-                minimize_button.set_relief(Gtk.ReliefStyle.NONE)
-                minimize_icon = Gtk.Image.new_from_icon_name("window-minimize", Gtk.IconSize.MENU)
-                minimize_button.add(minimize_icon)
-                minimize_button.connect("clicked", lambda x: progress_dialog.iconify())
-                header.pack_end(minimize_button)
-                progress_dialog.set_titlebar(header)
-                
-                # Add cancel button and connect to response signal
-                cancel_button = progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-                
-                vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-                vbox.set_margin_start(10)
-                vbox.set_margin_end(10)
-                vbox.set_margin_top(10)
-                vbox.set_margin_bottom(10)
-                
-                # Status label with better text handling
-                status_label = Gtk.Label()
-                status_label.set_line_wrap(True)
-                status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-                status_label.set_justify(Gtk.Justification.LEFT)
-                status_label.set_halign(Gtk.Align.START)
-                status_label.set_text("Starting update...")
-                
-                # Create a scrolled window for status label that expands
-                scroll = Gtk.ScrolledWindow()
-                scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-                scroll.set_size_request(-1, 80)  # Minimum height
-                scroll.add(status_label)
-                vbox.pack_start(scroll, True, True, 0)  # Allow vertical expansion
-                
-                # Progress bar that expands horizontally
-                progress_bar = Gtk.ProgressBar()
-                progress_bar.set_show_text(True)
-                progress_bar.set_size_request(300, -1)
-                vbox.pack_start(progress_bar, False, True, 0)
-                
-                progress_dialog.get_content_area().add(vbox)
-                progress_dialog.show_all()
 
                 # Track current process and script path
                 current_process = {'process': None}
-                script_path = [None]  # Use list to allow modification in nested functions
+                script_path = [None]
 
                 def on_cancel_clicked(dialog, response_id):
                     if response_id == Gtk.ResponseType.CANCEL:
@@ -2006,10 +2072,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Terminate current process if it exists
                         if current_process['process']:
                             try:
-                                current_process['process'].terminate()
-                                current_process['process'].wait()
+                                os.killpg(os.getpgid(current_process['process'].pid), signal.SIGTERM)
+                                current_process['process'].wait(timeout=2)
                             except:
-                                pass  # Process might have already ended
+                                pass
                         
                         # Clean up script if it exists
                         if script_path[0] and os.path.exists(script_path[0]):
@@ -2018,16 +2084,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             except:
                                 pass
                         
+                        # Update terminal with cancellation message
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUpdate cancelled by user"))
+                        time.sleep(1)
                         dialog.destroy()
 
                 # Connect the response signal
-                progress_dialog.connect('response', on_cancel_clicked)
+                update_dialog.connect('response', on_cancel_clicked)
 
                 def update_progress(fraction, status_text):
                     if not status_text:
                         return False
                     
-                    # Parse aria2c download progress format
+                    # Update both progress view and terminal view
                     if '[#' in status_text and ']' in status_text:
                         # Extract progress details from aria2c output
                         progress_part = status_text[status_text.find('['):status_text.find(']')+1]
@@ -2038,19 +2107,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     elif isinstance(status_text, str) and status_text.strip():
                         status_label.set_text(status_text)
                     
+                    # Update terminal view
+                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_text))
+                    
                     progress_bar.set_fraction(fraction)
                     progress_bar.set_text(f"{int(fraction * 100)}%")
                     return False
 
-                def install_thread():
+                def update_thread():
                     try:
                         # Download script (20%)
-                        GLib.idle_add(update_progress, 0.2, "Downloading install script...")
+                        GLib.idle_add(update_progress, 0.2, "Downloading update script...")
                         script_path[0] = self.download_script(app['install_url'])
                         if not script_path[0] or self.installation_cancelled:
                             if script_path[0] and os.path.exists(script_path[0]):
                                 os.remove(script_path[0])
-                            GLib.idle_add(progress_dialog.destroy)
+                            GLib.idle_add(update_dialog.destroy)
                             return
 
                         # Make script executable (30%)
@@ -2064,20 +2136,31 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT,
                             universal_newlines=True,
-                            bufsize=1
+                            bufsize=1,
+                            preexec_fn=os.setsid
                         )
                         
                         # Store process reference for cancellation
                         current_process['process'] = process
 
-                        for line in process.stdout:
+                        while True:
                             if self.installation_cancelled:
-                                process.terminate()
-                                process.wait()
-                                GLib.idle_add(progress_dialog.destroy)
+                                try:
+                                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                                    process.wait(timeout=2)
+                                except:
+                                    pass
+                                GLib.idle_add(update_dialog.destroy)
                                 return
 
+                            line = process.stdout.readline()
+                            if not line and process.poll() is not None:
+                                break
+
                             line = line.strip()
+                            if not line:
+                                continue
+
                             progress = 0.4
 
                             # Update progress based on specific actions
@@ -2097,12 +2180,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if process.returncode == 0 and not self.installation_cancelled:
                             GLib.idle_add(update_progress, 0.95, "Finalizing update...")
                             
-                            # Check if the app's version is 'distro_local_version'
-                            if app.get('version') == 'distro_local_version':
-                                # Logic to handle the update for distro apps
-                                print(f"Updating version for {app['app_name']} to the latest available version.")
-                                # Add your logic here to fetch and set the new version
-
                             # Remove from pending updates
                             if app['folder_name'] in self.pending_updates:
                                 del self.pending_updates[app['folder_name']]
@@ -2112,7 +2189,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             time.sleep(0.5)
                             GLib.idle_add(update_progress, 1.0, "Update complete!")
                             time.sleep(1)
-                            GLib.idle_add(progress_dialog.destroy)
+                            GLib.idle_add(update_dialog.destroy)
                             
                             # Refresh both the main app list and updates list
                             def refresh_ui():
@@ -2125,15 +2202,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         else:
                             GLib.idle_add(update_progress, 1.0, "Update failed!")
                             time.sleep(2)
-                            GLib.idle_add(progress_dialog.destroy)
+                            GLib.idle_add(update_dialog.destroy)
 
                     except Exception as e:
                         print(f"Update error: {str(e)}")
                         GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
                         time.sleep(2)
-                        GLib.idle_add(progress_dialog.destroy)
+                        GLib.idle_add(update_dialog.destroy)
                     
                     finally:
+                        if current_process['process']:
+                            try:
+                                os.killpg(os.getpgid(current_process['process'].pid), signal.SIGTERM)
+                            except:
+                                pass
                         current_process['process'] = None
                         if script_path[0] and os.path.exists(script_path[0]):
                             try:
@@ -2142,7 +2224,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             except Exception as e:
                                 print(f"Error cleaning up script: {e}")
 
-                thread = threading.Thread(target=install_thread)
+                thread = threading.Thread(target=update_thread)
                 thread.daemon = True
                 thread.start()
 

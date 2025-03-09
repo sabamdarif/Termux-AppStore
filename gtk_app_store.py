@@ -1475,42 +1475,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         dialog.destroy()
 
         if response == Gtk.ResponseType.YES:
-            progress_dialog = Gtk.Dialog(
+            # Create progress dialog with terminal functionality
+            progress_dialog, status_label, progress_bar, terminal_view = self.create_progress_dialog(
                 title="Uninstalling...",
-                parent=self,
-                flags=0
+                allow_cancel=True
             )
-            progress_dialog.set_default_size(400, -1)
-            progress_dialog.set_resizable(False)
-            progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            
-            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-            vbox.set_margin_start(20)
-            vbox.set_margin_end(20)
-            vbox.set_margin_top(20)
-            vbox.set_margin_bottom(20)
-            
-            status_label = Gtk.Label()
-            status_label.set_line_wrap(True)
-            status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-            status_label.set_max_width_chars(50)
-            status_label.set_width_chars(50)
-            status_label.set_justify(Gtk.Justification.LEFT)
-            status_label.set_halign(Gtk.Align.START)
-            status_label.set_text("Starting uninstallation...")
-            vbox.pack_start(status_label, True, True, 0)
-            
-            progress_bar = Gtk.ProgressBar()
-            progress_bar.set_show_text(True)
-            progress_bar.set_size_request(360, -1)
-            vbox.pack_start(progress_bar, True, True, 0)
-            
-            progress_dialog.get_content_area().add(vbox)
-            progress_dialog.show_all()
 
             def update_progress(fraction, status_text):
                 if status_text and not status_text.strip('-'):
                     status_label.set_text(status_text)
+                    self.update_terminal(terminal_view, status_text + "\n")
                 progress_bar.set_fraction(fraction)
                 progress_bar.set_text(f"{int(fraction * 100)}%")
                 return False
@@ -1518,62 +1492,95 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             def uninstall_thread():
                 script_path = None
                 try:
-                    # Download script
-                    GLib.idle_add(update_progress, 0.2, "Downloading uninstall script...")
-                    script_path = self.download_script(app['uninstall_url'])
-                    if not script_path or self.uninstallation_cancelled:
-                        if script_path and os.path.exists(script_path):
-                            os.remove(script_path)
+                    # Check if uninstall script URL is available
+                    uninstall_url = app.get('uninstall_url') or app.get('uninstall_script')
+                    if not uninstall_url:
+                        error_msg = "No uninstall script available for this app!"
+                        GLib.idle_add(update_progress, 1.0, error_msg)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                        time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
                         return
 
-                    os.chmod(script_path, os.stat(script_path).st_mode | stat.S_IEXEC)
+                    # Download uninstall script
+                    GLib.idle_add(update_progress, 0.1, "Downloading uninstall script...")
+                    GLib.idle_add(lambda: self.update_terminal(terminal_view, "Downloading uninstall script...\n"))
+                    script_path = self.download_script(uninstall_url)
+                    
+                    if not script_path:
+                        error_msg = "Failed to download uninstall script!"
+                        GLib.idle_add(update_progress, 1.0, error_msg)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                        time.sleep(2)
+                        GLib.idle_add(progress_dialog.destroy)
+                        return
+
+                    # Execute uninstall script
+                    os.chmod(script_path, 0o755)
+                    status_msg = "Starting uninstallation..."
+                    GLib.idle_add(update_progress, 0.2, status_msg)
+                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
 
                     process = subprocess.Popen(
-                        script_path,
+                        [script_path],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         universal_newlines=True,
-                        bufsize=1
+                        bufsize=1,
+                        preexec_fn=os.setsid
                     )
 
                     for line in process.stdout:
                         if self.uninstallation_cancelled:
-                            process.terminate()
-                            process.wait()
+                            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                            msg = "Uninstallation cancelled!"
+                            GLib.idle_add(update_progress, 1.0, msg)
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                            time.sleep(1)
                             GLib.idle_add(progress_dialog.destroy)
                             return
                         
                         GLib.idle_add(update_progress, 0.5, line.strip())
+                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
 
                     process.wait()
                     if process.returncode == 0 and not self.uninstallation_cancelled:
-                        GLib.idle_add(update_progress, 0.95, "Finalizing uninstallation...")
+                        msg = "Finalizing uninstallation..."
+                        GLib.idle_add(update_progress, 0.95, msg)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
                         self.installed_apps.remove(app['folder_name'])
                         self.save_installed_apps()
                         GLib.idle_add(self.show_apps)
-                        GLib.idle_add(update_progress, 1.0, "Uninstallation complete!")
+                        msg = "Uninstallation complete!"
+                        GLib.idle_add(update_progress, 1.0, msg)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
                         time.sleep(1)
-                        GLib.idle_add(progress_dialog.destroy)
                     else:
-                        GLib.idle_add(update_progress, 1.0, "Uninstallation failed!")
+                        msg = "Uninstallation failed!"
+                        GLib.idle_add(update_progress, 1.0, msg)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
                         time.sleep(2)
-                        GLib.idle_add(progress_dialog.destroy)
+                    GLib.idle_add(progress_dialog.destroy)
 
                 except Exception as e:
-                    print(f"Uninstallation error: {str(e)}")
+                    error_msg = f"Uninstallation error: {str(e)}"
+                    print(error_msg)
                     GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
+                    GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
                     time.sleep(2)
                     GLib.idle_add(progress_dialog.destroy)
                 
                 finally:
-                    # Clean up downloaded script
                     if script_path and os.path.exists(script_path):
                         try:
                             os.remove(script_path)
-                            print(f"Cleaned up script: {script_path}")
+                            msg = f"Cleaned up script: {script_path}"
+                            print(msg)
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
                         except Exception as e:
-                            print(f"Error cleaning up script: {e}")
+                            error_msg = f"Error cleaning up script: {e}"
+                            print(error_msg)
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
 
             thread = threading.Thread(target=uninstall_thread)
             thread.daemon = True
@@ -2636,55 +2643,65 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         GLib.idle_add(self.refresh_complete)
         GLib.idle_add(self.show_apps)
 
+    def update_terminal(self, terminal_view, text):
+        """Update the terminal view with new text"""
+        if not text:
+            return
+            
+        buffer = terminal_view.get_buffer()
+        end_iter = buffer.get_end_iter()
+        
+        # Add newline if buffer is not empty
+        if buffer.get_char_count() > 0:
+            buffer.insert(end_iter, "\n")
+            
+        # Insert the new text
+        buffer.insert(end_iter, text)
+        
+        # Scroll to the end
+        mark = buffer.create_mark(None, buffer.get_end_iter(), False)
+        terminal_view.scroll_mark_onscreen(mark)
+        buffer.delete_mark(mark)
+        return False
+
     def create_progress_dialog(self, title="Installing...", allow_cancel=True):
-        """Create a progress dialog with terminal toggle"""
+        # Create dialog
         progress_dialog = Gtk.Dialog(
             title=title,
             parent=self,
-            modal=True
+            modal=True,
+            destroy_with_parent=True
         )
-        progress_dialog.set_default_size(400, 200)
-        progress_dialog.set_resizable(True)
         
-        # Add minimize button to titlebar
-        header = Gtk.HeaderBar()
-        header.set_show_close_button(False)
+        # Create and set custom header bar
+        header_bar = Gtk.HeaderBar()
+        header_bar.set_show_close_button(False)
+        header_bar.set_title(title)
         
-        # Add terminal toggle button
-        terminal_button = Gtk.Button()
-        terminal_button.set_relief(Gtk.ReliefStyle.NONE)
-        terminal_icon = Gtk.Image.new_from_icon_name("utilities-terminal", Gtk.IconSize.MENU)
-        terminal_button.add(terminal_icon)
+        # Add terminal toggle button to header bar
+        terminal_button = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic", Gtk.IconSize.BUTTON)
         terminal_button.set_tooltip_text("Toggle Terminal View")
-        header.pack_end(terminal_button)
+        header_bar.pack_end(terminal_button)
         
-        # Add minimize button
-        minimize_button = Gtk.Button()
-        minimize_button.set_relief(Gtk.ReliefStyle.NONE)
-        minimize_icon = Gtk.Image.new_from_icon_name("window-minimize", Gtk.IconSize.MENU)
-        minimize_button.add(minimize_icon)
-        minimize_button.connect("clicked", lambda x: progress_dialog.iconify())
-        header.pack_end(minimize_button)
+        # Set the header bar
+        progress_dialog.set_titlebar(header_bar)
         
-        progress_dialog.set_titlebar(header)
-        
-        # Add cancel button if allowed
+        # Add close button if cancellation is allowed
         if allow_cancel:
             cancel_button = progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            cancel_button.get_style_context().add_class('destructive-action')
         
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        vbox.set_margin_start(10)
-        vbox.set_margin_end(10)
-        vbox.set_margin_top(10)
-        vbox.set_margin_bottom(10)
-        
-        # Create stack to switch between progress and terminal views
+        # Create stack for switching between progress and terminal views
         stack = Gtk.Stack()
         stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         stack.set_transition_duration(150)
         
         # Progress view
         progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        progress_box.set_margin_start(10)
+        progress_box.set_margin_end(10)
+        progress_box.set_margin_top(10)
+        progress_box.set_margin_bottom(10)
         
         # Status label with better text handling
         status_label = Gtk.Label()
@@ -2697,93 +2714,74 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Create a scrolled window for status label that expands
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_size_request(-1, 80)
+        scroll.set_size_request(-1, 60)  # Reduced from 80
         scroll.add(status_label)
         progress_box.pack_start(scroll, True, True, 0)
         
         # Progress bar that expands horizontally
         progress_bar = Gtk.ProgressBar()
         progress_bar.set_show_text(True)
-        progress_bar.set_size_request(350, -1)
+        progress_bar.set_size_request(-1, 20)
         progress_box.pack_start(progress_bar, False, True, 0)
         
         # Terminal view
         terminal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        terminal_box.set_margin_start(10)
+        terminal_box.set_margin_end(10)
+        terminal_box.set_margin_top(10)
+        terminal_box.set_margin_bottom(10)
+        
         terminal_scroll = Gtk.ScrolledWindow()
         terminal_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        terminal_scroll.set_size_request(400, 150)  # Reduced from 200
+        terminal_scroll.set_vexpand(True)
+        terminal_scroll.set_hexpand(True)
         
-        # Create terminal view with CSS styling
+        # Create terminal view with monospace font
         terminal_view = Gtk.TextView()
         terminal_view.set_editable(False)
         terminal_view.set_cursor_visible(False)
         terminal_view.set_monospace(True)
+        terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         
-        # Apply CSS classes
+        # Set terminal colors using CSS classes
         terminal_view.get_style_context().add_class('terminal-view')
-        terminal_button.get_style_context().add_class('terminal-toggle-button')
-        progress_dialog.get_style_context().add_class('progress-dialog')
-        progress_box.get_style_context().add_class('progress-view')
-        status_label.get_style_context().add_class('status-label')
         
         # Add terminal view to scroll window
         terminal_scroll.add(terminal_view)
         terminal_box.pack_start(terminal_scroll, True, True, 0)
         
-        # Add both views to stack
+        # Add views to stack
         stack.add_named(progress_box, "progress")
         stack.add_named(terminal_box, "terminal")
-        
-        # Show progress view by default
         stack.set_visible_child_name("progress")
         
-        # Add stack to dialog
-        vbox.pack_start(stack, True, True, 0)
-        progress_dialog.get_content_area().add(vbox)
+        # Add stack to dialog's content area with margins
+        content_area = progress_dialog.get_content_area()
+        content_area.add(stack)
         
-        # Connect terminal toggle button
+        # Make the dialog resizable and set compact default size
+        progress_dialog.set_resizable(True)
+        progress_dialog.set_default_size(400, 200)  # Reduced from 500x300
+        
         def toggle_terminal(button):
             current = stack.get_visible_child_name()
             stack.set_visible_child_name("terminal" if current == "progress" else "progress")
-            # Ensure text view is properly updated when switching to terminal view
-            if stack.get_visible_child_name() == "terminal":
-                terminal_view.queue_draw()
-                # Scroll to end
-                buffer = terminal_view.get_buffer()
-                terminal_view.scroll_to_iter(buffer.get_end_iter(), 0.0, False, 0.0, 0.0)
+            button.set_tooltip_text("Show Progress" if current == "progress" else "Show Terminal")
         
         terminal_button.connect("clicked", toggle_terminal)
         
         # Show all widgets
         progress_dialog.show_all()
         
+        def on_dialog_response(dialog, response_id):
+            if response_id == Gtk.ResponseType.CANCEL:
+                dialog.destroy()
+                self.cleanup_installation_state()
+        
+        progress_dialog.connect("response", on_dialog_response)
+        
         return progress_dialog, status_label, progress_bar, terminal_view
-
-    def update_terminal(self, terminal_view, text):
-        """Update terminal view with new text"""
-        if not text:
-            return
-            
-        buffer = terminal_view.get_buffer()
-        
-        # Get end iterator
-        end_iter = buffer.get_end_iter()
-        
-        # Insert text with newline
-        buffer.insert(end_iter, text + "\n")
-        
-        # Use idle_add to ensure proper UI update
-        def scroll_to_end():
-            # Get new end iterator after text insertion
-            new_end_iter = buffer.get_end_iter()
-            # Create mark at the end
-            mark = buffer.create_mark(None, new_end_iter, False)
-            # Scroll to mark
-            terminal_view.scroll_to_mark(mark, 0.0, False, 0.0, 1.0)
-            # Delete the temporary mark
-            buffer.delete_mark(mark)
-            return False
-            
-        GLib.idle_add(scroll_to_end)
 
 def main():
     app = AppStoreApplication()

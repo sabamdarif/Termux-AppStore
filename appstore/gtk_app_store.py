@@ -87,8 +87,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.current_task = None
         self.stop_background_tasks = False
         
-        # Initialize installation state
+        # Initialize thread pool
+        self.thread_pool = ThreadPoolExecutor(max_workers=4)
+        
+        # Initialize all state flags
         self.installation_cancelled = False
+        self.uninstallation_cancelled = False
         self.current_installation = None
         
         # Initialize distro state
@@ -109,10 +113,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.set_default_size(1000, 600)
         self.set_position(Gtk.WindowPosition.CENTER)
         
-        # Initialize installation flags
-        self.installation_cancelled = False
-        self.uninstallation_cancelled = False
-
         # Get system architecture
         self.system_arch = platform.machine().lower()
         print(f"System architecture: {self.system_arch}")
@@ -144,95 +144,107 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.categories = []
         self.apps_data = []
 
-        # Create main UI layout first
-        self.create_ui()
+        try:
+            # Create main UI layout first
+            self.create_ui()
 
-        # Start task processor after UI creation
-        self.start_task_processor()
+            # Start task processor after UI creation
+            self.start_task_processor()
 
-        # Connect the delete-event to handle window closing
-        self.connect("delete-event", self.on_delete_event)
+            # Connect the delete-event to handle window closing
+            self.connect("delete-event", self.on_delete_event)
 
-        # Show all widgets
-        self.show_all()
+            # Show all widgets
+            self.show_all()
 
-        # Initialize paths and create directories (after UI is ready)
-        self.setup_directories()
+            # Initialize paths and create directories (after UI is ready)
+            self.setup_directories()
 
-        # Start the initial data load
-        self.check_for_updates()
+            # Start the initial data load
+            self.check_for_updates()
+        except Exception as e:
+            print(f"Error during initialization: {e}")
+            self.show_error_dialog(f"Failed to initialize app store: {str(e)}")
+            raise
 
     def create_ui(self):
         """Create the main UI layout"""
-        # Load CSS
-        css_provider = Gtk.CssProvider()
-        css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
-        css_provider.load_from_path(str(css_file))
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
+        try:
+            # Load CSS
+            css_provider = Gtk.CssProvider()
+            css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
+            if not css_file.exists():
+                print(f"Warning: CSS file not found at {css_file}")
+            else:
+                css_provider.load_from_path(str(css_file))
+                Gtk.StyleContext.add_provider_for_screen(
+                    Gdk.Screen.get_default(),
+                    css_provider,
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                )
 
-        # Create main container with overlay
-        self.overlay = Gtk.Overlay()
-        self.add(self.overlay)
+            # Create main container with overlay
+            self.overlay = Gtk.Overlay()
+            self.add(self.overlay)
 
-        # Create main content box
-        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.overlay.add(self.main_box)
+            # Create main content box
+            self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.overlay.add(self.main_box)
 
-        # Create spinner for initial load
-        self.spinner = Gtk.Spinner()
-        self.spinner.set_size_request(64, 64)
+            # Create spinner for initial load
+            self.spinner = Gtk.Spinner()
+            self.spinner.set_size_request(64, 64)
 
-        # Create a label for the loading message
-        self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
-        self.loading_label.set_halign(Gtk.Align.CENTER)
-        self.loading_label.hide()
+            # Create a label for the loading message
+            self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
+            self.loading_label.set_halign(Gtk.Align.CENTER)
+            self.loading_label.hide()
 
-        spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        spinner_box.pack_start(self.spinner, True, True, 0)
-        spinner_box.pack_start(self.loading_label, True, True, 0)
-        spinner_box.set_valign(Gtk.Align.CENTER)
-        spinner_box.set_halign(Gtk.Align.CENTER)
-        self.overlay.add_overlay(spinner_box)
+            spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            spinner_box.pack_start(self.spinner, True, True, 0)
+            spinner_box.pack_start(self.loading_label, True, True, 0)
+            spinner_box.set_valign(Gtk.Align.CENTER)
+            spinner_box.set_halign(Gtk.Align.CENTER)
+            self.overlay.add_overlay(spinner_box)
 
-        # Create header bar
-        header = Gtk.HeaderBar()
-        header.set_show_close_button(True)
-        header.props.title = "Termux AppStore"
-        self.set_titlebar(header)
+            # Create header bar
+            header = Gtk.HeaderBar()
+            header.set_show_close_button(True)
+            header.props.title = "Termux AppStore"
+            self.set_titlebar(header)
 
-        # Create section buttons box
-        section_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        section_box.get_style_context().add_class('linked')  # This makes buttons appear connected
-        
-        # Explore button
-        self.explore_button = Gtk.Button(label="Explore")
-        self.explore_button.connect("clicked", self.on_section_clicked, "explore")
-        self.explore_button.get_style_context().add_class('section-button')
-        self.explore_button.get_style_context().add_class('selected')
-        section_box.pack_start(self.explore_button, False, False, 0)
-        
-        # Installed button
-        self.installed_button = Gtk.Button(label="Installed")
-        self.installed_button.connect("clicked", self.on_section_clicked, "installed")
-        self.installed_button.get_style_context().add_class('section-button')
-        section_box.pack_start(self.installed_button, False, False, 0)
-        
-        # Updates button
-        self.updates_button = Gtk.Button(label="Updates")
-        self.updates_button.connect("clicked", self.on_section_clicked, "updates")
-        self.updates_button.get_style_context().add_class('section-button')
-        section_box.pack_start(self.updates_button, False, False, 0)
-        
-        # Add section buttons to center of header
-        header.set_custom_title(section_box)
+            # Create section buttons box
+            section_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            section_box.get_style_context().add_class('linked')  # This makes buttons appear connected
+            
+            # Explore button
+            self.explore_button = Gtk.Button(label="Explore")
+            self.explore_button.connect("clicked", self.on_section_clicked, "explore")
+            self.explore_button.get_style_context().add_class('section-button')
+            self.explore_button.get_style_context().add_class('selected')
+            section_box.pack_start(self.explore_button, False, False, 0)
+            
+            # Installed button
+            self.installed_button = Gtk.Button(label="Installed")
+            self.installed_button.connect("clicked", self.on_section_clicked, "installed")
+            self.installed_button.get_style_context().add_class('section-button')
+            section_box.pack_start(self.installed_button, False, False, 0)
+            
+            # Updates button
+            self.updates_button = Gtk.Button(label="Updates")
+            self.updates_button.connect("clicked", self.on_section_clicked, "updates")
+            self.updates_button.get_style_context().add_class('section-button')
+            section_box.pack_start(self.updates_button, False, False, 0)
+            
+            # Add section buttons to center of header
+            header.set_custom_title(section_box)
 
-        # Create content box for app list
-        self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.main_box.pack_start(self.content_box, True, True, 0)
+            # Create content box for app list
+            self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            self.main_box.pack_start(self.content_box, True, True, 0)
+        except Exception as e:
+            print(f"Error creating UI: {e}")
+            raise
 
     def setup_directories(self):
         """Create necessary directories for the app store"""
@@ -262,31 +274,27 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def check_distro_configuration(self):
         """Check and load distro configuration"""
         try:
+            # Check for selected_distro file first
+            distro_file = os.path.join(APPSTORE_DIR, "selected_distro")
+            if os.path.exists(distro_file):
+                with open(distro_file, 'r') as f:
+                    self.selected_distro = f.read().strip()
+                    if self.selected_distro:
+                        print(f"Found selected_distro: {self.selected_distro}")
+
             # Check for distro_add_answer file
             answer_file = os.path.join(APPSTORE_DIR, "distro_add_answer")
             if os.path.exists(answer_file):
                 with open(answer_file, 'r') as f:
                     answer = f.read().strip()
-                print(f"Found distro_add_answer: {answer} -> enabled: {answer.lower() == 'y'}")
-                self.distro_enabled = answer.lower() == 'y'
+                    self.distro_enabled = answer.lower() == 'y'
+                    if self.distro_enabled:
+                        print(f"Found distro_add_answer: {answer} -> enabled: True")
             else:
-                # Create the file with default answer 'n'
+                # Silently create default file if it doesn't exist
                 with open(answer_file, 'w') as f:
                     f.write('n')
                 self.distro_enabled = False
-                print("Created distro_add_answer with default 'n'")
-
-            # Check for selected_distro file
-            distro_file = os.path.join(APPSTORE_DIR, "selected_distro")
-            if os.path.exists(distro_file):
-                with open(distro_file, 'r') as f:
-                    self.selected_distro = f.read().strip()
-            else:
-                self.selected_distro = None
-
-            print("\nConfiguration status:")
-            print(f"Distro enabled: {self.distro_enabled}")
-            print(f"Selected distro: {self.selected_distro}")
 
         except Exception as e:
             print(f"Error checking distro configuration: {e}")
@@ -1807,9 +1815,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.show_update_apps()
 
     def on_delete_event(self, widget, event):
-        """Handle window closing"""
-        self.stop_background_tasks = True
-        sys.exit(0)
+        """Handle window close event"""
+        try:
+            # Stop background tasks
+            self.stop_background_tasks = True
+            
+            # Shutdown thread pool
+            if hasattr(self, 'thread_pool'):
+                self.thread_pool.shutdown(wait=False)
+            
+            # Save any pending state
+            self.save_installed_apps()
+            self.save_pending_updates()
+            
+            # Quit the application
+            self.get_application().quit()
+            
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+            
         return False
 
     def refresh_error(self, error_message):

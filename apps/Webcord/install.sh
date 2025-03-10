@@ -16,7 +16,7 @@ aarch64) archtype="arm64" ;;
 armv7*|arm) archtype="armv7l" ;;
 esac
 
-appimage_filename="WebCord-${version#v}-${app_arch}.AppImage"
+appimage_filename="WebCord-${version#v}-${archtype}.AppImage"
 
 check_and_delete "${TMPDIR}/${appimage_filename} ${PREFIX}/share/applications/pd_added/webcord.desktop"
 

@@ -33,6 +33,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/icon-64.png"
   },
   {
+    "app_name": "Brave browser",
+    "folder_name": "Brave-browser",
+    "description": "Brave is a free and open-source web browser developed by Brave Software, Inc. based on the Chromium web browser.",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/opt/brave-browser/brave-browser --no-sandbox",
+    "supported_arch": "aarch64",
+    "version": "v1.76.73",
+    "supported_distro": "all",
+    "package_name": "brave-browser",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Brave-browser/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Brave-browser/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Brave-browser/logo.png"
+  },
+  {
     "app_name": "Chromium",
     "folder_name": "Chromium",
     "description": "Open-source version of Google Chrome.",
@@ -129,6 +146,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Firefox/logo.png"
   },
   {
+    "app_name": "Flameshot",
+    "folder_name": "Flameshot",
+    "description": "Powerful yet simple to use screenshot software",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "flameshot",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "flameshot",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Flameshot/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Flameshot/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Flameshot/logo.png"
+  },
+  {
     "app_name": "Freetube",
     "folder_name": "Freetube",
     "description": "An Open Source YouTube app for privacy",
@@ -193,6 +226,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git/logo.png"
+  },
+  {
+    "app_name": "Git gui",
+    "folder_name": "Git-gui",
+    "description": "A graphical interface to Git",
+    "categories": [
+      "Development"
+    ],
+    "app_type": "native",
+    "run_cmd": "/data/data/com.termux/files/usr/libexec/git-core/git-gui",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "git-gui",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git-gui/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git-gui/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Git-gui/logo.png"
   },
   {
     "app_name": "Github Desktop",
@@ -452,6 +501,23 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotify-qt/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotify-qt/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotify-qt/logo.png"
+  },
+  {
+    "app_name": "Tageditor",
+    "folder_name": "Tageditor",
+    "description": "A tag editor with Qt GUI and command-line interface. Supports MP4 (iTunes), ID3, Vorbis, Opus, FLAC and Matroska",
+    "categories": [
+      "Accessories",
+      "Productivity"
+    ],
+    "app_type": "native",
+    "run_cmd": "tageditor",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "tageditor",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Tageditor/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Tageditor/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Tageditor/logo.png"
   },
   {
     "app_name": "Telegram",

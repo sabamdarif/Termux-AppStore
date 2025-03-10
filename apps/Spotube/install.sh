@@ -4,7 +4,6 @@ supported_arch="aarch64"
 package_name="spotube"
 run_cmd="/opt/spotube/spotube --no-sandbox"
 version="v3.9.0"
-pause_update=true
 app_type="distro"
 page_url="https://github.com/KRTirtho/spotube"
 working_dir="${distro_path}/opt"

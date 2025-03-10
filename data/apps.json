@@ -512,7 +512,7 @@
     "app_type": "distro",
     "run_cmd": "/opt/spotube/spotube --no-sandbox",
     "supported_arch": "aarch64",
-    "version": "v3.9.0",
+    "version": "v4.0.0",
     "supported_distro": "all",
     "package_name": "spotube",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotube/install.sh",

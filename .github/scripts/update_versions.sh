@@ -30,8 +30,8 @@ update_version() {
     echo "File content before update:"
     cat "$file"
     
-    # Use sed to replace the version
-    sed -i "s/version=${old_version}/version=${new_version}/" "$file"
+    # Use sed to replace the version while keeping quotes intact
+    sed -i "s/version=\"$old_version\"/version=\"$new_version\"/" "$file"
     
     # Debug: Show file content after update
     echo "File content after update:"
@@ -64,18 +64,18 @@ for app_folder in apps/*; do
     [[ -z "$LATEST_VERSION" ]] && continue
     echo "Latest version for $app_name: $LATEST_VERSION"
     
-    # Get current version (without quotes)
-    CURRENT_VERSION=$(grep '^version=' "$install_file" | head -n1 | sed 's/version=//')
+    # Get current version (keeping quotes)
+    CURRENT_VERSION=$(grep '^version=' "$install_file" | head -n1 | cut -d '"' -f2)
     echo "Current version: $CURRENT_VERSION"
     
     if [[ "$CURRENT_VERSION" != "$LATEST_VERSION" ]]; then
         echo "Updating $app_name from $CURRENT_VERSION to $LATEST_VERSION"
         
-        # Update version
+        # Update version (keeping quotes intact)
         update_version "$install_file" "$CURRENT_VERSION" "$LATEST_VERSION"
         
         # Verify update
-        NEW_VERSION=$(grep 'version=' "$install_file" | sed 's/version=//')
+        NEW_VERSION=$(grep '^version=' "$install_file" | head -n1 | cut -d '"' -f2)
         if [[ "$NEW_VERSION" == "$LATEST_VERSION" ]]; then
             echo "Successfully updated version for $app_name"
             CHANGES_MADE=true

@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 supported_arch="aarch64,arm"
-version=release-3.4.13-linux1
+version="release-3.4.13-linux1"
 final_version="${version#release-}"
 app_type="distro"
 supported_distro="all"

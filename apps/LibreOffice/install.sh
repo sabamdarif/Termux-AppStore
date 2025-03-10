@@ -18,7 +18,7 @@ fi
 case "$selected_distro" in
     "debian"|"ubuntu")
         $selected_distro update
-        $selected_distro install libreoffice -y
+        $selected_distro install libreoffice libreoffice-gtk3 -y
         ;;
     "fedora")
         $selected_distro install libreoffice -y

@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -27,17 +28,26 @@ jobs:
         id: check_changes
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then
-            echo "changes=true" >> $GITHUB_OUTPUT
+            echo "changes=true" >> $GITHUB_ENV
           fi
 
-      - name: Commit and push if changed
-        if: steps.check_changes.outputs.changes == 'true'
+      - name: Generate changelog
+        if: env.changes == 'true'
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "GitHub Action"
-          
-          git add -A
-          git commit -m "Update app versions with latest releases from GitHub"
-          
-          # Push changes
-          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          echo "## 🆕 Updated App Versions" > changelog.md
+          echo "" >> changelog.md
+          git diff --unified=0 | grep '^+' | grep 'version=' | sed 's/^+//' >> changelog.md
+          echo "" >> changelog.md
+          echo "📌 This PR updates the app versions with the latest releases from GitHub." >> changelog.md
+
+      - name: Create Pull Request
+        if: env.changes == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: update-app-versions
+          delete-branch: true
+          title: "🔄 Update App Versions"
+          body-file: changelog.md
+          labels: "dependencies, automated"
+          commit-message: "Update app versions with latest releases from GitHub"

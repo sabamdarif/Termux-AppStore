@@ -48,6 +48,12 @@ for app_folder in apps/*; do
     [[ ! -d "$app_folder" || ! -f "$install_file" ]] && continue
     grep -q "version=.*local_version" "$install_file" && continue
     
+    # Check if updates are paused for this app
+    if grep -q "pause_update=true" "$install_file"; then
+        echo "Skipping update check for $app_name (pause_update=true set)"
+        continue
+    fi
+
     # Get page URL
     page_url=$(grep 'page_url=' "$install_file" | cut -d '"' -f2)
     [[ -z "$page_url" || ! "$page_url" =~ github.com ]] && continue

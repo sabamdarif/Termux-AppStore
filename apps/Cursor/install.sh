@@ -3,7 +3,7 @@
 supported_arch="aarch64,arm"
 package_name="cursor"
 run_cmd="/opt/cursor/cursor --no-sandbox"
-version=v0.44.0
+version="v0.44.0"
 app_type="distro"
 page_url="https://github.com/coder/cursor-arm"
 working_dir="${distro_path}/opt"

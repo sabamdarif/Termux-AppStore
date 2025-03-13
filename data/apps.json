@@ -628,7 +628,7 @@
       "Multimedia"
     ],
     "app_type": "distro",
-    "run_cmd": "/opt/AppImageLauncher/webcord/webcord --no-sandbox",
+    "run_cmd": "/opt/AppImageLauncher/webcord/usr/bin/webcord --no-sandbox",
     "supported_arch": "aarch64,arm",
     "version": "v4.10.4",
     "supported_distro": "all",

@@ -514,73 +514,33 @@ proot-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh
 }
 
 function pd_package_install_and_check() {
-distro_run "
-    packs_list=($@)
-
-    # Get distro id
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-    fi
-
-    # Install package
-    for package_name in "\${packs_list[@]}"; do
-        echo "Installing package: \$package_name"
-        if [[ "\$ID" == "debian" ]] || [[ "\$ID" == "ubuntu" ]]; then
-            apt install "\$package_name" -y
-        elif [[ "\$ID" == arch* ]]; then
-            pacman -Sy --noconfirm "\$package_name"
-        elif [[ "\$ID" == "fedora" ]]; then
-            dnf install "\$package_name" -y
+    distro_run "
+        packs_list=(\"$@\")
+        
+        # Get distro ID
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
         fi
 
-        # Handle error in installation
-        if [ \$? -ne 0 ]; then
-            echo "Error detected during installation of: \$package_name"
-            if [[ "\$ID" == "debian" ]] || [[ "\$ID" == "ubuntu" ]]; then
-                apt --fix-broken install -y
-                dpkg --configure -a
-                apt install "\$package_name" -y
-            elif [[ "\$ID" == arch* ]]; then
-                pacman -Syu --noconfirm
-                pacman -Sy --noconfirm "\$package_name"
-            elif [[ "\$ID" == "fedora" ]]; then
-                dnf --refresh install -y
-                rpm --rebuilddb
-                dnf install "\$package_name" -y
+        # Install packages
+        for package_name in \"\${packs_list[@]}\"; do
+            echo \"Installing package: \$package_name\"
+            if [[ \"\$ID\" == \"debian\" ]] || [[ \"\$ID\" == \"ubuntu\" ]]; then
+                apt install \"\$package_name\" -y
+            elif [[ \"\$ID\" == arch* ]]; then
+                pacman -Sy --noconfirm \"\$package_name\"
+            elif [[ \"\$ID\" == \"fedora\" ]]; then
+                dnf install \"\$package_name\" -y
             fi
-        fi
 
-        # Reinstall if necessary
-        if [[ "\$ID" == "debian" ]] || [[ "\$ID" == "ubuntu" ]]; then
-            if ! dpkg -s "\$package_name" >/dev/null 2>&1; then
-                apt install "\$package_name" -y
+            # Check if installed
+            if command -v \"\$package_name\" >/dev/null 2>&1; then
+                echo \"\$package_name installed successfully\"
+            else
+                echo \"Error installing \$package_name\"
             fi
-        elif [[ "\$ID" == arch* ]]; then
-            if ! pacman -Qi "\$package_name" >/dev/null 2>&1; then
-                pacman -Sy --noconfirm "\$package_name"
-            fi
-        elif [[ "\$ID" == "fedora" ]]; then
-            if ! rpm -q "\$package_name" >/dev/null 2>&1; then
-                dnf install "\$package_name" -y
-            fi
-        fi
-
-        # Check installation
-        if [[ "\$ID" == "debian" ]] || [[ "\$ID" == "ubuntu" ]]; then
-            if dpkg -s "\$package_name" >/dev/null 2>&1; then
-                print_success "\$package_name installed successfully"
-            fi
-        elif [[ "\$ID" == arch* ]]; then
-            if pacman -Qi "\$package_name" >/dev/null 2>&1; then
-                print_success "\$package_name installed successfully"
-            fi
-        elif [[ "\$ID" == "fedora" ]]; then
-            if rpm -q "\$package_name" >/dev/null 2>&1; then
-                print_success "\$package_name installed successfully"
-            fi
-        fi
-    done
-"
+        done
+    " "$@"
 }
 
 read_conf

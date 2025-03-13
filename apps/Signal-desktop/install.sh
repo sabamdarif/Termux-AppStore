@@ -19,7 +19,7 @@ if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]];
     cd $working_dir
     filename="signal-desktop-unofficial_${version#v}_${archtype}.deb"
     download_file "${page_url}/releases/download/${version}/${filename}"
-    distro_run "apt install ./${filename} -y"
+    distro_run "sudo apt install ./${filename} -y"
     check_and_delete "${working_dir}/${filename}"
 elif [[ "$selected_distro" == "fedora" ]]; then
     cd $working_dir

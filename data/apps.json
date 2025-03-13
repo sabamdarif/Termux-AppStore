@@ -487,6 +487,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Shotcut/logo.png"
   },
   {
+    "app_name": "Signal desktop",
+    "folder_name": "Signal-desktop",
+    "description": "Signal \u2014 Private Messenger for Windows, Mac, and Linux",
+    "categories": [
+      "Multimedia"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/opt/Signal Unofficial/signal-desktop-unofficial --no-sandbox",
+    "supported_arch": "aarch64",
+    "version": "v7.46.0",
+    "supported_distro": "all",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Signal-desktop/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Signal-desktop/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Signal-desktop/logo.png"
+  },
+  {
     "app_name": "Spotify qt",
     "folder_name": "Spotify-qt",
     "description": "Lightweight Spotify client using Qt",
@@ -618,6 +634,23 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code/icon-64.png"
+  },
+  {
+    "app_name": "Visual Studio Code Insiders",
+    "folder_name": "Visual-Studio-Code-Insiders",
+    "description": "Visual Studio Code is a free source-code editor made by Microsoft with support for debugging, syntax highlighting, and intelligent code completion.",
+    "categories": [
+      "Development"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/usr/share/code-insiders/code-insiders --no-sandbox",
+    "supported_arch": "aarch64,arm",
+    "version": "distro_local_version",
+    "supported_distro": "all",
+    "package_name": "code-insiders",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code-Insiders/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code-Insiders/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code-Insiders/logo.png"
   },
   {
     "app_name": "Webcord",

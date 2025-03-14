@@ -98,8 +98,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Initialize distro state
         self.distro_enabled = False
-        self.selected_distro = None
         
+        # Initialize update state
+        self.update_in_progress = False
+
         # Initialize thread pool and queues
         self.ui_update_queue = queue.Queue()
         self.pending_ui_updates = []
@@ -2239,6 +2241,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         button.set_sensitive(False)
         button.get_style_context().add_class('updating')
         
+        # Set update in progress flag
+        self.update_in_progress = True
+        
+        # Store the current active section when starting the update
+        self.update_started_section = "updates"
+        
         # Create spinner for version check
         version_check_spinner = Gtk.Spinner()
         version_check_spinner.set_size_request(16, 16)
@@ -2251,6 +2259,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         button.remove(button.get_children()[0])  # Remove current label
         button.add(button_box)
         button.show_all()
+        
+        # Add a timer to continuously check button visibility during update
+        self.button_visibility_timer_id = GLib.timeout_add(100, self.ensure_correct_update_button_visibility)
+        
+        # Ensure correct button visibility
+        self.ensure_correct_update_button_visibility()
         
         def update_progress_safe(progress, label=None):
             def update():
@@ -2279,6 +2293,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         button.show_all()
                         # Only update progress bar when not checking versions
                         self.update_progress(progress)
+                
+                # Always ensure correct update button visibility
+                self.ensure_correct_update_button_visibility()
+            
             GLib.idle_add(update)
 
         def update_system_thread():
@@ -2520,7 +2538,65 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 
                 # Reset button and refresh display
                 GLib.idle_add(self.update_complete)
-                GLib.idle_add(self.show_update_apps)
+                
+                # Reload all app data first
+                GLib.idle_add(self.load_app_metadata)
+                
+                # Then refresh the current view
+                def refresh_update_view():
+                    # Get current active section by checking which button is selected
+                    current_section = None
+                    if self.explore_button.get_style_context().has_class('selected'):
+                        current_section = "explore"
+                    elif self.installed_button.get_style_context().has_class('selected'):
+                        current_section = "installed"
+                    elif self.updates_button.get_style_context().has_class('selected'):
+                        current_section = "updates"
+                    
+                    # Clear current content to prevent flashing old content
+                    self.clear_app_list_box()
+                    
+                    # Add loading indicator
+                    loading_box = self.show_temporary_loading()
+                    
+                    # Apply the correct UI state for the current tab
+                    if current_section == "explore":
+                        self.sidebar.show()
+                        self.update_button.hide()
+                        
+                        # Load content on next idle
+                        def load_content():
+                            self.clear_app_list_box()
+                            self.show_apps()
+                            return False
+                            
+                        GLib.idle_add(load_content)
+                        
+                    elif current_section == "installed":
+                        self.sidebar.hide()
+                        self.update_button.hide()
+                        
+                        # Load content on next idle
+                        def load_content():
+                            self.clear_app_list_box()
+                            self.show_installed_apps()
+                            return False
+                            
+                        GLib.idle_add(load_content)
+                        
+                    elif current_section == "updates":
+                        self.sidebar.hide()
+                        self.update_button.show()
+                        
+                        # Load content on next idle
+                        def load_content():
+                            self.clear_app_list_box()
+                            self.show_update_apps()
+                            return False
+                            
+                        GLib.idle_add(load_content)
+                
+                GLib.idle_add(refresh_update_view)
                 
             except Exception as e:
                 print(f"\n=== Update Check Failed ===")
@@ -2528,6 +2604,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 print(f"Stack trace:")
                 import traceback
                 traceback.print_exc()
+                
+                # Reset update state on error
+                GLib.idle_add(lambda: setattr(self, 'update_in_progress', False))
+                
+                # Remove visibility timer on error
+                if hasattr(self, 'button_visibility_timer_id'):
+                    GLib.idle_add(lambda: GLib.source_remove(self.button_visibility_timer_id))
+                    GLib.idle_add(lambda: setattr(self, 'button_visibility_timer_id', None))
+                
                 GLib.idle_add(lambda: self.show_error_dialog(f"Update check failed: {str(e)}"))
                 GLib.idle_add(self.update_complete)
 
@@ -2554,6 +2639,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.update_button.set_label("Check for Updates")
         self.update_button.get_style_context().remove_class('updating')
         self.update_progress(0)
+        
+        # Reset update state
+        self.update_in_progress = False
+        
+        # Remove the visibility check timer
+        if hasattr(self, 'button_visibility_timer_id'):
+            GLib.source_remove(self.button_visibility_timer_id)
+            self.button_visibility_timer_id = None
+        
+        # Ensure update button is only visible on updates tab
+        if not self.updates_button.get_style_context().has_class('selected'):
+            self.update_button.hide()
+        
         return False
 
     def on_section_clicked(self, button, section):
@@ -2566,28 +2664,57 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Clear search entry
         self.search_entry.set_text("")
         
+        # Clear current content immediately to prevent brief display of previous content
+        self.clear_app_list_box()
+        
+        # Add temporary loading indicator
+        loading_box = self.show_temporary_loading()
+        
         # Show/hide UI elements based on section
         if section == "explore":
             # Show categories, hide update button
             self.sidebar.show()
             self.update_button.hide()
             self.search_entry.show()
-            # Show all apps
-            self.show_apps()
+            
+            # Define function to load content and remove spinner
+            def load_explore_content():
+                self.clear_app_list_box()  # Clear loading indicator
+                self.show_apps()
+                return False
+            
+            # Schedule content load on next idle
+            GLib.idle_add(load_explore_content)
+            
         elif section == "installed":
             # Hide categories and update button
             self.sidebar.hide()
             self.update_button.hide()
             self.search_entry.show()
-            # Show installed apps
-            self.show_installed_apps()
+            
+            # Define function to load content and remove spinner
+            def load_installed_content():
+                self.clear_app_list_box()  # Clear loading indicator
+                self.show_installed_apps()
+                return False
+            
+            # Schedule content load on next idle
+            GLib.idle_add(load_installed_content)
+            
         else:  # updates
             # Hide categories, show update button
             self.sidebar.hide()
             self.update_button.show()
             self.search_entry.show()
-            # Show update apps
-            self.show_update_apps()
+            
+            # Define function to load content and remove spinner
+            def load_updates_content():
+                self.clear_app_list_box()  # Clear loading indicator
+                self.show_update_apps()
+                return False
+            
+            # Schedule content load on next idle
+            GLib.idle_add(load_updates_content)
 
     def show_installed_apps(self):
         """Show only installed apps"""
@@ -2864,6 +2991,37 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         progress_dialog.connect("response", on_dialog_response)
         
         return progress_dialog, status_label, progress_bar, terminal_view
+
+    def ensure_correct_update_button_visibility(self):
+        """Ensure update button is only visible on updates tab"""
+        if self.updates_button.get_style_context().has_class('selected'):
+            self.update_button.show()
+        else:
+            self.update_button.hide()
+        return False
+
+    def show_temporary_loading(self):
+        """Show a temporary loading spinner in the app list box"""
+        # Create a centered box for the spinner
+        loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        loading_box.set_valign(Gtk.Align.CENTER)
+        loading_box.set_halign(Gtk.Align.CENTER)
+        
+        # Create and start spinner
+        spinner = Gtk.Spinner()
+        spinner.set_size_request(32, 32)
+        spinner.start()
+        loading_box.pack_start(spinner, False, False, 0)
+        
+        # Add loading label
+        label = Gtk.Label(label="Loading...")
+        loading_box.pack_start(label, False, False, 0)
+        
+        # Add to app list box
+        self.app_list_box.pack_start(loading_box, True, True, 0)
+        loading_box.show_all()
+        
+        return loading_box
 
 def main():
     app = AppStoreApplication()

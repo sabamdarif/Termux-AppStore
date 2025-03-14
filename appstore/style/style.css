@@ -350,3 +350,64 @@ label.status-label {
     margin: 8px 0;
     color: @theme_fg_color;
 }
+
+/* Header bar and tabs styling */
+headerbar {
+    background-color: @theme_bg_color;
+    border-bottom: none;
+}
+
+.header-tabs-box {
+    background: transparent;
+    padding: 4px;
+}
+
+.header-tab-button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    margin: 2px;
+    transition-property: none; /* Disable all transitions */
+    background: transparent;
+    border: none;
+    color: alpha(@theme_fg_color, 0.8);
+}
+
+.header-tab-button:hover {
+    background: alpha(@theme_fg_color, 0.1);
+}
+
+.header-tab-button:active,
+.header-tab-button:focus {
+    background: none;
+    padding: 8px 16px; /* Keep the same padding on press */
+    margin: 2px; /* Keep the same margin on press */
+    border: none; /* No border animation on press */
+    outline: none; /* No outline on focus */
+}
+
+.header-tab-button.active {
+    background: @theme_selected_bg_color;
+    border: 1px solid shade(@theme_selected_bg_color, 0.8);
+    color: @theme_selected_fg_color;
+    font-weight: bold;
+}
+
+.header-tab-button box {
+    padding: 0 3px;
+}
+
+.header-tab-button image {
+    margin-right: 6px;
+}
+
+.menu-button {
+    padding: 8px;
+    border-radius: 6px;
+    margin: 2px;
+    background: transparent;
+    border: none;
+}
+
+.menu-button:hover {
+    background: alpha(@theme_fg_color, 0.1);
+}

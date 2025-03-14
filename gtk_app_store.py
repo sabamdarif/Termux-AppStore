@@ -32,7 +32,9 @@ GITHUB_APPS_JSON = "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore
 
 # Add these constants after the existing path definitions
 APPSTORE_OLD_JSON_DIR = os.path.join(APPSTORE_DIR, 'old_json')
-UPDATES_TRACKING_FILE = os.path.expanduser("~/.termux_appstore/updates.json")
+UPDATES_TRACKING_FILE = os.path.join(APPSTORE_DIR, "updates.json")  # Changed from .termux_appstore
+INSTALLED_APPS_FILE = os.path.join(APPSTORE_DIR, "installed_apps.json")  # Changed from .termux_appstore
+LAST_VERSION_CHECK_FILE = os.path.join(APPSTORE_DIR, "last_version_check")  # Changed from .termux_appstore
 
 # Function to validate logo size
 def validate_logo_size(logo_path):
@@ -51,6 +53,7 @@ def validate_logo_size(logo_path):
 
 class AppStoreApplication(Gtk.Application):
     def __init__(self):
+        """Initialize the application"""
         Gtk.Application.__init__(
             self,
             application_id="org.sabamdarif.termux.appstore",
@@ -61,6 +64,7 @@ class AppStoreApplication(Gtk.Application):
         self.connect('activate', self.on_activate)
 
     def do_startup(self):
+        """Application startup"""
         Gtk.Application.do_startup(self)
         # Set application name
         GLib.set_application_name("Termux AppStore")
@@ -73,7 +77,7 @@ class AppStoreApplication(Gtk.Application):
             print(f"Failed to set application icon: {e}")
 
     def on_activate(self, app):
-        """Handler for the application's activate signal"""
+        """Called when the application is activated"""
         if not self.window:
             self.window = AppStoreWindow(self)
         self.window.present()
@@ -107,7 +111,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.pending_ui_updates = []
         
         # Initialize updates tracking
-        self.updates_tracking_file = os.path.expanduser("~/.termux_appstore/updates.json")
+        self.updates_tracking_file = UPDATES_TRACKING_FILE
         self.pending_updates = {}
         
         # Set window properties
@@ -139,7 +143,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
 
         # Initialize installed apps tracking
-        self.installed_apps_file = Path(os.path.expanduser("~/.termux_appstore/installed_apps.json"))
+        self.installed_apps_file = Path(INSTALLED_APPS_FILE)
         self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
         self.load_installed_apps()
 
@@ -175,16 +179,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         try:
             # Load CSS
             css_provider = Gtk.CssProvider()
-            css_file = Path("/data/data/com.termux/files/usr/opt/appstore/style/style.css")
-            if not css_file.exists():
-                print(f"Warning: CSS file not found at {css_file}")
-            else:
-                css_provider.load_from_path(str(css_file))
-                Gtk.StyleContext.add_provider_for_screen(
-                    Gdk.Screen.get_default(),
-                    css_provider,
-                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-                )
+            css_file = Path(__file__).parent / "style" / "style.css"
+            print(f"Loading CSS from: {css_file}")
+            css_provider.load_from_path(str(css_file))
+            Gtk.StyleContext.add_provider_for_screen(
+                Gdk.Screen.get_default(),
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
 
             # Create main container with overlay
             self.overlay = Gtk.Overlay()
@@ -216,32 +218,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             header.props.title = "Termux AppStore"
             self.set_titlebar(header)
 
-            # Create section buttons box
-            section_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-            section_box.get_style_context().add_class('linked')  # This makes buttons appear connected
-            
-            # Explore button
-            self.explore_button = Gtk.Button(label="Explore")
-            self.explore_button.connect("clicked", self.on_section_clicked, "explore")
-            self.explore_button.get_style_context().add_class('section-button')
-            self.explore_button.get_style_context().add_class('selected')
-            section_box.pack_start(self.explore_button, False, False, 0)
-            
-            # Installed button
-            self.installed_button = Gtk.Button(label="Installed")
-            self.installed_button.connect("clicked", self.on_section_clicked, "installed")
-            self.installed_button.get_style_context().add_class('section-button')
-            section_box.pack_start(self.installed_button, False, False, 0)
-            
-            # Updates button
-            self.updates_button = Gtk.Button(label="Updates")
-            self.updates_button.connect("clicked", self.on_section_clicked, "updates")
-            self.updates_button.get_style_context().add_class('section-button')
-            section_box.pack_start(self.updates_button, False, False, 0)
-            
-            # Add section buttons to center of header
-            header.set_custom_title(section_box)
+            # Create box for tabs
+            tabs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+            tabs_box.get_style_context().add_class('header-tabs-box')
+            header.set_custom_title(tabs_box)
 
+            # Create tab buttons with icons
+            self.explore_button = self.create_tab_button("Explore", "system-search-symbolic")
+            self.installed_button = self.create_tab_button("Installed", "system-software-install-symbolic")
+            self.updates_button = self.create_tab_button("Updates", "software-update-available-symbolic")
+            
+            # Connect click handlers
+            self.explore_button.connect("clicked", self.on_section_clicked, "explore")
+            self.installed_button.connect("clicked", self.on_section_clicked, "installed")
+            self.updates_button.connect("clicked", self.on_section_clicked, "updates")
+            
+            # Set initial active state
+            self.explore_button.get_style_context().add_class('active')
+
+            tabs_box.pack_start(self.explore_button, False, False, 0)
+            tabs_box.pack_start(self.installed_button, False, False, 0)
+            tabs_box.pack_start(self.updates_button, False, False, 0)
+            
+            # Create menu button
+            menu_button = Gtk.Button()
+            menu_button.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON))
+            menu_button.get_style_context().add_class('menu-button')
+            menu_button.connect("clicked", self.on_menu_clicked)
+            header.pack_end(menu_button)
+            
             # Create content box for app list
             self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             self.main_box.pack_start(self.content_box, True, True, 0)
@@ -249,13 +254,68 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print(f"Error creating UI: {e}")
             raise
 
+    def create_tab_button(self, label_text, icon_name):
+        """Create a styled tab button with icon and label"""
+        button = Gtk.Button()
+        button.get_style_context().add_class('header-tab-button')
+        
+        # Add these properties to help prevent animations
+        button.set_can_focus(False)  # Prevent focus animation
+        button.set_can_default(False)  # Prevent default button animation
+        button.set_relief(Gtk.ReliefStyle.NONE)  # Remove button relief effect
+        
+        # Create fixed-size button to avoid resizing during clicks
+        button.set_size_request(120, 36)  # Set a fixed size
+        
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        icon = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.BUTTON)
+        label = Gtk.Label(label=label_text)
+        
+        box.pack_start(icon, False, False, 0)
+        box.pack_start(label, False, False, 0)
+        button.add(box)
+        
+        return button
+        
+    def on_menu_clicked(self, button):
+        """Show the application menu"""
+        menu = Gtk.Menu()
+        
+        about_item = Gtk.MenuItem(label="About")
+        about_item.connect("activate", self.on_about_clicked)
+        menu.append(about_item)
+        
+        menu.show_all()
+        menu.popup_at_widget(button, Gdk.Gravity.SOUTH_WEST, Gdk.Gravity.NORTH_WEST, None)
+    
+    def on_about_clicked(self, widget):
+        """Show about dialog"""
+        about_dialog = Gtk.AboutDialog(transient_for=self)
+        
+        # Set dialog properties
+        about_dialog.set_program_name("Termux App Store")
+        about_dialog.set_version("0.5.1-beta")
+        about_dialog.set_comments("A modern graphical package manager for Termux")
+        about_dialog.set_copyright("© 2025 Termux Desktop (sabamdarif)")
+        about_dialog.set_license_type(Gtk.License.GPL_3_0)
+        about_dialog.set_website("https://github.com/sabamdarif/termux-desktop")
+        about_dialog.set_website_label("Website (GITHUB)")
+        about_dialog.set_logo_icon_name("system-software-install")
+        
+        # Show the dialog
+        about_dialog.run()
+        about_dialog.destroy()
+
     def setup_directories(self):
         """Create necessary directories for the app store"""
         try:
             # Create main directories
             os.makedirs(APPSTORE_DIR, exist_ok=True)
             os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
-            os.makedirs(os.path.expanduser("~/.termux_appstore"), exist_ok=True)
+            os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
+            
+            # Migrate data from old directory structure if needed
+            self.migrate_old_data()
             
             # Check for distro configuration
             self.check_distro_configuration()
@@ -308,10 +368,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         print('Checking for updates...')
         try:
             # Create directory if it doesn't exist
-            os.makedirs(os.path.expanduser("~/.termux_appstore"), exist_ok=True)
+            os.makedirs(APPSTORE_DIR, exist_ok=True)
             
             # Check when was the last version update
-            last_version_check_file = os.path.expanduser("~/.termux_appstore/last_version_check")
+            last_version_check_file = LAST_VERSION_CHECK_FILE
             current_time = datetime.now()
 
             # If apps.json doesn't exist, force a refresh
@@ -1897,7 +1957,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def save_pending_updates(self):
         """Save pending updates to tracking file"""
         try:
-            os.makedirs(os.path.dirname(self.updates_tracking_file), exist_ok=True)
+            # APPSTORE_DIR is already created in setup_directories
             print(f"Saving updates to {self.updates_tracking_file}")
             print(f"Updates to save: {self.pending_updates}")
             with open(self.updates_tracking_file, 'w') as f:
@@ -2649,17 +2709,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.button_visibility_timer_id = None
         
         # Ensure update button is only visible on updates tab
-        if not self.updates_button.get_style_context().has_class('selected'):
+        if not (self.updates_button.get_style_context().has_class('selected') or
+                self.updates_button.get_style_context().has_class('active')):
             self.update_button.hide()
         
         return False
 
     def on_section_clicked(self, button, section):
         """Handle section button clicks"""
-        # Update button states
+        # Update button states - keep both classes for compatibility
         for btn in [self.explore_button, self.installed_button, self.updates_button]:
             btn.get_style_context().remove_class('selected')
+            btn.get_style_context().remove_class('active')
+        
+        # Add both classes to clicked button for proper highlighting
         button.get_style_context().add_class('selected')
+        button.get_style_context().add_class('active')
         
         # Clear search entry
         self.search_entry.set_text("")
@@ -2994,11 +3059,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def ensure_correct_update_button_visibility(self):
         """Ensure update button is only visible on updates tab"""
-        if self.updates_button.get_style_context().has_class('selected'):
+        # Check for either 'selected' or 'active' class for compatibility
+        if (self.updates_button.get_style_context().has_class('selected') or 
+            self.updates_button.get_style_context().has_class('active')):
             self.update_button.show()
         else:
             self.update_button.hide()
-        return False
+        return self.update_in_progress  # Keep timer running if update is in progress
 
     def show_temporary_loading(self):
         """Show a temporary loading spinner in the app list box"""
@@ -3022,6 +3089,67 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         loading_box.show_all()
         
         return loading_box
+
+    def load_explore_content(self):
+        """Load content for the explore section"""
+        self.clear_app_list_box()  # Clear loading indicator
+        self.show_apps()
+        return False
+    
+    def load_installed_content(self):
+        """Load content for the installed section"""
+        self.clear_app_list_box()  # Clear loading indicator
+        self.show_installed_apps()
+        return False
+    
+    def load_updates_content(self):
+        """Load content for the updates section"""
+        self.clear_app_list_box()  # Clear loading indicator
+        self.show_update_apps()
+        return False
+
+    def migrate_old_data(self):
+        """Migrate data from old .termux_appstore directory to new .appstore directory"""
+        try:
+            old_dir = os.path.expanduser("~/.termux_appstore")
+            if os.path.exists(old_dir):
+                print(f"Found old data directory: {old_dir}, migrating data...")
+                
+                # Migrate installed apps data
+                old_installed_apps = os.path.join(old_dir, "installed_apps.json")
+                if os.path.exists(old_installed_apps):
+                    print(f"Migrating installed apps data from {old_installed_apps} to {INSTALLED_APPS_FILE}")
+                    shutil.copy2(old_installed_apps, INSTALLED_APPS_FILE)
+                
+                # Migrate updates tracking data
+                old_updates = os.path.join(old_dir, "updates.json")
+                if os.path.exists(old_updates):
+                    print(f"Migrating updates data from {old_updates} to {UPDATES_TRACKING_FILE}")
+                    shutil.copy2(old_updates, UPDATES_TRACKING_FILE)
+                
+                # Migrate last version check data
+                old_version_check = os.path.join(old_dir, "last_version_check")
+                if os.path.exists(old_version_check):
+                    print(f"Migrating version check data from {old_version_check} to {LAST_VERSION_CHECK_FILE}")
+                    shutil.copy2(old_version_check, LAST_VERSION_CHECK_FILE)
+                
+                print("Migration completed successfully.")
+                
+                # Optionally backup old directory instead of removing
+                backup_dir = os.path.expanduser("~/.termux_appstore_backup")
+                if not os.path.exists(backup_dir):
+                    print(f"Creating backup of old data at: {backup_dir}")
+                    shutil.copytree(old_dir, backup_dir)
+                
+                # Now we can safely remove the old directory
+                print(f"Removing old data directory: {old_dir}")
+                shutil.rmtree(old_dir)
+            else:
+                print("No old data directory found, nothing to migrate.")
+        except Exception as e:
+            print(f"Error during data migration: {e}")
+            import traceback
+            traceback.print_exc()
 
 def main():
     app = AppStoreApplication()

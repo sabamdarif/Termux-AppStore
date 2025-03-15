@@ -132,7 +132,7 @@ EOF
             # Extract the filename pattern from the download URL
             local filename_pattern=$(basename "$download_url")
             # Replace the version and arch in the pattern with variables
-            filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/$supported_arch/\${supported_arch}/g")
+            filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/${version#v}/\${version#v}/g" | sed "s/$supported_arch/\${supported_arch}/g")
             
             cat >> "$folder_path/install.sh" << EOF
 supported_distro="$supported_distro"
@@ -169,12 +169,77 @@ MimeType=x-scheme-handler/$package_name;
 Categories=${selected_categories[0]};
 DESKTOP_EOF
 EOF
+        elif [[ "$download_url" =~ \.deb$ ]]; then
+        # Extract the filename pattern from the download URL
+        local filename_pattern=$(basename "$download_url")
+        # Replace the version and arch in the pattern with variables
+        filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/${version#v}/\${version#v}/g" | sed "s/$supported_arch/\${supported_arch}/g")
+        cat >> "$folder_path/install.sh" << EOF
+supported_distro="$supported_distro"
+page_url="$base_url"
+working_dir="\${distro_path}/root"
+
+app_arch=\$(uname -m)
+case " \$app_arch" in
+aarch64) archtype="arm64" ;;
+armv7*|arm) archtype="armv7l" ;;
+esac
+
+if [[ "\$selected_distro" == "ubuntu" ]] || [[ "\$selected_distro" == "debian" ]]; then
+cd \$working_dir
+filename="${filename_pattern}"
+distro_run "
+check_and_delete "/root/\${filename}"
+"
+download_file "${page_url}/releases/download/${version}/${filename}"
+distro_run "
+sudo apt install ./\${filename} -y
+check_and_delete "/root/\${filename}"
+"
+elif [[ "\$selected_distro" == "fedora" ]]; then
+cd \$working_dir
+filename="${filename_pattern}"
+distro_run "
+check_and_delete "/root/\${filename}"
+"
+download_file "\${page_url}/releases/download/\${version}/\${filename}"
+distro_run "
+cd /root
+check_and_delete "app_installer"
+check_and_create_directory "app_installer"
+mv \${filename} app_installer/
+cd app_installer
+sudo dnf install -y ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3
+ar x \${filename}
+extract "data.tar.xz"
+mv opt/* /opt
+cd /root
+check_and_delete "app_installer"
+"
+else
+    print_failed "Unsupported distro"
+fi
+
+print_success "Creating desktop entry..."
+cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
+[Desktop Entry]
+Name=${package_name^}
+Exec=pdrun \${run_cmd}
+Terminal=false
+Type=Application
+Icon=\${HOME}/.appstore/logo/$folder_name/logo.png
+StartupWMClass=$package_name
+Comment=$package_name
+MimeType=x-scheme-handler/$package_name;
+Categories=${selected_categories[0]};
+DESKTOP_EOF
+EOF
         else
             # For tar/archive installations
             # Extract the filename pattern from the download URL
             local filename_pattern=$(basename "$download_url")
             # Replace the version and arch in the pattern with variables
-            filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/$supported_arch/\${supported_arch}/g")
+            filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/${version#v}/\${version#v}/g" | sed "s/$supported_arch/\${supported_arch}/g")
 
             cat >> "$folder_path/install.sh" << EOF
 page_url="$base_url"
@@ -262,6 +327,21 @@ check_and_delete "\${distro_path}/opt/AppImageLauncher/$package_name"
 check_and_delete "\${distro_path}/usr/share/icons/hicolor/*/apps/$package_name.png"
 check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
 EOF
+        elif [[ "$download_url" =~ \.deb$ ]]; then
+            cat > "$folder_path/uninstall.sh" << EOF
+if [[ "\$selected_distro" == "ubuntu" ]] || [[ "\$selected_distro" == "debian" ]]; then
+distro_run "
+sudo apt remove $package_name -y
+"
+elif [[ "\$selected_distro" == "fedora" ]]; then
+distro_run "
+rm -rf "/opt/$package_name"
+"
+else
+    print_failed "Unsupported distro"
+fi
+check_and_delete "\${PREFIX}/share/applications/pd_added/signal-desktop-unofficial.desktop"
+EOF
         else
             cat > "$folder_path/uninstall.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
@@ -283,7 +363,7 @@ main() {
     folder_name=$(sanitize_folder_name "$app_name")
     
     # Get supported architectures
-    supported_archs=$(get_multiple_choices "Enter supported architectures (comma-separated: aarch64,arm,x86,x86_64): " "aarch64" "arm" "x86" "x86_64")
+    supported_archs=$(get_multiple_choices "Enter supported architectures (comma-separated: aarch64,arm): " "aarch64" "arm")
     
     app_type=$(get_valid_input "Enter app type (native/distro): " "native" "distro")
     
@@ -321,16 +401,11 @@ main() {
     # Get package details
     read -p "Enter package name: " package_name
     
-    if [ "$app_type" = "distro" ] && [ "$is_repo_pkg" = "no" ] && [[ ! "$download_url" =~ \.AppImage$ ]]; then
+    if [ "$app_type" = "distro" ] && [ "$is_repo_pkg" = "no" ] && [[ ! "$download_url" =~ \.AppImage$ ]] && [[ ! "$download_url" =~ \.deb$ ]]; then
         # For tar archives, set default run command
         run_cmd="/opt/$package_name/$package_name"
     else
         read -p "Enter run command: " run_cmd
-    fi
-
-    # For distro apps, append --no-sandbox if not present
-    if [ "$app_type" = "distro" ] && [[ ! "$run_cmd" =~ --no-sandbox$ ]]; then
-        run_cmd="$run_cmd --no-sandbox"
     fi
 
     # Get description

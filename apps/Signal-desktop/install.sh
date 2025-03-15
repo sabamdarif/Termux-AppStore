@@ -6,7 +6,7 @@ app_type="distro"
 supported_distro="all"
 working_dir="${distro_path}/root"
 page_url="https://github.com/dennisameling/Signal-Desktop"
-run_cmd="/opt/Signal Unofficial/signal-desktop-unofficial --no-sandbox"
+run_cmd="/opt/Signal-Unofficial/signal-desktop-unofficial --no-sandbox"
 
 app_arch=$(uname -m)
 case "$app_arch" in
@@ -19,7 +19,10 @@ if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]];
     cd $working_dir
     filename="signal-desktop-unofficial_${version#v}_${archtype}.deb"
     download_file "${page_url}/releases/download/${version}/${filename}"
-    distro_run "sudo apt install ./${filename} -y"
+    distro_run "
+sudo apt install ./${filename} -y
+mv '/opt/Signal Unofficial'  /opt/Signal-Unofficial
+"
     check_and_delete "${working_dir}/${filename}"
 elif [[ "$selected_distro" == "fedora" ]]; then
     cd $working_dir
@@ -34,7 +37,7 @@ sudo dnf install -y ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-l
 ar x ${filename}
 extract "data.tar.xz"
 cd opt
-mv * /opt
+mv 'Signal Unofficial'  /opt/Signal-Unofficial
 cd /root
 check_and_delete "signal"
 "
@@ -46,11 +49,11 @@ print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/signal-desktop-unofficial.desktop >/dev/null
 [Desktop Entry]
 Name=Signal Unofficial
-Exec=pdrun ${run_cmd}
+Exec=pdrun "${run_cmd}"
 Terminal=false
 Type=Application
 Icon=${HOME}/.appstore/logo/Signal-desktop/logo.png
-StartupWMClass=Signal Unofficial
+StartupWMClass=signal-desktop-unofficial
 Comment=Private messaging from your desktop (UNOFFICIAL)
 MimeType=x-scheme-handler/sgnl;x-scheme-handler/signalcaptcha;
 Categories=Network;InstantMessaging;Chat;

@@ -159,7 +159,7 @@ print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
-Exec=pdrun \${run_cmd}
+Exec=pdrun "\${run_cmd}"
 Terminal=false
 Type=Application
 Icon=\${HOME}/.appstore/logo/$folder_name/logo.png
@@ -224,7 +224,7 @@ print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
-Exec=pdrun \${run_cmd}
+Exec=pdrun "\${run_cmd}"
 Terminal=false
 Type=Application
 Icon=\${HOME}/.appstore/logo/$folder_name/logo.png
@@ -269,7 +269,7 @@ print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
-Exec=pdrun \${run_cmd}
+Exec=pdrun "\${run_cmd}"
 Terminal=false
 Type=Application
 Icon=\${HOME}/.appstore/logo/$folder_name/logo.png

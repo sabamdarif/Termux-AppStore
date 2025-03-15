@@ -439,7 +439,13 @@ function update_sys() {
 }
 
 function fix_exec() {
-    sed -i -E 's|^Exec=([^ ]+)(.*)|Exec=pdrun \1\2 '"$2"'|' "/data/data/com.termux/files/usr/share/applications/$1"
+    local file="/data/data/com.termux/files/usr/share/applications/$1"
+    sed -i -E "/^Exec=/ {
+        /pdrun/ { 
+            s/\$/ $2/; b 
+        }
+        s|^Exec=([^ ]+)(.*)|Exec=pdrun \1\2 $2|
+    }" "$file"
 }
 
 function install_appimage() {

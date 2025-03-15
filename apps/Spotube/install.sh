@@ -3,7 +3,8 @@
 supported_arch="aarch64"
 package_name="spotube"
 run_cmd="/opt/spotube/spotube --no-sandbox"
-version="v4.0.0"
+version="v3.9.0"
+pause_update=true
 app_type="distro"
 page_url="https://github.com/KRTirtho/spotube"
 working_dir="${distro_path}/opt"
@@ -17,12 +18,12 @@ fi
 
 if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]]; then
 distro_run "
-sudo apt update && sudo apt install -y libayatana-appindicator3-1 libwebkit2gtk-4.0-37 libavcodec-extra libasound2 libegl1-mesa libgl1-mesa-glx libgles2 libwayland-egl1 libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 mpv libmpv-dev libxcb-xfixes0 pipewire pipewire-audio-client-libraries libgtk-3-0 libgdk-pixbuf2.0-0 libwayland-client0 libwayland-egl1 libwayland-cursor0
+sudo apt update && sudo apt install -y libayatana-appindicator3-1 libwebkit2gtk-4.0-37 libwebkit2gtk-4.1-0 libwebkit2gtk-4.0-dev libavcodec-extra libasound2 libegl1-mesa libgl1-mesa-glx libgles2 libwayland-egl1 libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 mpv libmpv-dev libxcb-xfixes0 pipewire pipewire-audio-client-libraries libgtk-3-0 libgdk-pixbuf2.0-0 libwayland-client0 libwayland-egl1 libwayland-cursor0
 "
 
 elif [[ "$selected_distro" == "fedora" ]]; then
 distro_run "
-sudo dnf install -y libayatana-appindicator webkit2gtk3 ffmpeg alsa-lib mesa-libEGL mesa-libGL mesa-libGLES wayland libX11-xcb libXcomposite libXcursor libXdamage libXext libXfixes libXi libXrandr libXrender mpv mpv-libs libxcb pipewire pipewire-libs pipewire-alsa pipewire-pulseaudio gtk3 gdk-pixbuf2 wayland-devel
+sudo dnf install -y libayatana-appindicator webkit2gtk3 webkit2gtk4.0 ffmpeg alsa-lib mesa-libEGL mesa-libGL mesa-libGLES wayland libX11-xcb libXcomposite libXcursor libXdamage libXext libXfixes libXi libXrandr libXrender mpv mpv-libs libxcb pipewire pipewire-libs pipewire-alsa pipewire-pulseaudio gtk3 gdk-pixbuf2 wayland-devel
 "
 fi
 

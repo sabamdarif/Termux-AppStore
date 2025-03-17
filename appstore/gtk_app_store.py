@@ -79,8 +79,13 @@ class AppStoreApplication(Gtk.Application):
 
     def on_activate(self, app):
         """Called when the application is activated"""
-        if not self.window:
-            self.window = AppStoreWindow(self)
+        # Check if window exists already and just present it
+        if self.window:
+            self.window.present()
+            return
+            
+        # Create a new window if one doesn't exist
+        self.window = AppStoreWindow(self)
         self.window.present()
 
 class AppStoreWindow(Gtk.ApplicationWindow):
@@ -295,6 +300,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         terminal_progress_item.connect("toggled", self.on_terminal_progress_toggled)
         settings_submenu.append(terminal_progress_item)
         
+        # Auto-refresh option (inverted logic)
+        auto_refresh_item = Gtk.CheckMenuItem(label="Disable auto-refresh")
+        # Checked means disabled, so invert the setting
+        auto_refresh_item.set_active(not self.get_setting("enable_auto_refresh", True))
+        auto_refresh_item.connect("toggled", self.on_auto_refresh_toggled)
+        settings_submenu.append(auto_refresh_item)
+        
         settings_item.set_submenu(settings_submenu)
         menu.append(settings_item)
         
@@ -322,6 +334,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         use_terminal = check_item.get_active()
         self.set_setting("use_terminal_for_progress", use_terminal)
         print(f"Terminal progress setting changed to: {use_terminal}")
+    
+    def on_auto_refresh_toggled(self, check_item):
+        """Handle toggle of auto-refresh option"""
+        # Invert the active state since checked means disabled
+        disable_auto_refresh = check_item.get_active()
+        enable_auto_refresh = not disable_auto_refresh
+        self.set_setting("enable_auto_refresh", enable_auto_refresh)
+        if disable_auto_refresh:
+            print("Auto-refresh disabled")
+        else:
+            print("Auto-refresh enabled")
     
     def on_about_clicked(self, widget):
         """Show about dialog"""
@@ -414,6 +437,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def check_for_updates(self):
         print('Checking for updates...')
         try:
+            # Check if auto-refresh is disabled
+            if not self.get_setting("enable_auto_refresh", True):
+                print("Auto-refresh is disabled, skipping automatic version check...")
+                # Load app metadata and setup UI first
+                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
+                thread.daemon = True
+                thread.start()
+                return
+                
             # Create directory if it doesn't exist
             os.makedirs(APPSTORE_DIR, exist_ok=True)
             
@@ -642,6 +674,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         for child in self.content_box.get_children():
             child.destroy()
 
+        # Hide the header bar during refresh
+        header_bar = self.get_titlebar()
+        if header_bar:
+            header_bar.hide()
+
         # Show and start spinner
         self.spinner.show()
         self.spinner.start()
@@ -723,11 +760,58 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             logos_url = "https://github.com/sabamdarif/Termux-AppStore/releases/download/logos/logos.zip"
             
             print("Downloading logos archive...")
-            command = f"aria2c -x 16 -s 16 '{logos_url}' -d '{TERMUX_TMP}' -o 'logos.zip'"
-            result = subprocess.run(command, shell=True, capture_output=True, text=True)
             
-            if result.returncode != 0:
-                print(f"Failed to download logos: {result.stderr}")
+            # Try to download using available download tools
+            download_success = False
+            
+            # Try aria2c first (most efficient)
+            try:
+                print("Trying aria2c...")
+                command = f"aria2c -x 16 -s 16 '{logos_url}' -d '{TERMUX_TMP}' -o 'logos.zip'"
+                result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                if result.returncode == 0:
+                    download_success = True
+                    print("Download with aria2c successful")
+                else:
+                    print(f"aria2c failed: {result.stderr}")
+            except Exception as e:
+                print(f"Error using aria2c: {e}")
+            
+            # Try wget if aria2c failed
+            if not download_success:
+                try:
+                    print("Trying wget...")
+                    command = f"wget '{logos_url}' -O '{logos_zip}'"
+                    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        download_success = True
+                        print("Download with wget successful")
+                    else:
+                        print(f"wget failed: {result.stderr}")
+                except Exception as e:
+                    print(f"Error using wget: {e}")
+            
+            # Try curl if wget failed
+            if not download_success:
+                try:
+                    print("Trying curl...")
+                    command = f"curl -L '{logos_url}' -o '{logos_zip}'"
+                    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        download_success = True
+                        print("Download with curl successful")
+                    else:
+                        print(f"curl failed: {result.stderr}")
+                except Exception as e:
+                    print(f"Error using curl: {e}")
+            
+            # Check if any download method succeeded
+            if not download_success:
+                print("All download methods failed")
+                # Check if the directory already exists and has some content
+                if os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
+                    print("Using existing logo directory since download failed")
+                    return True
                 return False
             
             # Create logo directory
@@ -735,22 +819,42 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # Extract logos
             print("Extracting logos...")
-            command = f"unzip -o '{logos_zip}' -d '{APPSTORE_LOGO_DIR}'"
-            result = subprocess.run(command, shell=True, capture_output=True, text=True)
-            
-            # Clean up zip file
-            if os.path.exists(logos_zip):
-                os.remove(logos_zip)
-            
-            return result.returncode == 0
+            try:
+                command = f"unzip -o '{logos_zip}' -d '{APPSTORE_LOGO_DIR}'"
+                result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                
+                # Clean up zip file
+                if os.path.exists(logos_zip):
+                    os.remove(logos_zip)
+                
+                # If extraction fails but directory exists with content, consider it a success
+                if result.returncode != 0 and os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
+                    print("Using existing logo directory since extraction failed")
+                    return True
+                    
+                return result.returncode == 0
+            except Exception as e:
+                print(f"Error extracting logos: {e}")
+                # If extraction fails but directory exists with content, consider it a success
+                if os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
+                    print("Using existing logo directory since extraction failed")
+                    return True
+                return False
             
         except Exception as e:
             print(f"Error handling logos: {e}")
+            # Check if the directory already exists and has some content
+            if os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
+                print("Using existing logo directory since an error occurred")
+                return True
             return False
 
     def refresh_data_background(self):
         try:
             print("\nStarting refresh process...")
+            
+            # Keep header bar hidden throughout the refresh process
+            GLib.idle_add(self._ensure_header_hidden)
             
             # 1. First ensure old_json directory exists
             os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
@@ -983,6 +1087,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         return False
 
+    def _ensure_header_hidden(self):
+        """Make sure the header bar remains hidden during refresh"""
+        header_bar = self.get_titlebar()
+        if header_bar:
+            header_bar.hide()
+        return False  # Don't repeat this idle callback
+
     def refresh_complete(self):
         """Called when refresh is complete"""
         print('Refresh complete!')
@@ -999,6 +1110,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.spinner.hide()
         self.loading_label.hide()
         # self.refresh_button.set_sensitive(True)
+
+        # Show the header bar again
+        header_bar = self.get_titlebar()
+        if header_bar:
+            header_bar.show()
 
         # Setup UI with the new data
         self.setup_app_list_ui()
@@ -2061,7 +2177,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def refresh_error(self, error_message):
         """Handle refresh error"""
         print(f"Refresh error: {error_message}")
-        # Implement additional error handling logic here if needed
+        
+        # Show the header bar again in case of error
+        header_bar = self.get_titlebar()
+        if header_bar:
+            header_bar.show()
+            
+        # Hide loading indicators
+        self.spinner.stop()
+        self.spinner.hide()
+        self.loading_label.hide()
+        
+        # Show error dialog
+        self.show_error_dialog(f"Refresh failed: {error_message}")
+        
+        # Setup UI with existing data
+        self.setup_app_list_ui()
 
     def download_apps(self):
         """Download apps in the background"""
@@ -3397,6 +3528,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 # Default settings
                 self.settings = {
                     "use_terminal_for_progress": False,
+                    "enable_auto_refresh": True,
                     "last_category": "All Apps"
                     # Add more default settings as needed
                 }
@@ -3408,6 +3540,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Fallback to default settings
             self.settings = {
                 "use_terminal_for_progress": False,
+                "enable_auto_refresh": True,
                 "last_category": "All Apps"
             }
     

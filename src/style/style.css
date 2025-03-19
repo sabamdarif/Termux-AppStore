@@ -304,6 +304,36 @@ button.terminal-toggle-button:hover {
     background-color: @terminal_button_hover_color;
 }
 
+/* Command Output Window */
+.command-output-dialog {
+    background-color: @theme_bg_color;
+    border-radius: 8px;
+}
+
+.command-output-save-button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+.command-output-save-button:hover {
+    background-color: #2980b9;
+}
+
+.command-output-close-button {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+.command-output-close-button:hover {
+    background-color: #c0392b;
+}
+
 /* Progress Dialog */
 window.progress-dialog {
     background-color: @theme_bg_color;

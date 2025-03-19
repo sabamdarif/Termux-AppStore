@@ -90,8 +90,41 @@ class AppStoreApplication(Gtk.Application):
 
 class AppStoreWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        """Initialize the main window"""
-        super().__init__(application=app, title="Termux App Store")
+        """Initialize window"""
+        Gtk.ApplicationWindow.__init__(self, application=app, title="Termux App Store")
+        
+        # Load settings
+        self.load_settings()
+        self.selected_distro = None
+        self.distro_enabled = False
+        self.is_refreshing = False  # Add a flag to track refresh state
+        
+        # Set up scaling for hi-dpi screens
+        self.set_default_size(1000, 650)
+        # Set window position to center
+        self.set_position(Gtk.WindowPosition.CENTER)
+        
+        # Set window icon
+        icon_name = "system-software-install"
+        icon_theme = Gtk.IconTheme.get_default()
+        if icon_theme.has_icon(icon_name):
+            self.set_icon_name(icon_name)
+        
+        # Set window class
+        self.set_wmclass("termux-appstore", "Termux AppStore")
+        
+        # Identify system architecture
+        self.system_arch = platform.machine().lower()
+        print(f"System architecture: {self.system_arch}")
+        
+        # Maps system architecture to compatible architectures
+        self.arch_compatibility = {
+            "aarch64": ["aarch64", "arm64", "arm", "all", "any"],
+            "armv8l": ["arm", "armv7", "armhf", "all", "any"],
+            "armv7l": ["arm", "armv7", "armhf", "all", "any"],
+            "x86_64": ["x86_64", "amd64", "x86", "all", "any"],
+            "i686": ["x86", "i686", "i386", "all", "any"]
+        }
         
         # Initialize task queue and current task first
         self.task_queue = queue.Queue()
@@ -106,9 +139,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.uninstallation_cancelled = False
         self.current_installation = None
         
-        # Initialize distro state
-        self.distro_enabled = False
-        
         # Initialize update state
         self.update_in_progress = False
 
@@ -120,37 +150,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.updates_tracking_file = UPDATES_TRACKING_FILE
         self.pending_updates = {}
         
-        # Load user settings
-        self.load_settings()
-        
-        # Set window properties
-        self.set_wmclass("termux-appstore", "Termux AppStore")
-        self.set_role("termux-appstore")
-        self.set_default_size(1000, 600)
-        self.set_position(Gtk.WindowPosition.CENTER)
-        
-        # Get system architecture
-        self.system_arch = platform.machine().lower()
-        print(f"System architecture: {self.system_arch}")
-        
-        # Define architecture compatibility groups
-        self.arch_compatibility = {
-            'arm64': ['arm64', 'aarch64'],
-            'aarch64': ['arm64', 'aarch64'],
-            'arm': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-            'armv7l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-            'armhf': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l'],
-            'armv8l': ['arm', 'armhf', 'armv7', 'armv7l', 'armv7a', 'armv8l']
-        }
-
-        # Add keyboard accelerators
-        accel = Gtk.AccelGroup()
-        self.add_accel_group(accel)
-        
-        # Add Ctrl+Q shortcut
-        key, mod = Gtk.accelerator_parse("<Control>Q")
-        accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
-
         # Initialize installed apps tracking
         self.installed_apps_file = Path(INSTALLED_APPS_FILE)
         self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
@@ -288,63 +287,159 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
     def on_menu_clicked(self, button):
         """Show the application menu"""
-        menu = Gtk.Menu()
+        popover = Gtk.Popover(relative_to=button)
+        popover.set_position(Gtk.PositionType.BOTTOM)
         
-        # Settings submenu
-        settings_item = Gtk.MenuItem(label="Settings")
-        settings_submenu = Gtk.Menu()
-        
-        # Terminal progress option
-        terminal_progress_item = Gtk.CheckMenuItem(label="Use terminal for progress")
-        terminal_progress_item.set_active(self.get_setting("use_terminal_for_progress", False))
-        terminal_progress_item.connect("toggled", self.on_terminal_progress_toggled)
-        settings_submenu.append(terminal_progress_item)
-        
-        # Auto-refresh option (inverted logic)
-        auto_refresh_item = Gtk.CheckMenuItem(label="Disable auto-refresh")
-        # Checked means disabled, so invert the setting
-        auto_refresh_item.set_active(not self.get_setting("enable_auto_refresh", True))
-        auto_refresh_item.connect("toggled", self.on_auto_refresh_toggled)
-        settings_submenu.append(auto_refresh_item)
-        
-        settings_item.set_submenu(settings_submenu)
-        menu.append(settings_item)
-        
-        # Add a separator
-        menu.append(Gtk.SeparatorMenuItem())
+        # Create main box
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.set_margin_top(6)
+        box.set_margin_bottom(6)
+        box.set_margin_start(6)
+        box.set_margin_end(6)
+        box.set_spacing(2)  # Minimal spacing between items
         
         # About item
-        about_item = Gtk.MenuItem(label="About")
-        about_item.connect("activate", self.on_about_clicked)
-        menu.append(about_item)
+        about_button = Gtk.ModelButton(label="About")
+        about_button.connect("clicked", self.on_about_clicked)
+        box.pack_start(about_button, False, False, 0)
+        
+        # Add a separator
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator, False, False, 6)
+        
+        # Settings item
+        settings_button = Gtk.ModelButton(label="Settings")
+        settings_button.connect("clicked", self.on_settings_clicked)
+        box.pack_start(settings_button, False, False, 0)
         
         # Add another separator
-        menu.append(Gtk.SeparatorMenuItem())
+        separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator2, False, False, 6)
         
         # Quit item
-        quit_item = Gtk.MenuItem(label="Quit")
-        quit_item.connect("activate", self.on_quit_clicked)
-        menu.append(quit_item)
+        quit_button = Gtk.ModelButton(label="Quit")
+        quit_button.connect("clicked", self.on_quit_clicked)
+        box.pack_start(quit_button, False, False, 0)
         
-        menu.show_all()
-        menu.popup_at_widget(button, Gdk.Gravity.SOUTH_WEST, Gdk.Gravity.NORTH_WEST, None)
-    
-    def on_terminal_progress_toggled(self, check_item):
+        # Show the box in the popover
+        box.show_all()
+        popover.add(box)
+        popover.popup()
+
+    def on_settings_clicked(self, widget):
+        """Show settings window"""
+        settings_dialog = Gtk.Dialog(title="Settings", transient_for=self)
+        settings_dialog.set_default_size(450, 350)
+        
+        # Create main content box
+        content_box = settings_dialog.get_content_area()
+        content_box.set_margin_start(20)
+        content_box.set_margin_end(20)
+        content_box.set_margin_top(20)
+        content_box.set_margin_bottom(20)
+        content_box.set_spacing(16)
+        
+        # Create settings box
+        settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        
+        # Add header title
+        title_label = Gtk.Label(label="<b>Application Settings</b>")
+        title_label.set_use_markup(True)
+        title_label.set_halign(Gtk.Align.START)
+        title_label.set_margin_bottom(10)
+        settings_box.pack_start(title_label, False, False, 0)
+        
+        # Terminal progress setting
+        terminal_frame = Gtk.Frame()
+        terminal_frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
+        terminal_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        terminal_box.set_margin_start(12)
+        terminal_box.set_margin_end(12)
+        terminal_box.set_margin_top(12)
+        terminal_box.set_margin_bottom(12)
+        
+        terminal_label = Gtk.Label(label="Use terminal for progress")
+        terminal_label.set_halign(Gtk.Align.START)
+        terminal_switch = Gtk.Switch()
+        terminal_switch.set_halign(Gtk.Align.END)
+        terminal_switch.set_active(self.get_setting("use_terminal_for_progress", False))
+        terminal_switch.connect("state-set", self.on_terminal_progress_toggled)
+        
+        terminal_box.pack_start(terminal_label, True, True, 0)
+        terminal_box.pack_start(terminal_switch, False, False, 0)
+        terminal_frame.add(terminal_box)
+        settings_box.pack_start(terminal_frame, False, False, 0)
+        
+        # Auto-refresh setting
+        refresh_frame = Gtk.Frame()
+        refresh_frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
+        refresh_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        refresh_box.set_margin_start(12)
+        refresh_box.set_margin_end(12)
+        refresh_box.set_margin_top(12)
+        refresh_box.set_margin_bottom(12)
+        
+        refresh_label = Gtk.Label(label="Enable auto-refresh")
+        refresh_label.set_halign(Gtk.Align.START)
+        refresh_switch = Gtk.Switch()
+        refresh_switch.set_halign(Gtk.Align.END)
+        refresh_switch.set_active(self.get_setting("enable_auto_refresh", True))
+        refresh_switch.connect("state-set", self.on_auto_refresh_toggled)
+        
+        refresh_box.pack_start(refresh_label, True, True, 0)
+        refresh_box.pack_start(refresh_switch, False, False, 0)
+        refresh_frame.add(refresh_box)
+        settings_box.pack_start(refresh_frame, False, False, 0)
+        
+        # Show command output setting
+        output_frame = Gtk.Frame()
+        output_frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
+        output_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        output_box.set_margin_start(12)
+        output_box.set_margin_end(12)
+        output_box.set_margin_top(12)
+        output_box.set_margin_bottom(12)
+        
+        output_label = Gtk.Label(label="Show command output in terminal")
+        output_label.set_halign(Gtk.Align.START)
+        output_switch = Gtk.Switch()
+        output_switch.set_halign(Gtk.Align.END)
+        output_switch.set_active(self.get_setting("show_command_output", False))
+        output_switch.connect("state-set", self.on_command_output_toggled)
+        
+        output_box.pack_start(output_label, True, True, 0)
+        output_box.pack_start(output_switch, False, False, 0)
+        output_frame.add(output_box)
+        settings_box.pack_start(output_frame, False, False, 0)
+        
+        # Add settings box to content
+        content_box.pack_start(settings_box, True, True, 0)
+        
+        # Add close button
+        settings_dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+        settings_dialog.connect("response", lambda dialog, response: dialog.destroy())
+        
+        settings_dialog.show_all()
+        settings_dialog.run()
+        settings_dialog.destroy()
+
+    def on_terminal_progress_toggled(self, switch, state):
         """Handle toggle of terminal progress option"""
-        use_terminal = check_item.get_active()
-        self.set_setting("use_terminal_for_progress", use_terminal)
-        print(f"Terminal progress setting changed to: {use_terminal}")
+        self.set_setting("use_terminal_for_progress", state)
+        print(f"Terminal progress setting changed to: {state}")
     
-    def on_auto_refresh_toggled(self, check_item):
+    def on_auto_refresh_toggled(self, switch, state):
         """Handle toggle of auto-refresh option"""
-        # Invert the active state since checked means disabled
-        disable_auto_refresh = check_item.get_active()
-        enable_auto_refresh = not disable_auto_refresh
-        self.set_setting("enable_auto_refresh", enable_auto_refresh)
-        if disable_auto_refresh:
-            print("Auto-refresh disabled")
-        else:
+        self.set_setting("enable_auto_refresh", state)
+        if state:
             print("Auto-refresh enabled")
+        else:
+            print("Auto-refresh disabled")
+    
+    def on_command_output_toggled(self, switch, state):
+        """Handle toggle of command output option"""
+        self.set_setting("show_command_output", state)
+        print(f"Show command output setting changed to: {state}")
     
     def on_about_clicked(self, widget):
         """Show about dialog"""
@@ -352,7 +447,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Set dialog properties
         about_dialog.set_program_name("Termux App Store")
-        about_dialog.set_version("0.5.1-beta")
+        about_dialog.set_version("0.5.2-beta")
         about_dialog.set_comments("A modern graphical package manager for Termux")
         about_dialog.set_copyright("© 2025 Termux Desktop (sabamdarif)")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
@@ -665,7 +760,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def start_refresh(self, is_manual=True):
         """Start the refresh process in a background thread"""
+        # Check if a refresh operation is already in progress
+        if self.is_refreshing:
+            print("Refresh already in progress, skipping this request")
+            return
+
         print("\nStarting refresh process...")
+        
+        # Set the refresh flag
+        self.is_refreshing = True
         
         # Store is_manual flag as instance variable
         self.is_manual_refresh = is_manual
@@ -852,6 +955,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def refresh_data_background(self):
         try:
             print("\nStarting refresh process...")
+            
+            # Double-check that we're not already refreshing
+            if not self.is_refreshing:
+                print("Warning: Refresh flag not set, but refresh_data_background was called")
+                self.is_refreshing = True
             
             # Keep header bar hidden throughout the refresh process
             GLib.idle_add(self._ensure_header_hidden)
@@ -1097,6 +1205,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def refresh_complete(self):
         """Called when refresh is complete"""
         print('Refresh complete!')
+        
+        # Reset the refreshing flag
+        self.is_refreshing = False
         
         # Load app metadata first
         self.load_app_metadata()
@@ -2178,15 +2289,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Handle refresh error"""
         print(f"Refresh error: {error_message}")
         
-        # Show the header bar again in case of error
-        header_bar = self.get_titlebar()
-        if header_bar:
-            header_bar.show()
-            
-        # Hide loading indicators
+        # Reset the refreshing flag
+        self.is_refreshing = False
+        
+        # Hide the loading indicators
         self.spinner.stop()
         self.spinner.hide()
         self.loading_label.hide()
+        # self.refresh_button.set_sensitive(True)
         
         # Show error dialog
         self.show_error_dialog(f"Refresh failed: {error_message}")
@@ -2211,9 +2321,169 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if app.get('app_type') == 'distro':
                 run_cmd = f"pdrun {run_cmd}"
 
-            subprocess.Popen(['bash', '-c', run_cmd])
+            # Check if we should show command output
+            if self.get_setting("show_command_output", False):
+                self.show_command_output_window(app.get('name', 'Application'), run_cmd)
+            else:
+                # Just run the command
+                subprocess.Popen(['bash', '-c', run_cmd])
         except Exception as e:
             self.show_error_dialog(f"Error opening app: {e}")
+            
+    def show_command_output_window(self, app_name, run_cmd):
+        """Show a terminal-like window with command output"""
+        # Create dialog
+        dialog = Gtk.Window(title=f"{app_name} - Command Output")
+        dialog.set_default_size(700, 400)
+        dialog.set_transient_for(self)
+        dialog.set_modal(True)
+        dialog.connect("delete-event", lambda w, e: w.destroy())
+        dialog.get_style_context().add_class("command-output-dialog")
+        
+        # Create main box
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        main_box.set_margin_start(12)
+        main_box.set_margin_end(12)
+        main_box.set_margin_top(12)
+        main_box.set_margin_bottom(12)
+        dialog.add(main_box)
+        
+        # Create command label
+        command_label = Gtk.Label()
+        command_label.set_markup(f"<b>Command:</b> <span font_family='monospace'>{GLib.markup_escape_text(run_cmd)}</span>")
+        command_label.set_halign(Gtk.Align.START)
+        command_label.set_margin_bottom(6)
+        main_box.pack_start(command_label, False, False, 0)
+        
+        # Create ScrolledWindow for terminal
+        scrolled_window = Gtk.ScrolledWindow()
+        scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled_window.set_shadow_type(Gtk.ShadowType.IN)
+        
+        # Create TextView for terminal output
+        terminal_view = Gtk.TextView()
+        terminal_view.set_editable(False)
+        terminal_view.set_cursor_visible(False)
+        terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        terminal_view.get_style_context().add_class("terminal-view")
+        
+        # Set terminal colors
+        terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
+        terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
+        
+        scrolled_window.add(terminal_view)
+        main_box.pack_start(scrolled_window, True, True, 0)
+        
+        # Create button box
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        button_box.set_halign(Gtk.Align.END)
+        button_box.set_margin_top(12)
+        main_box.pack_start(button_box, False, False, 0)
+        
+        # Create save button
+        save_button = Gtk.Button(label="Save Output")
+        save_button.set_tooltip_text("Save command output to a file")
+        save_button.get_style_context().add_class("command-output-save-button")
+        button_box.pack_start(save_button, False, False, 0)
+        
+        # Create close button
+        close_button = Gtk.Button(label="Close")
+        close_button.set_tooltip_text("Close this window")
+        close_button.get_style_context().add_class("command-output-close-button")
+        button_box.pack_start(close_button, False, False, 0)
+        
+        # Set up text buffer
+        buffer = terminal_view.get_buffer()
+        end_iter = buffer.get_end_iter()
+        buffer.insert(end_iter, f"Starting {app_name}...\n")
+        
+        # Show all widgets
+        dialog.show_all()
+        
+        # Function to update the terminal
+        def update_terminal_output(text):
+            # Get end iterator and insert text
+            buf = terminal_view.get_buffer()
+            end = buf.get_end_iter()
+            buf.insert(end, text)
+            # Scroll to end
+            mark = buf.create_mark(None, buf.get_end_iter(), False)
+            terminal_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
+            buf.delete_mark(mark)
+            # Process GTK events to update the UI
+            while Gtk.events_pending():
+                Gtk.main_iteration_do(False)
+        
+        # Function to save output to file
+        def on_save_clicked(button):
+            buf = terminal_view.get_buffer()
+            start, end = buf.get_bounds()
+            text = buf.get_text(start, end, False)
+            
+            # Create file chooser dialog
+            file_dialog = Gtk.FileChooserDialog(
+                title="Save Output",
+                parent=dialog,
+                action=Gtk.FileChooserAction.SAVE
+            )
+            file_dialog.add_buttons(
+                Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                Gtk.STOCK_SAVE, Gtk.ResponseType.OK
+            )
+            
+            # Set default filename and location
+            home_dir = os.path.expanduser("~")
+            file_dialog.set_current_folder(home_dir)
+            file_dialog.set_current_name(f"{app_name.lower().replace(' ', '_')}_output.log")
+            
+            # Show the dialog
+            response = file_dialog.run()
+            if response == Gtk.ResponseType.OK:
+                filename = file_dialog.get_filename()
+                try:
+                    with open(filename, 'w') as f:
+                        f.write(text)
+                    update_terminal_output(f"\nOutput saved to {filename}\n")
+                except Exception as e:
+                    update_terminal_output(f"\nError saving output: {e}\n")
+            
+            file_dialog.destroy()
+        
+        # Connect save button
+        save_button.connect("clicked", on_save_clicked)
+        
+        # Connect close button
+        close_button.connect("clicked", lambda b: dialog.destroy())
+        
+        # Start process
+        try:
+            # Run the command
+            process = subprocess.Popen(
+                ['bash', '-c', run_cmd],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
+            )
+            
+            # Function to read output
+            def read_output():
+                for line in iter(process.stdout.readline, ''):
+                    GLib.idle_add(update_terminal_output, line)
+                process.stdout.close()
+                # Add completed message
+                GLib.idle_add(update_terminal_output, f"\nCommand completed with return code: {process.wait()}\n")
+                return False
+            
+            # Start thread to read output
+            output_thread = threading.Thread(target=read_output)
+            output_thread.daemon = True
+            output_thread.start()
+            
+        except Exception as e:
+            update_terminal_output(f"Error running command: {e}\n")
+        
+        return dialog
 
     def start_task_processor(self):
         """Start the background task processor thread"""
@@ -3529,7 +3799,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.settings = {
                     "use_terminal_for_progress": False,
                     "enable_auto_refresh": True,
-                    "last_category": "All Apps"
+                    "last_category": "All Apps",
+                    "show_command_output": False
                     # Add more default settings as needed
                 }
                 # Save default settings
@@ -3541,7 +3812,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.settings = {
                 "use_terminal_for_progress": False,
                 "enable_auto_refresh": True,
-                "last_category": "All Apps"
+                "last_category": "All Apps",
+                "show_command_output": False
             }
     
     def save_settings(self):

@@ -2619,6 +2619,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         terminal_button.set_tooltip_text("Toggle Terminal View")
         header_bar.pack_end(terminal_button)
         
+        # Add save button to header bar
+        save_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
+        save_button.set_tooltip_text("Save Log to File")
+        header_bar.pack_end(save_button)
+        
         # Set the header bar
         update_dialog.set_titlebar(header_bar)
         
@@ -3613,6 +3618,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         terminal_button.set_tooltip_text("Toggle Terminal View")
         header_bar.pack_end(terminal_button)
         
+        # Add save button to header bar
+        save_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
+        save_button.set_tooltip_text("Save Log to File")
+        header_bar.pack_end(save_button)
+        
         # Set the header bar
         progress_dialog.set_titlebar(header_bar)
         
@@ -3717,6 +3727,44 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.cleanup_installation_state()
         
         progress_dialog.connect("response", on_dialog_response)
+        
+        # Function to save log content to file
+        def on_save_log_clicked(button):
+            buf = terminal_view.get_buffer()
+            start, end = buf.get_bounds()
+            text = buf.get_text(start, end, False)
+            
+            # Create file chooser dialog
+            file_dialog = Gtk.FileChooserDialog(
+                title="Save Installation Log",
+                parent=progress_dialog,
+                action=Gtk.FileChooserAction.SAVE
+            )
+            file_dialog.add_buttons(
+                Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                Gtk.STOCK_SAVE, Gtk.ResponseType.OK
+            )
+            
+            # Set default filename and location
+            home_dir = os.path.expanduser("~")
+            file_dialog.set_current_folder(home_dir)
+            file_dialog.set_current_name(f"installation_log_{int(time.time())}.log")
+            
+            # Show the dialog
+            response = file_dialog.run()
+            if response == Gtk.ResponseType.OK:
+                filename = file_dialog.get_filename()
+                try:
+                    with open(filename, 'w') as f:
+                        f.write(text)
+                    self.update_terminal(terminal_view, f"\nLog saved to {filename}\n")
+                except Exception as e:
+                    self.update_terminal(terminal_view, f"\nError saving log: {e}\n")
+            
+            file_dialog.destroy()
+        
+        # Connect save button click
+        save_button.connect("clicked", on_save_log_clicked)
         
         return progress_dialog, status_label, progress_bar, terminal_view
 

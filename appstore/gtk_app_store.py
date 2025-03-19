@@ -460,6 +460,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     
     def on_quit_clicked(self, widget):
         """Handle quit menu item click"""
+        # Close any open log files
+        if hasattr(self, 'log_file') and self.log_file:
+            try:
+                self.log_file.write("\n--- Application closed by user ---\n")
+                self.log_file.close()
+            except Exception:
+                pass
+            self.log_file = None
+            self.logging_active = False
+            self.log_file_path = None
+            
         self.on_delete_event(None, None)
 
     def setup_directories(self):
@@ -1765,17 +1776,53 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         
                         time.sleep(0.5)
                         GLib.idle_add(update_progress, 1.0, "Installation complete!")
+                        
+                        # Close log file if logging is active
+                        if self.logging_active and self.log_file:
+                            try:
+                                self.log_file.write("\n--- Installation completed successfully ---\n")
+                                self.log_file.close()
+                            except Exception:
+                                pass
+                            self.log_file = None
+                            self.logging_active = False
+                            self.log_file_path = None
+                        
                         time.sleep(1)
                         GLib.idle_add(progress_dialog.destroy)
                         GLib.idle_add(self.show_apps)  # Refresh the UI
                     else:
                         GLib.idle_add(update_progress, 1.0, "Installation failed or cancelled!")
+                        
+                        # Close log file if logging is active
+                        if self.logging_active and self.log_file:
+                            try:
+                                self.log_file.write("\n--- Installation failed or cancelled ---\n")
+                                self.log_file.close()
+                            except Exception:
+                                pass
+                            self.log_file = None
+                            self.logging_active = False
+                            self.log_file_path = None
+                        
                         time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
 
                 except Exception as e:
                     print(f"Installation error: {str(e)}")
                     GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
+                    
+                    # Close log file if logging is active
+                    if self.logging_active and self.log_file:
+                        try:
+                            self.log_file.write(f"\n--- Installation error: {str(e)} ---\n")
+                            self.log_file.close()
+                        except Exception:
+                            pass
+                        self.log_file = None
+                        self.logging_active = False
+                        self.log_file_path = None
+                    
                     time.sleep(2)
                     GLib.idle_add(progress_dialog.destroy)
                 
@@ -2035,11 +2082,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         msg = "Uninstallation complete!"
                         GLib.idle_add(update_progress, 1.0, msg)
                         GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        
+                        # Close log file if logging is active
+                        if self.logging_active and self.log_file:
+                            try:
+                                self.log_file.write("\n--- Uninstallation completed successfully ---\n")
+                                self.log_file.close()
+                            except Exception:
+                                pass
+                            self.log_file = None
+                            self.logging_active = False
+                            self.log_file_path = None
+                        
                         time.sleep(1)
                     else:
                         msg = "Uninstallation failed!"
                         GLib.idle_add(update_progress, 1.0, msg)
                         GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        
+                        # Close log file if logging is active
+                        if self.logging_active and self.log_file:
+                            try:
+                                self.log_file.write("\n--- Uninstallation failed ---\n")
+                                self.log_file.close()
+                            except Exception:
+                                pass
+                            self.log_file = None
+                            self.logging_active = False
+                            self.log_file_path = None
+                        
                         time.sleep(2)
                     GLib.idle_add(progress_dialog.destroy)
 
@@ -2048,20 +2119,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     print(error_msg)
                     GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
                     GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                    
+                    # Close log file if logging is active
+                    if self.logging_active and self.log_file:
+                        try:
+                            self.log_file.write(f"\n--- Uninstallation error: {str(e)} ---\n")
+                            self.log_file.close()
+                        except Exception:
+                            pass
+                        self.log_file = None
+                        self.logging_active = False
+                        self.log_file_path = None
+                    
                     time.sleep(2)
                     GLib.idle_add(progress_dialog.destroy)
-                
-                finally:
-                    if script_file and os.path.exists(script_file):
-                        try:
-                            os.remove(script_file)
-                            msg = f"Cleaned up script: {script_file}"
-                            print(msg)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
-                        except Exception as e:
-                            error_msg = f"Error cleaning up script: {e}"
-                            print(error_msg)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
 
             thread = threading.Thread(target=uninstall_thread)
             thread.daemon = True
@@ -2540,6 +2611,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_destroy(self, *args):
         """Clean up when window is closed"""
+        # Close any open log files
+        if hasattr(self, 'log_file') and self.log_file:
+            try:
+                self.log_file.write("\n--- Application closed ---\n")
+                self.log_file.close()
+            except Exception:
+                pass
+            self.log_file = None
+            self.logging_active = False
+            self.log_file_path = None
+            
         self.stop_task_processor()
         sys.exit(0)
 
@@ -2608,6 +2690,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             modal=True,
             destroy_with_parent=True
         )
+        
+        # Variables for continuous logging are already set at the class level
         
         # Create and set custom header bar
         header_bar = Gtk.HeaderBar()
@@ -2981,6 +3065,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Ensure correct button visibility
         self.ensure_correct_update_button_visibility()
         
+        # Initialize logging for system updates
+        self.log_file_path = None
+        self.logging_active = False
+        self.log_file = None
+        
+        # Set up automatic logging for system updates
+        try:
+            # Create a timestamp for the log filename
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            # Create logs directory if it doesn't exist
+            log_dir = os.path.expanduser("~/.appstore/logs")
+            os.makedirs(log_dir, exist_ok=True)
+            # Set up log file path
+            self.log_file_path = os.path.join(log_dir, f"system_update_{timestamp}.log")
+            self.log_file = open(self.log_file_path, 'w')
+            self.logging_active = True
+            # Write initial log entry
+            self.log_file.write(f"=== System Update Log - {timestamp} ===\n\n")
+            self.log_file.flush()
+            print(f"Continuous logging started - saving to {self.log_file_path}")
+        except Exception as e:
+            print(f"Error setting up system update logging: {e}")
+            # Reset logging variables if setup fails
+            self.log_file_path = None
+            self.logging_active = False
+            self.log_file = None
+        
         def update_progress_safe(progress, label=None):
             def update():
                 if label:
@@ -3011,11 +3122,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 
                 # Always ensure correct update button visibility
                 self.ensure_correct_update_button_visibility()
+                
+                # Log progress update if logging is active
+                if self.logging_active and self.log_file:
+                    try:
+                        if label:
+                            self.log_file.write(f"[Progress {progress}%] {label}\n")
+                            self.log_file.flush()
+                    except Exception:
+                        pass
             
             GLib.idle_add(update)
 
         def update_system_thread():
             try:
+                # Log the start of the update process
+                if self.logging_active and self.log_file:
+                    self.log_file.write("\n=== Starting System Update Process ===\n")
+                    self.log_file.flush()
+                
                 # Step 1: Update Repository (0-40%)
                 print("\n=== Checking Package Manager ===")
                 update_progress_safe(0)
@@ -3024,6 +3149,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True)
                 pkg_manager = result.stdout.strip()
                 print(f"Detected package manager: {pkg_manager}")
+                
+                # Log package manager info
+                if self.logging_active and self.log_file:
+                    self.log_file.write(f"Detected package manager: {pkg_manager}\n")
+                    self.log_file.flush()
 
                 print("\n=== Updating Repository ===")
                 update_progress_safe(10, "Updating repository...")
@@ -3251,6 +3381,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 print("\n=== Update Check Complete ===")
                 update_progress_safe(100, "Check for Updates")
                 
+                # Log update completion
+                if self.logging_active and self.log_file:
+                    self.log_file.write("\n=== System Update Process Completed Successfully ===\n")
+                    self.log_file.flush()
+                
                 # Reset button and refresh display
                 GLib.idle_add(self.update_complete)
                 
@@ -3320,6 +3455,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 import traceback
                 traceback.print_exc()
                 
+                # Log error information
+                if self.logging_active and self.log_file:
+                    try:
+                        self.log_file.write(f"\n=== System Update Process Failed ===\n")
+                        self.log_file.write(f"Error: {str(e)}\n")
+                        self.log_file.write("Stack trace:\n")
+                        traceback.print_exc(file=self.log_file)
+                        self.log_file.flush()
+                    except Exception:
+                        pass
+                
                 # Reset update state on error
                 GLib.idle_add(lambda: setattr(self, 'update_in_progress', False))
                 
@@ -3356,6 +3502,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def update_complete(self):
         """Reset update button state after update completes"""
+        # Close log file if continuous logging is active
+        if self.logging_active and self.log_file:
+            try:
+                self.log_file.write("\n--- Update completed successfully ---\n")
+                self.log_file.close()
+            except Exception:
+                pass
+            self.log_file = None
+            self.logging_active = False
+            self.log_file_path = None
+            
         self.update_button.set_sensitive(True)
         self.update_button.set_label("Check for Updates")
         self.update_button.get_style_context().remove_class('updating')
@@ -3579,7 +3736,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         GLib.idle_add(self.show_apps)
 
     def update_terminal(self, terminal_view, text):
-        """Update the terminal view with new text"""
+        """Update the terminal view with new text and append to log file if logging is active"""
         if not text:
             return
             
@@ -3589,9 +3746,31 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Add newline if buffer is not empty
         if buffer.get_char_count() > 0:
             buffer.insert(end_iter, "\n")
+            # Also append newline to log file if logging is active
+            if self.logging_active and self.log_file:
+                try:
+                    self.log_file.write("\n")
+                    self.log_file.flush()  # Ensure it's written immediately
+                except Exception:
+                    pass  # Ignore errors in logging
             
         # Insert the new text
         buffer.insert(end_iter, text)
+        
+        # Append to log file if continuous logging is active
+        if self.logging_active and self.log_file:
+            try:
+                self.log_file.write(text)
+                self.log_file.flush()  # Ensure it's written immediately
+            except Exception:
+                # If there's an error writing to the log file, disable logging
+                try:
+                    self.log_file.close()
+                except Exception:
+                    pass
+                self.log_file = None
+                self.logging_active = False
+                self.log_file_path = None
         
         # Scroll to the end
         mark = buffer.create_mark(None, buffer.get_end_iter(), False)
@@ -3607,6 +3786,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             modal=True,
             destroy_with_parent=True
         )
+        
+        # Variables for continuous logging
+        self.log_file_path = None
+        self.logging_active = False
+        self.log_file = None
         
         # Create and set custom header bar
         header_bar = Gtk.HeaderBar()
@@ -3722,6 +3906,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         progress_dialog.show_all()
         
         def on_dialog_response(dialog, response_id):
+            # Close log file if logging is active
+            if self.logging_active and self.log_file:
+                try:
+                    self.log_file.write("\n--- Installation completed or cancelled ---\n")
+                    self.log_file.close()
+                except Exception:
+                    pass
+                self.log_file = None
+                self.logging_active = False
+                self.log_file_path = None
+            
             if response_id == Gtk.ResponseType.CANCEL:
                 dialog.destroy()
                 self.cleanup_installation_state()
@@ -3730,13 +3925,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Function to save log content to file
         def on_save_log_clicked(button):
+            # If logging is already active, stop it
+            if self.logging_active:
+                if self.log_file:
+                    self.log_file.close()
+                    self.log_file = None
+                self.logging_active = False
+                self.log_file_path = None
+                save_button.set_icon_name("document-save-symbolic")
+                save_button.set_tooltip_text("Save Log to File")
+                self.update_terminal(terminal_view, "\nContinuous logging stopped.\n")
+                return
+            
+            # Get current log content
             buf = terminal_view.get_buffer()
             start, end = buf.get_bounds()
             text = buf.get_text(start, end, False)
             
             # Create file chooser dialog
             file_dialog = Gtk.FileChooserDialog(
-                title="Save Installation Log",
+                title="Save and Continue Logging",
                 parent=progress_dialog,
                 action=Gtk.FileChooserAction.SAVE
             )
@@ -3755,11 +3963,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if response == Gtk.ResponseType.OK:
                 filename = file_dialog.get_filename()
                 try:
+                    # Save current content
                     with open(filename, 'w') as f:
                         f.write(text)
-                    self.update_terminal(terminal_view, f"\nLog saved to {filename}\n")
+                    
+                    # Start continuous logging
+                    self.log_file_path = filename
+                    self.log_file = open(filename, 'a')
+                    self.logging_active = True
+                    
+                    # Update button appearance
+                    save_button.set_icon_name("media-record-symbolic")
+                    save_button.set_tooltip_text("Stop Continuous Logging")
+                    
+                    self.update_terminal(terminal_view, f"\nContinuous logging started - saving to {filename}\n")
                 except Exception as e:
-                    self.update_terminal(terminal_view, f"\nError saving log: {e}\n")
+                    self.update_terminal(terminal_view, f"\nError setting up logging: {e}\n")
             
             file_dialog.destroy()
         

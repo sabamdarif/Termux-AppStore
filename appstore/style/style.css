@@ -43,22 +43,44 @@ window {
 }
 
 .category-button {
+    min-width: 160px;
+    min-height: 30px;
     background: alpha(@theme_fg_color, 0.1);
     color: @theme_fg_color;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 6px 12px;
     margin: 2px 0;
-    transition: all 200ms ease;
+    transition: none;
+    font-size: 13px;
 }
 
 .category-button:hover {
     background: alpha(@theme_fg_color, 0.15);
 }
 
+.category-button:active,
+.category-button:focus {
+    animation: none;
+}
+
 .category-button.selected {
-    background: @theme_selected_bg_color;
-    color: @theme_selected_fg_color;
+    background: #3498db;  /* Bright blue color that's visible on dark themes */
+    color: white;
+    font-weight: bold;
+    border: 1px solid #2980b9;  /* Darker blue border */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);  /* Subtle shadow for depth */
+}
+
+.category-button label {
+    padding: 1px;
+    transition: none;
+    animation: none;
+}
+
+.category-button.selected label {
+    padding: 1px 0px;
+    font-weight: bold;
 }
 
 /* App cards */
@@ -259,10 +281,9 @@ window {
     opacity: 0.7;
 }
 
+/* Progress update animation */
 .updating {
-    background-image: linear-gradient(to right, @theme_selected_bg_color 0%, @theme_selected_bg_color 0%, transparent 0%);
-    background-repeat: no-repeat;
-    transition: background-image 0.3s ease-in-out;
+    background-color: @theme_selected_bg_color;
 }
 
 /* App description */
@@ -393,13 +414,16 @@ headerbar {
 }
 
 .header-tab-button {
-    padding: 8px 16px;
+    min-width: 100px;
+    min-height: 30px;
+    padding: 6px 12px;
     border-radius: 6px;
     margin: 2px;
     transition-property: none; /* Disable all transitions */
     background: transparent;
     border: none;
     color: alpha(@theme_fg_color, 0.8);
+    font-size: 13px;
 }
 
 .header-tab-button:hover {
@@ -409,16 +433,29 @@ headerbar {
 .header-tab-button:active,
 .header-tab-button:focus {
     background: none;
-    padding: 8px 16px; /* Keep the same padding on press */
+    padding: 6px 12px; /* Keep the same padding on press */
     margin: 2px; /* Keep the same margin on press */
     border: none; /* No border animation on press */
     outline: none; /* No outline on focus */
+    animation: none;
 }
 
 .header-tab-button.active {
-    background: @theme_selected_bg_color;
-    border: 1px solid shade(@theme_selected_bg_color, 0.8);
-    color: @theme_selected_fg_color;
+    background: #3498db;  /* Bright blue color that's visible on dark themes */
+    border: 1px solid #2980b9;  /* Darker blue border */
+    color: white;
+    font-weight: bold;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);  /* Subtle shadow for depth */
+}
+
+.header-tab-button label {
+    padding: 1px;
+    transition: none;
+    animation: none;
+}
+
+.header-tab-button.active label {
+    padding: 1px 0px;
     font-weight: bold;
 }
 

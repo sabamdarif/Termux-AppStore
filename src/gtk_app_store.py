@@ -2202,6 +2202,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 else:
                     version = version.split(',')[0].strip()
                     version = version.split()[0].strip()
+                    # Remove leading 'v' if present
+                    if version.startswith('v'):
+                        version = version[1:]
             else:
                 version = 'Unavailable'
             version_label.set_text(GLib.markup_escape_text(version))

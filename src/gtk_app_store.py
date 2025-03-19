@@ -555,27 +555,41 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 return
 
             if os.path.exists(last_version_check_file):
-                with open(last_version_check_file, 'r') as f:
-                    last_check = datetime.fromtimestamp(float(f.read().strip()))
-                    if current_time - last_check < timedelta(days=1):
-                        print("Version check performed within last 24 hours, skipping...")
-                        # Load app metadata and setup UI first
-                        thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
-                        thread.daemon = True
-                        thread.start()
-                        return
+                try:
+                    with open(last_version_check_file, 'r') as f:
+                        file_content = f.read().strip()
+                        if file_content:  # Make sure file has content
+                            last_check = datetime.fromtimestamp(float(file_content))
+                            if current_time - last_check < timedelta(days=1):
+                                print(f"Version check performed within last 24 hours ({last_check}), skipping...")
+                                # Load app metadata and setup UI first
+                                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
+                                thread.daemon = True
+                                thread.start()
+                                return
+                        else:
+                            print("Last version check file is empty, will refresh")
+                except (ValueError, OSError) as e:
+                    print(f"Error reading last version check file: {e}, will refresh")
+            else:
+                print("No previous version check found, will perform initial check")
 
             # If we reach here, we need to update versions
             print("Performing daily version check...")
             self.start_refresh(is_manual=False)
             
-            # Update last check time
-            with open(last_version_check_file, 'w') as f:
-                f.write(str(current_time.timestamp()))
+            # Update last check time is now handled in refresh_complete method
 
         except Exception as e:
             print(f"Error checking updates: {e}")
-            self.start_refresh(is_manual=False)
+            # Load app metadata to ensure UI is functional even if refresh fails
+            try:
+                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
+                thread.daemon = True
+                thread.start()
+            except:
+                # Last resort - force a refresh if load fails
+                self.start_refresh(is_manual=False)
 
     def update_app_versions(self):
         """Update versions for all apps in the background"""
@@ -1208,6 +1222,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Reset the refreshing flag
         self.is_refreshing = False
+        
+        # Update last version check timestamp
+        current_time = datetime.now()
+        with open(LAST_VERSION_CHECK_FILE, 'w') as f:
+            f.write(str(current_time.timestamp()))
+        print(f"Updated last version check timestamp: {current_time}")
         
         # Load app metadata first
         self.load_app_metadata()
@@ -2297,6 +2317,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.spinner.hide()
         self.loading_label.hide()
         # self.refresh_button.set_sensitive(True)
+        
+        # Show the header bar again in case of error
+        header_bar = self.get_titlebar()
+        if header_bar:
+            header_bar.show()
         
         # Show error dialog
         self.show_error_dialog(f"Refresh failed: {error_message}")

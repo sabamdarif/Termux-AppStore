@@ -183,19 +183,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             raise
 
     def create_ui(self):
-        """Create the main UI layout"""
+        """Create the main UI for the application"""
+        # Set up CSS
+        screen = Gdk.Screen.get_default()
+        css_provider = Gtk.CssProvider()
+        # Try to load CSS, but don't fail if there are errors
+        css_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "style.css")
+        print(f"Loading CSS from: {css_file}")
         try:
-            # Load CSS
-            css_provider = Gtk.CssProvider()
-            css_file = Path(__file__).parent / "style" / "style.css"
-            print(f"Loading CSS from: {css_file}")
             css_provider.load_from_path(str(css_file))
             Gtk.StyleContext.add_provider_for_screen(
-                Gdk.Screen.get_default(),
-                css_provider,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
+                screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        except Exception as e:
+            print(f"Warning: CSS error occurred: {e}")
+            print("Continuing without custom styles")
 
+        try:
             # Create main container with overlay
             self.overlay = Gtk.Overlay()
             self.add(self.overlay)
@@ -265,23 +268,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def create_tab_button(self, label_text, icon_name):
         """Create a styled tab button with icon and label"""
         button = Gtk.Button()
-        button.get_style_context().add_class('header-tab-button')
+        button.set_relief(Gtk.ReliefStyle.NONE)
+        button.get_style_context().add_class("header-tab-button")
         
-        # Add these properties to help prevent animations
-        button.set_can_focus(False)  # Prevent focus animation
-        button.set_can_default(False)  # Prevent default button animation
-        button.set_relief(Gtk.ReliefStyle.NONE)  # Remove button relief effect
+        # Set fixed size to prevent the button from changing size when text becomes bold
+        button.set_size_request(120, 36)
         
-        # Create fixed-size button to avoid resizing during clicks
-        button.set_size_request(120, 36)  # Set a fixed size
-        
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        icon = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.BUTTON)
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        icon = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.MENU)
         label = Gtk.Label(label=label_text)
         
-        box.pack_start(icon, False, False, 0)
-        box.pack_start(label, False, False, 0)
-        button.add(box)
+        hbox.pack_start(icon, False, False, 0)
+        hbox.pack_start(label, False, False, 0)
+        button.add(hbox)
         
         return button
         
@@ -1465,7 +1464,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Add "All Apps" button first
         all_button = Gtk.Button(label="All Apps")
         all_button.connect("clicked", self.on_category_clicked)
-        all_button.set_size_request(-1, 40)
+        all_button.set_size_request(180, 40)  # Set fixed width and height
         all_button.get_style_context().add_class("category-button")
         all_button.get_style_context().add_class("selected")
         self.sidebar.pack_start(all_button, False, True, 0)
@@ -1475,7 +1474,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         for category in sorted(self.categories):
             button = Gtk.Button(label=category)
             button.connect("clicked", self.on_category_clicked)
-            button.set_size_request(-1, 40)
+            button.set_size_request(180, 40)  # Set fixed width and height
             button.get_style_context().add_class("category-button")
             self.sidebar.pack_start(button, False, True, 0)
             self.category_buttons.append(button)
@@ -1528,8 +1527,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_category_clicked(self, button):
         # Update selected state of category buttons
-        for btn in self.category_buttons:
-            btn.get_style_context().remove_class('selected')
+        for child in self.category_buttons:
+            child.get_style_context().remove_class('selected')
         button.get_style_context().add_class('selected')
 
         category = button.get_label()
@@ -3329,16 +3328,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def update_progress(self, progress):
         """Update the progress bar effect on button"""
+        # Use CSS custom property instead of regenerating CSS
+        self.update_button.get_style_context().add_class('updating')
+        
+        # Create style provider if it doesn't exist
+        if not hasattr(self, 'progress_provider'):
+            self.progress_provider = Gtk.CssProvider()
+            self.update_button.get_style_context().add_provider(
+                self.progress_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        
+        # Set the custom property value
         css = f"""
             .updating {{
-                background-image: linear-gradient(to right, @theme_selected_bg_color 0%, 
-                    @theme_selected_bg_color {progress}%, transparent {progress}%);
+                --progress-value: {progress}%;
             }}
         """
-        css_provider = Gtk.CssProvider()
-        css_provider.load_from_data(css.encode())
-        self.update_button.get_style_context().add_provider(
-            css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.progress_provider.load_from_data(css.encode())
         return True
 
     def update_complete(self):

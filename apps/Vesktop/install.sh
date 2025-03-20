@@ -18,6 +18,7 @@ check_and_delete "/root/${filename}"
 "
 download_file "${page_url}/releases/download/${version}/${filename}"
 distro_run "
+sudo apt update -y -o Dpkg::Options::="--force-confnew"
 sudo apt install ./${filename} -y
 check_and_delete "/root/${filename}"
 "

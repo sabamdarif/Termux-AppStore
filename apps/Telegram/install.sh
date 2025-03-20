@@ -9,6 +9,9 @@ package_name="telegram-desktop"
 run_cmd="telegram-desktop --no-sandbox"
 
 if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]];then
+distro_run "
+sudo apt update -y -o Dpkg::Options::="--force-confnew"
+"
     $selected_distro install telegram-desktop -y
 elif [[ "$selected_distro" == "fedora" ]]; then
     distro_run 'dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(. /etc/os-release && echo $VERSION_ID).noarch.rpm -y'

@@ -18,7 +18,7 @@ fi
 
 if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]]; then
 distro_run "
-sudo apt update && sudo apt install -y libayatana-appindicator3-1 libwebkit2gtk-4.0-37 libwebkit2gtk-4.1-0 libwebkit2gtk-4.0-dev libavcodec-extra libasound2 libegl1-mesa libgl1-mesa-glx libgles2 libwayland-egl1 libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 mpv libmpv-dev libxcb-xfixes0 pipewire pipewire-audio-client-libraries libgtk-3-0 libgdk-pixbuf2.0-0 libwayland-client0 libwayland-egl1 libwayland-cursor0
+sudo apt update -y -o Dpkg::Options::="--force-confnew" && sudo apt install -y libayatana-appindicator3-1 libwebkit2gtk-4.0-37 libwebkit2gtk-4.1-0 libwebkit2gtk-4.0-dev libavcodec-extra libasound2 libegl1-mesa libgl1-mesa-glx libgles2 libwayland-egl1 libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 mpv libmpv-dev libxcb-xfixes0 pipewire pipewire-audio-client-libraries libgtk-3-0 libgdk-pixbuf2.0-0 libwayland-client0 libwayland-egl1 libwayland-cursor0
 "
 
 elif [[ "$selected_distro" == "fedora" ]]; then

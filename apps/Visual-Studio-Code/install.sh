@@ -12,6 +12,7 @@ run_cmd="/usr/share/code/code --no-sandbox"
 if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]];then
 
 distro_run '
+sudo apt update -y -o Dpkg::Options::="--force-confnew"
 # Ensure wget and gpg are installed
 sudo apt-get install -y wget gpg
 

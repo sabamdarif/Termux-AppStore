@@ -21,7 +21,8 @@ if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]];
     download_file "${page_url}/releases/download/${version}/${filename}"
     distro_run "
 sudo apt install ./${filename} -y
-mv '/opt/Signal Unofficial'  /opt/Signal-Unofficial
+cd /opt
+mv 'Signal Unofficial' Signal-Unofficial
 "
     check_and_delete "${working_dir}/${filename}"
 elif [[ "$selected_distro" == "fedora" ]]; then

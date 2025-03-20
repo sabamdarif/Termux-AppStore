@@ -155,6 +155,15 @@ print_success "Downloading $package_name AppImage..."
 download_file "\${page_url}/releases/download/\${version}/\$appimage_filename"
 install_appimage "\$appimage_filename" "$package_name"
 
+# Determine which logo file to use
+if [ -f "\${HOME}/.appstore/logo/$folder_name/logo.png" ]; then
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo.png"
+elif [ -f "\${HOME}/.appstore/logo/$folder_name/logo.svg" ]; then
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo.svg"
+else
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo"
+fi
+
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
@@ -162,7 +171,7 @@ Name=${package_name^}
 Exec=pdrun "\${run_cmd}"
 Terminal=false
 Type=Application
-Icon=\${HOME}/.appstore/logo/$folder_name/logo.png
+Icon=\${icon_path}
 StartupWMClass=$package_name
 Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
@@ -220,6 +229,15 @@ else
     print_failed "Unsupported distro"
 fi
 
+# Determine which logo file to use
+if [ -f "\${HOME}/.appstore/logo/$folder_name/logo.png" ]; then
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo.png"
+elif [ -f "\${HOME}/.appstore/logo/$folder_name/logo.svg" ]; then
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo.svg"
+else
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo"
+fi
+
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
@@ -227,7 +245,7 @@ Name=${package_name^}
 Exec=pdrun "\${run_cmd}"
 Terminal=false
 Type=Application
-Icon=\${HOME}/.appstore/logo/$folder_name/logo.png
+Icon=\${icon_path}
 StartupWMClass=$package_name
 Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
@@ -265,6 +283,16 @@ echo "\$(pwd)"
 extract "${filename_pattern}"
 check_and_delete "${filename_pattern}"
 "
+
+# Determine which logo file to use
+if [ -f "\${HOME}/.appstore/logo/$folder_name/logo.png" ]; then
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo.png"
+elif [ -f "\${HOME}/.appstore/logo/$folder_name/logo.svg" ]; then
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo.svg"
+else
+    icon_path="\${HOME}/.appstore/logo/$folder_name/logo"
+fi
+
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
@@ -272,13 +300,12 @@ Name=${package_name^}
 Exec=pdrun "\${run_cmd}"
 Terminal=false
 Type=Application
-Icon=\${HOME}/.appstore/logo/$folder_name/logo.png
+Icon=\${icon_path}
 StartupWMClass=$package_name
 Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
 Categories=${selected_categories[0]};
 DESKTOP_EOF
-
 EOF
         fi
     fi
@@ -463,17 +490,26 @@ main() {
     
     # Handle logo
     while true; do
-        read -p $'\nEnter path to logo.png: ' logo_path
+        read -p $'\nEnter path to logo (PNG or SVG): ' logo_path
         
         # Remove quotes if present
         logo_path="${logo_path//[\'\"]/}"
         
-        if [ -f "$logo_path" ] && [[ "$logo_path" =~ \.png$ ]]; then
-            cp "$logo_path" "$app_dir/logo.png"
-            echo "Logo copied successfully"
-            break
+        if [ -f "$logo_path" ]; then
+            # Check file extension
+            if [[ "$logo_path" =~ \.png$ ]]; then
+                cp "$logo_path" "$app_dir/logo.png"
+                echo "PNG logo copied successfully"
+                break
+            elif [[ "$logo_path" =~ \.svg$ ]]; then
+                cp "$logo_path" "$app_dir/logo.svg"
+                echo "SVG logo copied successfully"
+                break
+            else
+                echo "Invalid file format. Please provide a PNG or SVG file."
+            fi
         else
-            echo "Invalid path or not a PNG file"
+            echo "Invalid path or file does not exist"
         fi
     done
     

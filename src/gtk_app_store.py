@@ -99,6 +99,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.distro_enabled = False
         self.is_refreshing = False  # Add a flag to track refresh state
         
+        # Initialize search variables
+        self.search_timeout_id = None
+        self.search_delay = 15  # milliseconds
+        
         # Set up scaling for hi-dpi screens
         self.set_default_size(1000, 650)
         # Set window position to center
@@ -244,8 +248,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.installed_button.connect("clicked", self.on_section_clicked, "installed")
             self.updates_button.connect("clicked", self.on_section_clicked, "updates")
             
-            # Set initial active state
+            # Set initial active state - use both classes for compatibility
             self.explore_button.get_style_context().add_class('active')
+            self.explore_button.get_style_context().add_class('selected')
 
             tabs_box.pack_start(self.explore_button, False, False, 0)
             tabs_box.pack_start(self.installed_button, False, False, 0)
@@ -1499,9 +1504,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         search_box.set_margin_start(10)
         search_box.set_margin_end(10)
         search_box.set_margin_top(10)
-        self.search_entry = Gtk.SearchEntry()
+        self.search_entry = Gtk.Entry()
         self.search_entry.set_placeholder_text("Search apps...")
-        self.search_entry.connect("search-changed", self.on_search_changed)
+        self.search_entry.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "system-search-symbolic")
+        self.search_entry.set_icon_activatable(Gtk.EntryIconPosition.PRIMARY, False)
+        self.search_entry.get_style_context().add_class('search-entry')
+        self.search_entry.connect("changed", self.on_search_changed)
         self.search_entry.set_size_request(-1, 40)
         search_box.pack_start(self.search_entry, True, True, 0)
         self.right_panel.pack_start(search_box, False, True, 0)
@@ -1537,14 +1545,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.update_button.hide()  # Ensure update button is hidden initially
 
     def on_category_clicked(self, button):
+        """Handle category button clicks"""
         # Update selected state of category buttons
         for child in self.category_buttons:
             child.get_style_context().remove_class('selected')
         button.get_style_context().add_class('selected')
 
         category = button.get_label()
-        # Clear search when changing categories
-        self.search_entry.set_text("")
+        print(f"Category selected: {category}")
+        
+        # Get current search text before clearing
+        current_search = self.search_entry.get_text()
+        
+        # Only clear search if user hasn't entered anything
+        if not current_search:
+            self.search_entry.set_text("")
+            
+        # Show apps for the selected category
         self.show_apps(category)
 
     def on_refresh_clicked(self, button):
@@ -2152,25 +2169,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         try:
             # Clear current list safely
             GLib.idle_add(self.clear_app_list_box)
-
+            
             # Filter apps based on category and search query
             filtered_apps = self.apps_data
             if category and category != "All Apps":
                 filtered_apps = [app for app in filtered_apps if category in app['categories']]
-
+                # print(f"Filtered by category '{category}': {len(filtered_apps)} apps")
+                
             # Apply search filter if search entry has text
             search_text = self.search_entry.get_text().lower()
             if search_text:
+                # print(f"Filtering by search term: '{search_text}'")
+                original_count = len(filtered_apps)
                 filtered_apps = [
                     app for app in filtered_apps
                     if search_text in app['app_name'].lower()
                     or search_text in app['description'].lower()
                     or any(search_text in cat.lower() for cat in app['categories'])
                 ]
-
+                # print(f"Search filtered {original_count} -> {len(filtered_apps)} apps")
+            
             # Add filtered apps to the list using idle_add
-            for app in filtered_apps:
-                GLib.idle_add(lambda a=app: self.add_app_card(a))
+            if filtered_apps:
+                # print(f"Displaying {len(filtered_apps)} apps")
+                for app in filtered_apps:
+                    GLib.idle_add(lambda a=app: self.add_app_card(a))
+            else:
+                # print("No apps match the current filters")
+                # Show a message that no apps match
+                GLib.idle_add(self._show_no_apps_message, search_text)
 
             GLib.idle_add(self.app_list_box.show_all)
         except Exception as e:
@@ -2178,16 +2205,45 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             import traceback
             traceback.print_exc()
 
+    def _show_no_apps_message(self, search_text):
+        """Show a message when no apps match the search"""
+        message_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        message_box.set_valign(Gtk.Align.CENTER)
+        message_box.set_halign(Gtk.Align.CENTER)
+        
+        # Add an icon
+        icon = Gtk.Image.new_from_icon_name("system-search", Gtk.IconSize.DIALOG)
+        message_box.pack_start(icon, False, False, 0)
+        
+        # Add message
+        if search_text:
+            message = Gtk.Label()
+            message.set_markup(f"<span size='larger'>No apps match: <i>{GLib.markup_escape_text(search_text)}</i></span>")
+            message_box.pack_start(message, False, False, 0)
+            
+            # Add suggestion
+            suggestion = Gtk.Label()
+            suggestion.set_markup("<span>Try a different search term</span>")
+            message_box.pack_start(suggestion, False, False, 10)
+        else:
+            message = Gtk.Label()
+            message.set_markup("<span size='larger'>No apps available</span>")
+            message_box.pack_start(message, False, False, 0)
+        
+        self.app_list_box.pack_start(message_box, True, True, 0)
+
     def clear_app_list_box(self):
-        """Safely clear the app list box"""
-        try:
-            for child in self.app_list_box.get_children():
-                self.app_list_box.remove(child)
-                child.destroy()
-            return False
-        except Exception as e:
-            print(f"Error clearing app list box: {e}")
-            return False
+        """Clear the app list box, removing all children"""
+        # Print the current number of children for debugging
+        children_count = len(self.app_list_box.get_children())
+        # print(f"Clearing app list box with {children_count} children")
+        
+        # Remove all children
+        for child in self.app_list_box.get_children():
+            self.app_list_box.remove(child)
+        
+        # print("App list box cleared")
+        return False  # For use with GLib.idle_add
 
     def add_app_card(self, app):
         """Add a single app card to the list box"""
@@ -2331,14 +2387,47 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_search_changed(self, entry):
         """Handle search entry changes"""
-        # Get the currently selected section
+        # Get the current search text
+        search_text = entry.get_text().lower()
+        # print(f"Search changed: '{search_text}'")
+        
+        # Remove any existing timeout
+        if self.search_timeout_id:
+            GLib.source_remove(self.search_timeout_id)
+            self.search_timeout_id = None
+        
+        # Add a small delay to avoid unnecessary refreshes while typing
+        self.search_timeout_id = GLib.timeout_add(self.search_delay, self._do_search, search_text)
+
+    def _do_search(self, search_text):
+        """Process the search after delay"""
+        self.search_timeout_id = None  # Clear the timeout ID
+        
+        # Check all potential classes for tab selection
+        explorer_selected = (self.explore_button.get_style_context().has_class('selected') or 
+                            self.explore_button.get_style_context().has_class('active'))
+        installed_selected = (self.installed_button.get_style_context().has_class('selected') or 
+                             self.installed_button.get_style_context().has_class('active'))
+        updates_selected = (self.updates_button.get_style_context().has_class('selected') or 
+                           self.updates_button.get_style_context().has_class('active'))
+        
+        # Log all tab states for debugging
+        # print(f"Tab states - Explore: {explorer_selected}, Installed: {installed_selected}, Updates: {updates_selected}")
+        
+        # Determine which section is selected
         selected_section = None
-        if self.explore_button.get_style_context().has_class('selected'):
+        if explorer_selected:
             selected_section = "explore"
-        elif self.installed_button.get_style_context().has_class('selected'):
+        elif installed_selected:
             selected_section = "installed"
-        elif self.updates_button.get_style_context().has_class('selected'):
+        elif updates_selected:
             selected_section = "updates"
+        else:
+            # Default to explore if nothing is selected
+            selected_section = "explore"
+            print("No tab appears to be selected, defaulting to 'explore'")
+            
+        # print(f"Selected section: {selected_section}")
         
         # Update the appropriate view
         if selected_section == "explore":
@@ -2350,11 +2439,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     break
             if selected_category == "All Apps":
                 selected_category = None
+                
+            # print(f"Selected category: {selected_category}")
             self.show_apps(selected_category)
         elif selected_section == "installed":
             self.show_installed_apps()
         elif selected_section == "updates":
             self.show_update_apps()
+            
+        return False  # Don't repeat the timeout
 
     def on_delete_event(self, widget, event):
         """Handle window close event"""
@@ -3560,10 +3653,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.update_button.hide()
             self.search_entry.show()
             
+            # Get the currently selected category
+            selected_category = None
+            for button in self.category_buttons:
+                if button.get_style_context().has_class('selected'):
+                    selected_category = button.get_label()
+                    break
+            
+            if selected_category == "All Apps" or selected_category is None:
+                selected_category = None
+            
             # Define function to load content and remove spinner
             def load_explore_content():
                 self.clear_app_list_box()  # Clear loading indicator
-                self.show_apps()
+                self.show_apps(selected_category)
                 return False
             
             # Schedule content load on next idle
@@ -3600,103 +3703,56 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             GLib.idle_add(load_updates_content)
 
     def show_installed_apps(self):
-        """Show only installed apps"""
-        # Clear current content
-        for child in self.app_list_box.get_children():
-            self.app_list_box.remove(child)
-        
-        # Get installed apps
-        installed_apps = [app for app in self.apps_data if app['folder_name'] in self.installed_apps]
-        
-        # Apply search filter if search entry has text
-        search_text = self.search_entry.get_text().lower()
-        if search_text:
-            installed_apps = [
-                app for app in installed_apps
-                if search_text in app['app_name'].lower()
-                or search_text in app['description'].lower()
-                or any(search_text in cat.lower() for cat in app['categories'])
-            ]
-        
-        if not installed_apps:
-            # Create message for no installed apps
-            message_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-            message_box.set_valign(Gtk.Align.CENTER)
-            message_box.set_halign(Gtk.Align.CENTER)
-            
-            # Add an icon
-            icon = Gtk.Image.new_from_icon_name("dialog-information", Gtk.IconSize.DIALOG)
-            message_box.pack_start(icon, False, False, 0)
-            
-            # Add message labels
-            title_label = Gtk.Label()
-            title_label.set_markup("<span size='larger' weight='bold'>No Apps Installed</span>")
-            title_label.get_style_context().add_class('no-apps-message')
-            message_box.pack_start(title_label, False, False, 0)
-            
-            if search_text:
-                # Show search-specific message
-                message = Gtk.Label()
-                message.set_markup(f"No installed apps match the search: <i>{GLib.markup_escape_text(search_text)}</i>")
-                message.get_style_context().add_class('no-apps-submessage')
-                message_box.pack_start(message, False, False, 10)
-            else:
-                # Show general message with instructions
-                message = Gtk.Label()
-                message.set_markup(
-                    "You haven't installed any apps yet.\n"
-                    "Go to the <b>Explore</b> tab to discover and install apps."
-                )
-                message.set_justify(Gtk.Justification.CENTER)
-                message.set_line_wrap(True)
-                message.get_style_context().add_class('no-apps-submessage')
-                message_box.pack_start(message, False, False, 10)
-                
-                # Add a button to go to Explore tab
-                explore_button = Gtk.Button(label="Go to Explore")
-                explore_button.get_style_context().add_class('suggested-action')  # Gives it a highlighted appearance
-                explore_button.connect("clicked", lambda btn: self.on_section_clicked(self.explore_button, "explore"))
-                explore_button.set_margin_top(10)
-                message_box.pack_start(explore_button, False, False, 0)
-            
-            self.app_list_box.pack_start(message_box, True, True, 0)
-        else:
-            for app in installed_apps:
-                self.add_app_card(app)
-        
-        self.app_list_box.show_all()
+        """Display installed apps"""
+        try:
+            # Clear current list safely
+            GLib.idle_add(self.clear_app_list_box)
+
+            # Get search text
+            search_text = self.search_entry.get_text().lower()
+
+            # Filter and display installed apps
+            for app in self.apps_data:
+                if app['app_name'] in self.installed_apps:
+                    # Apply search filter if search entry has text
+                    if search_text:
+                        if (search_text not in app['app_name'].lower() and 
+                            search_text not in app['description'].lower() and 
+                            not any(search_text in cat.lower() for cat in app['categories'])):
+                            continue
+                    GLib.idle_add(lambda a=app: self.add_app_card(a))
+
+            GLib.idle_add(self.app_list_box.show_all)
+        except Exception as e:
+            print(f"Error in show_installed_apps: {e}")
+            import traceback
+            traceback.print_exc()
 
     def show_update_apps(self):
-        """Show only apps with updates"""
-        # Clear current content
-        for child in self.app_list_box.get_children():
-            self.app_list_box.remove(child)
-        
-        # Add apps with updates
-        update_apps = [app for app in self.apps_data if app['folder_name'] in self.pending_updates]
-        
-        if not update_apps:
-            # Create message for no updates
-            message_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-            message_box.set_valign(Gtk.Align.CENTER)
-            message_box.set_halign(Gtk.Align.CENTER)
-            
-            # Add an icon
-            icon = Gtk.Image.new_from_icon_name("software-update-available", Gtk.IconSize.DIALOG)
-            message_box.pack_start(icon, False, False, 0)
-            
-            # Add message label
-            message = Gtk.Label()
-            message.set_markup("<span size='larger'>All apps are up to date</span>")
-            message.get_style_context().add_class('no-apps-message')
-            message_box.pack_start(message, False, False, 0)
-            
-            self.app_list_box.pack_start(message_box, True, True, 0)
-        else:
-            for app in update_apps:
-                self.add_app_card(app)
-        
-        self.app_list_box.show_all()
+        """Display apps that have updates available"""
+        try:
+            # Clear current list safely
+            GLib.idle_add(self.clear_app_list_box)
+
+            # Get search text
+            search_text = self.search_entry.get_text().lower()
+
+            # Filter and display apps with updates
+            for app in self.apps_data:
+                if app['app_name'] in self.pending_updates:
+                    # Apply search filter if search entry has text
+                    if search_text:
+                        if (search_text not in app['app_name'].lower() and 
+                            search_text not in app['description'].lower() and 
+                            not any(search_text in cat.lower() for cat in app['categories'])):
+                            continue
+                    GLib.idle_add(lambda a=app: self.add_app_card(a))
+
+            GLib.idle_add(self.app_list_box.show_all)
+        except Exception as e:
+            print(f"Error in show_update_apps: {e}")
+            import traceback
+            traceback.print_exc()
 
     def process_ui_updates(self):
         """Process UI updates in a separate thread"""

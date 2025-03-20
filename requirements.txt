@@ -1,4 +1,6 @@
 #PyGObject>=3.42.0
 #Pillow>=9.0.0
 requests>=2.28.0
-urllib3>=1.26.0 
+urllib3>=1.26.0
+fuzzywuzzy>=0.18.0
+# thefuzz>=0.17.0

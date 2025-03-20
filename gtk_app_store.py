@@ -18,6 +18,27 @@ from PIL import Image
 import platform
 from concurrent.futures import ThreadPoolExecutor
 import signal
+import re
+import tempfile
+import logging
+import traceback
+import urllib.request
+import tarfile
+import zipfile
+import datetime
+import random
+import fcntl
+
+# Fuzzy search libraries
+try:
+    from fuzzywuzzy import fuzz, process
+except ImportError:
+    try:
+        from thefuzz import fuzz, process
+    except ImportError:
+        print("Warning: Fuzzy search libraries not found. Falling back to regular search.")
+        fuzz = None
+        process = None
 
 # Termux-specific paths
 TERMUX_PREFIX = "/data/data/com.termux/files/usr"
@@ -416,6 +437,27 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         output_frame.add(output_box)
         settings_box.pack_start(output_frame, False, False, 0)
         
+        # Fuzzy search setting
+        fuzzy_frame = Gtk.Frame()
+        fuzzy_frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
+        fuzzy_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        fuzzy_box.set_margin_start(12)
+        fuzzy_box.set_margin_end(12)
+        fuzzy_box.set_margin_top(12)
+        fuzzy_box.set_margin_bottom(12)
+        
+        fuzzy_label = Gtk.Label(label="Enable fuzzy search")
+        fuzzy_label.set_halign(Gtk.Align.START)
+        fuzzy_switch = Gtk.Switch()
+        fuzzy_switch.set_halign(Gtk.Align.END)
+        fuzzy_switch.set_active(self.get_setting("enable_fuzzy_search", False))
+        fuzzy_switch.connect("state-set", self.on_fuzzy_search_toggled)
+        
+        fuzzy_box.pack_start(fuzzy_label, True, True, 0)
+        fuzzy_box.pack_start(fuzzy_switch, False, False, 0)
+        fuzzy_frame.add(fuzzy_box)
+        settings_box.pack_start(fuzzy_frame, False, False, 0)
+        
         # Add settings box to content
         content_box.pack_start(settings_box, True, True, 0)
         
@@ -435,15 +477,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_auto_refresh_toggled(self, switch, state):
         """Handle toggle of auto-refresh option"""
         self.set_setting("enable_auto_refresh", state)
-        if state:
-            print("Auto-refresh enabled")
-        else:
-            print("Auto-refresh disabled")
+        print(f"Auto-refresh setting changed to: {state}")
     
     def on_command_output_toggled(self, switch, state):
         """Handle toggle of command output option"""
         self.set_setting("show_command_output", state)
-        print(f"Show command output setting changed to: {state}")
+        print(f"Command output setting changed to: {state}")
+    
+    def on_fuzzy_search_toggled(self, switch, state):
+        """Handle toggle of fuzzy search option"""
+        self.set_setting("enable_fuzzy_search", state)
+        print(f"Fuzzy search setting changed to: {state}")
     
     def on_about_clicked(self, widget):
         """Show about dialog"""
@@ -2181,12 +2225,43 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if search_text:
                 # print(f"Filtering by search term: '{search_text}'")
                 original_count = len(filtered_apps)
-                filtered_apps = [
-                    app for app in filtered_apps
-                    if search_text in app['app_name'].lower()
-                    or search_text in app['description'].lower()
-                    or any(search_text in cat.lower() for cat in app['categories'])
-                ]
+                
+                # Check if fuzzy search is enabled
+                if self.get_setting("enable_fuzzy_search", False) and (fuzz is not None):
+                    # Use fuzzy search
+                    fuzzy_threshold = 60  # Minimum score to consider a match (0-100)
+                    fuzzy_matches = []
+                    
+                    for app in filtered_apps:
+                        # Check app name
+                        name_score = fuzz.partial_ratio(search_text, app['app_name'].lower())
+                        
+                        # Check description
+                        desc_score = fuzz.partial_ratio(search_text, app['description'].lower())
+                        
+                        # Check categories
+                        cat_score = 0
+                        for cat in app['categories']:
+                            cat_score = max(cat_score, fuzz.partial_ratio(search_text, cat.lower()))
+                        
+                        # Use the best score
+                        max_score = max(name_score, desc_score, cat_score)
+                        
+                        if max_score >= fuzzy_threshold:
+                            # Store the app and its score for sorting
+                            fuzzy_matches.append((app, max_score))
+                    
+                    # Sort by score (highest first) and extract just the apps
+                    fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
+                    filtered_apps = [app for app, score in fuzzy_matches]
+                else:
+                    # Use regular search (substring matching)
+                    filtered_apps = [
+                        app for app in filtered_apps
+                        if search_text in app['app_name'].lower()
+                        or search_text in app['description'].lower()
+                        or any(search_text in cat.lower() for cat in app['categories'])
+                    ]
                 # print(f"Search filtered {original_count} -> {len(filtered_apps)} apps")
             
             # Add filtered apps to the list using idle_add
@@ -3710,17 +3785,53 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Get search text
             search_text = self.search_entry.get_text().lower()
+            
+            # Collect all installed apps
+            all_installed_apps = [app for app in self.apps_data if app['app_name'] in self.installed_apps]
+            
+            # If search text is provided, filter the apps
+            if search_text:
+                if self.get_setting("enable_fuzzy_search", False) and (fuzz is not None):
+                    # Use fuzzy search
+                    fuzzy_threshold = 60  # Minimum score to consider a match
+                    fuzzy_matches = []
+                    
+                    for app in all_installed_apps:
+                        # Check app name
+                        name_score = fuzz.partial_ratio(search_text, app['app_name'].lower())
+                        
+                        # Check description
+                        desc_score = fuzz.partial_ratio(search_text, app['description'].lower())
+                        
+                        # Check categories
+                        cat_score = 0
+                        for cat in app['categories']:
+                            cat_score = max(cat_score, fuzz.partial_ratio(search_text, cat.lower()))
+                        
+                        # Use the best score
+                        max_score = max(name_score, desc_score, cat_score)
+                        
+                        if max_score >= fuzzy_threshold:
+                            # Store the app and its score for sorting
+                            fuzzy_matches.append((app, max_score))
+                    
+                    # Sort by score (highest first) and extract just the apps
+                    fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
+                    filtered_apps = [app for app, score in fuzzy_matches]
+                else:
+                    # Use regular search
+                    filtered_apps = [
+                        app for app in all_installed_apps
+                        if search_text in app['app_name'].lower() or 
+                        search_text in app['description'].lower() or 
+                        any(search_text in cat.lower() for cat in app['categories'])
+                    ]
+            else:
+                filtered_apps = all_installed_apps
 
-            # Filter and display installed apps
-            for app in self.apps_data:
-                if app['app_name'] in self.installed_apps:
-                    # Apply search filter if search entry has text
-                    if search_text:
-                        if (search_text not in app['app_name'].lower() and 
-                            search_text not in app['description'].lower() and 
-                            not any(search_text in cat.lower() for cat in app['categories'])):
-                            continue
-                    GLib.idle_add(lambda a=app: self.add_app_card(a))
+            # Display the filtered apps
+            for app in filtered_apps:
+                GLib.idle_add(lambda a=app: self.add_app_card(a))
 
             GLib.idle_add(self.app_list_box.show_all)
         except Exception as e:
@@ -3736,17 +3847,53 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Get search text
             search_text = self.search_entry.get_text().lower()
+            
+            # Collect all apps with updates
+            all_update_apps = [app for app in self.apps_data if app['app_name'] in self.pending_updates]
+            
+            # If search text is provided, filter the apps
+            if search_text:
+                if self.get_setting("enable_fuzzy_search", False) and (fuzz is not None):
+                    # Use fuzzy search
+                    fuzzy_threshold = 60  # Minimum score to consider a match
+                    fuzzy_matches = []
+                    
+                    for app in all_update_apps:
+                        # Check app name
+                        name_score = fuzz.partial_ratio(search_text, app['app_name'].lower())
+                        
+                        # Check description
+                        desc_score = fuzz.partial_ratio(search_text, app['description'].lower())
+                        
+                        # Check categories
+                        cat_score = 0
+                        for cat in app['categories']:
+                            cat_score = max(cat_score, fuzz.partial_ratio(search_text, cat.lower()))
+                        
+                        # Use the best score
+                        max_score = max(name_score, desc_score, cat_score)
+                        
+                        if max_score >= fuzzy_threshold:
+                            # Store the app and its score for sorting
+                            fuzzy_matches.append((app, max_score))
+                    
+                    # Sort by score (highest first) and extract just the apps
+                    fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
+                    filtered_apps = [app for app, score in fuzzy_matches]
+                else:
+                    # Use regular search
+                    filtered_apps = [
+                        app for app in all_update_apps
+                        if search_text in app['app_name'].lower() or 
+                        search_text in app['description'].lower() or 
+                        any(search_text in cat.lower() for cat in app['categories'])
+                    ]
+            else:
+                filtered_apps = all_update_apps
 
-            # Filter and display apps with updates
-            for app in self.apps_data:
-                if app['app_name'] in self.pending_updates:
-                    # Apply search filter if search entry has text
-                    if search_text:
-                        if (search_text not in app['app_name'].lower() and 
-                            search_text not in app['description'].lower() and 
-                            not any(search_text in cat.lower() for cat in app['categories'])):
-                            continue
-                    GLib.idle_add(lambda a=app: self.add_app_card(a))
+            # Display the filtered apps
+            for app in filtered_apps:
+                GLib.idle_add(lambda a=app: self.add_app_card(a))
 
             GLib.idle_add(self.app_list_box.show_all)
         except Exception as e:
@@ -4149,14 +4296,27 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if os.path.exists(SETTINGS_FILE):
                 with open(SETTINGS_FILE, 'r') as f:
                     self.settings = json.load(f)
-                    print(f"Loaded settings: {self.settings}")
+                    # Add any keys that might be missing in old settings files
+                    if "use_terminal_for_progress" not in self.settings:
+                        self.settings["use_terminal_for_progress"] = False
+                    if "enable_auto_refresh" not in self.settings:
+                        self.settings["enable_auto_refresh"] = True
+                    if "last_category" not in self.settings:
+                        self.settings["last_category"] = "All Apps"
+                    if "show_command_output" not in self.settings:
+                        self.settings["show_command_output"] = False
+                    if "enable_fuzzy_search" not in self.settings:
+                        self.settings["enable_fuzzy_search"] = False
+                    # Save the updated settings
+                    self.save_settings()
             else:
-                # Default settings
+                # Create default settings
                 self.settings = {
                     "use_terminal_for_progress": False,
                     "enable_auto_refresh": True,
                     "last_category": "All Apps",
-                    "show_command_output": False
+                    "show_command_output": False,
+                    "enable_fuzzy_search": False
                     # Add more default settings as needed
                 }
                 # Save default settings
@@ -4169,7 +4329,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 "use_terminal_for_progress": False,
                 "enable_auto_refresh": True,
                 "last_category": "All Apps",
-                "show_command_output": False
+                "show_command_output": False,
+                "enable_fuzzy_search": False
             }
     
     def save_settings(self):

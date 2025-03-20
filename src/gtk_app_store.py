@@ -2335,8 +2335,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             card_box.set_margin_bottom(12)
 
             # App logo with error handling
-            logo_path = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'], 'logo.png')
-            if os.path.exists(logo_path):
+            logo_path = None
+            # Try PNG first
+            png_path = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'], 'logo.png')
+            # Try SVG if PNG doesn't exist
+            svg_path = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'], 'logo.svg')
+            
+            if os.path.exists(png_path):
+                logo_path = png_path
+            elif os.path.exists(svg_path):
+                logo_path = svg_path
+                
+            if logo_path:
                 try:
                     # Load image in a safer way
                     pixbuf = None

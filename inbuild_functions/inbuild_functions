@@ -36,60 +36,69 @@ function print_log() {
 
 function print_success() {
     echo "[✓] $1"
-    print_log "SUCCESS: $1"
-
 }
 
 function print_failed() {
     echo "[✗] $1"
-    print_log "FAILED: $1"
     exit 1
 }
 
 function print_warn() {
     echo "[!] $1"
-    print_log "WARNING: $1"
-
 }
 
 function wait_for_keypress() {
-	read -n1 -s -r -p "Press any key to continue..."
-	echo
+    read -n1 -s -r -p "Press any key to continue..."
+    echo
 }
 
 function check_and_create_directory() {
-    if [[ ! -d "$1" ]]; then
-        mkdir -p "$1"
-        print_log "Created directory: $1"
-    fi
+    local max_retries=3
+    local attempt=1
+    
+    while (( attempt <= max_retries )); do
+        if [[ ! -d "$1" ]]; then
+            mkdir -p "$1" && break
+        fi
+        ((attempt++))
+        sleep 1
+    done
 }
 
 function check_and_delete() {
+    local max_retries=3
+    local attempt=1
+    
     for item in "$@"; do
-        if [[ -e "$item" ]]; then
-            rm -rf "$item" >/dev/null 2>&1
-            print_log "Deleted: $item"
-        fi
+        while (( attempt <= max_retries )); do
+            if [[ -e "$item" ]]; then
+                rm -rf "$item" >/dev/null 2>&1 && break
+            fi
+            ((attempt++))
+            sleep 1
+        done
     done
 }
 
 # first check then backup
 function check_and_backup() {
-	local file
-	local files_folders
+    local max_retries=3
+    local attempt=1
+    
     for files_folders in "$@"; do
         for file in $files_folders; do
             if [[ -e "$file" ]]; then
-            local date_str
-			date_str=$(date +"%d-%m-%Y")
-			local backup="${file}-${date_str}.bak"
-			    if [[ -e "$backup" ]]; then
-				echo "Backup file ${backup} already exists"
-				echo
-				fi
-		    echo "backing up file $file"
-			mv "$1" "$backup"
-			print_log "$1 $backup"
+                local date_str=$(date +"%d-%m-%Y")
+                local backup="${file}-${date_str}.bak"
+                
+                while (( attempt <= max_retries )); do
+                    if mv "$file" "$backup"; then
+                        echo "backed up file $file"
+                        break
+                    fi
+                    ((attempt++))
+                    sleep 1
+                done
             fi
         done
     done
@@ -98,23 +107,23 @@ function check_and_backup() {
 function download_file() {
     local url="$1"
     local file_name="$(basename "$url")"
-    local max_retries=3
+    local max_retries=5
+    local attempt=1
 
     if ! command -v aria2c &> /dev/null; then
         package_install_and_check "aria2"
     fi
     check_and_delete "$file_name"
 
-    for ((attempt = 1; attempt <= max_retries; attempt++)); do
-        aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url"
-
-        if [[ $? -eq 0 && -f "$file_name" && -s "$file_name" ]]; then
+    while (( attempt <= max_retries )); do
+        if aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url" && [[ -f "$file_name" && -s "$file_name" ]]; then
             print_success "Download completed: $file_name"
             return 0
         fi
 
         print_warn "Download failed, attempt $attempt of $max_retries."
         sleep 2
+        ((attempt++))
     done
 
     print_failed "Download failed after $max_retries attempts: $file_name"
@@ -123,16 +132,14 @@ function download_file() {
 function extract() {
     local archive="$1"
     local output_dir="$2"
-    local max_retries=3
-    local attempt=0
+    local max_retries=5
+    local attempt=1
 
-    while (( attempt < max_retries )); do
+    while (( attempt <= max_retries )); do
         if [[ ! -f "$archive" ]]; then
-            echo "Error: '$archive' does not exist!"
-            exit 1
+            print_failed "Error: '$archive' does not exist!"
         fi
 
-        # Prepare output directory argument if provided
         local dir_arg=""
         if [[ -n "$output_dir" ]]; then
             check_and_create_directory "$output_dir"
@@ -141,50 +148,50 @@ function extract() {
 
         case "$archive" in
             *.tar.gz|*.tgz)
-                tar xvzf "$archive" $dir_arg --no-same-owner -h && break
+                if tar xvzf "$archive" $dir_arg --no-same-owner -h; then break; fi
                 ;;
             *.tar.xz)
-                tar xvJf "$archive" $dir_arg --no-same-owner -h && break
+                if tar xvJf "$archive" $dir_arg --no-same-owner -h; then break; fi
                 ;;
             *.tar.bz2|*.tbz2)
-                tar xvjf "$archive" $dir_arg --no-same-owner -h && break
+                if tar xvjf "$archive" $dir_arg --no-same-owner -h; then break; fi
                 ;;
             *.tar)
-                tar xvf "$archive" $dir_arg --no-same-owner -h && break
+                if tar xvf "$archive" $dir_arg --no-same-owner -h; then break; fi
                 ;;
             *.bz2)
                 if [[ -n "$output_dir" ]]; then
-                    bunzip2 -c "$archive" > "$output_dir/$(basename "${archive%.bz2}")"
+                    if bunzip2 -c "$archive" > "$output_dir/$(basename "${archive%.bz2}")"; then break; fi
                 else
-                    bunzip2 "$archive"
+                    if bunzip2 "$archive"; then break; fi
                 fi
                 ;;
             *.gz)
                 if [[ -n "$output_dir" ]]; then
-                    gunzip -c "$archive" > "$output_dir/$(basename "${archive%.gz}")"
+                    if gunzip -c "$archive" > "$output_dir/$(basename "${archive%.gz}")"; then break; fi
                 else
-                    gunzip -c "$archive" > "${archive%.gz}"
+                    if gunzip -c "$archive" > "${archive%.gz}"; then break; fi
                 fi
                 ;;
             *.7z)
                 if [[ -n "$output_dir" ]]; then
-                    7z x "$archive" -o"$output_dir" -y
+                    if 7z x "$archive" -o"$output_dir" -y; then break; fi
                 else
-                    7z x "$archive" -y
+                    if 7z x "$archive" -y; then break; fi
                 fi
                 ;;
             *.rar)
                 if [[ -n "$output_dir" ]]; then
-                    unrar x -o+ "$archive" "$output_dir"
+                    if unrar x -o+ "$archive" "$output_dir"; then break; fi
                 else
-                    unrar x -o+ "$archive"
+                    if unrar x -o+ "$archive"; then break; fi
                 fi
                 ;;
             *.zip)
                 if [[ -n "$output_dir" ]]; then
-                    unzip -o "$archive" -d "$output_dir"
+                    if unzip -o "$archive" -d "$output_dir"; then break; fi
                 else
-                    unzip -o "$archive"
+                    if unzip -o "$archive"; then break; fi
                 fi
                 ;;
             *)
@@ -192,11 +199,12 @@ function extract() {
                 ;;
         esac
 
-        echo "Extraction failed, attempt $((attempt + 1)) of $max_retries."
+        print_warn "Extraction failed, attempt $attempt of $max_retries."
+        sleep 2
         ((attempt++))
     done
 
-    if (( attempt == max_retries )); then
+    if (( attempt > max_retries )); then
         print_failed "Extraction failed after $max_retries attempts: $archive"
     fi
 
@@ -206,30 +214,29 @@ function extract() {
 # find a backup file which end with a number pattern and restore it
 function check_and_restore() {
     local target_path="$1"
-    local dir
-    local base_name
-
-    dir=$(dirname "$target_path")
-    base_name=$(basename "$target_path")
-
-    local latest_backup
-   latest_backup=$(find "$dir" -maxdepth 1 -type f -name "$base_name-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9].bak" 2>/dev/null | sort | tail -n 1)
+    local max_retries=3
+    local attempt=1
+    
+    local dir=$(dirname "$target_path")
+    local base_name=$(basename "$target_path")
+    local latest_backup=$(find "$dir" -maxdepth 1 -type f -name "$base_name-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9].bak" 2>/dev/null | sort | tail -n 1)
 
     if [[ -z "$latest_backup" ]]; then
         print_failed "No backup file found for ${target_path}."
-		echo
-        exit 1
     fi
 
     if [[ -e "$target_path" ]]; then
         print_failed "Original file or directory ${target_path} already exists."
-		echo
-    else
-        mv "$latest_backup" "$target_path"
-        print_success "Restored ${latest_backup} to ${target_path}"
-		echo
     fi
-	print_log "$target_path $dir $base_name $latest_backup"
+
+    while (( attempt <= max_retries )); do
+        if mv "$latest_backup" "$target_path"; then
+            print_success "Restored ${latest_backup} to ${target_path}"
+            break
+        fi
+        ((attempt++))
+        sleep 1
+    done
 }
 
 function detact_package_manager() {
@@ -247,160 +254,147 @@ function detact_package_manager() {
 
 # will check if the package is already installed or not, if it installed then it will reinstall it and at the end it will print success/failed message
 function package_install_and_check() {
-    packs_list=($@)
+    local max_retries=3
+    local attempt=1
+    local packs_list=($@)
+    
     for package_name in "${packs_list[@]}"; do
-        echo " Processing package: $package_name"
+        echo "Processing package: $package_name"
+        attempt=1
 
-        if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-            if pacman -Qi "$package_name" >/dev/null 2>&1; then
-				print_log "$package_name = already_exist"
-                continue
-            fi
+        while (( attempt <= max_retries )); do
+            if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+                if pacman -Qi "$package_name" >/dev/null 2>&1; then
+                    break
+                fi
 
-            if [[ $package_name == *"*"* ]]; then
-                echo " Processing wildcard pattern: $package_name"
-				print_log "Processing wildcard pattern: $package_name"
-                packages=$(pacman -Ssq "${package_name%*}" 2>/dev/null)
-                for pkgs in $packages; do
-                    echo " Installing matched package: $pkgs"
-                    pacman -Sy --noconfirm --overwrite '*' "$pkgs"
-                done
-            else
-                pacman -Sy --noconfirm --overwrite '*' "$package_name"
-            fi
-
-        else
-            if [[ $package_name == *"*"* ]]; then
-                echo " Processing wildcard pattern: $package_name"
-				print_log "Processing wildcard pattern: $package_name"
-                packages_by_name=$(apt-cache search "${package_name%*}" | awk "/^${package_name}/ {print \$1}")
-				packages_by_description=$(apt-cache search "${package_name%*}" | grep -Ei "\b${package_name%*}\b" | awk '{print $1}')
-				packages=$(echo -e "${packages_by_name}\n${packages_by_description}" | sort -u)
-                for pkgs in $packages; do
-                    echo " Installing matched package: $pkgs"
-                    if dpkg -s "$pkgs" >/dev/null 2>&1; then
-						print_log "$pkgs = already_exist"
-                        pkg reinstall "$pkgs" -y
-                    else
-                        pkg install "$pkgs" -y
-                    fi
-                done
-            else
-                if dpkg -s "$package_name" >/dev/null 2>&1; then
-					print_log "$package_name = already_exist"
-                    pkg reinstall "$package_name" -y
+                if [[ $package_name == *"*"* ]]; then
+                    echo "Processing wildcard pattern: $package_name"
+                    packages=$(pacman -Ssq "${package_name%*}" 2>/dev/null)
+                    for pkgs in $packages; do
+                        echo "Installing matched package: $pkgs"
+                        if pacman -Sy --noconfirm --overwrite '*' "$pkgs"; then
+                            print_success "$pkgs installed successfully"
+                        fi
+                    done
+                    break
                 else
-                    pkg install "$package_name" -y
+                    if pacman -Sy --noconfirm --overwrite '*' "$package_name"; then
+                        print_success "$package_name installed successfully"
+                        break
+                    fi
+                fi
+            else
+                if [[ $package_name == *"*"* ]]; then
+                    echo "Processing wildcard pattern: $package_name"
+                    packages_by_name=$(apt-cache search "${package_name%*}" | awk "/^${package_name}/ {print \$1}")
+                    packages_by_description=$(apt-cache search "${package_name%*}" | grep -Ei "\b${package_name%*}\b" | awk '{print $1}')
+                    packages=$(echo -e "${packages_by_name}\n${packages_by_description}" | sort -u)
+                    for pkgs in $packages; do
+                        echo "Installing matched package: $pkgs"
+                        if dpkg -s "$pkgs" >/dev/null 2>&1; then
+                            pkg reinstall "$pkgs" -y
+                        else
+                            pkg install "$pkgs" -y
+                        fi
+                        if dpkg -s "$pkgs" >/dev/null 2>&1; then
+                            print_success "$pkgs installed successfully"
+                        fi
+                    done
+                    break
+                else
+                    if dpkg -s "$package_name" >/dev/null 2>&1; then
+                        pkg reinstall "$package_name" -y
+                    else
+                        pkg install "$package_name" -y
+                    fi
+                    if dpkg -s "$package_name" >/dev/null 2>&1; then
+                        print_success "$package_name installed successfully"
+                        break
+                    fi
                 fi
             fi
-        fi
 
-        # Check installation success
-        if [ $? -ne 0 ]; then
-            echo " Error detected during installation of: $package_name"
-			print_log "Error detected during installation of: $package_name"
-            if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-                pacman -Sy --overwrite '*' "$package_name"
-                pacman -Sy --noconfirm "$package_name"
-            else
-                apt --fix-broken install -y
-                dpkg --configure -a
-                pkg install "$package_name" -y
-            fi
-        fi
+            print_warn "Installation failed, attempt $attempt of $max_retries."
+            sleep 2
+            ((attempt++))
+        done
 
-        # Final verification
-		if [[ $package_name != *"*"* ]]; then
-        	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-        	    if pacman -Qi "$package_name" >/dev/null 2>&1; then
-        	        print_success "$package_name installed successfully"
-        	    else
-        	        print_failed "$package_name installation failed "
-        	    fi
-        	else
-        	    if dpkg -s "$package_name" >/dev/null 2>&1; then
-        	        print_success "$package_name installed successfully"
-        	    else
-        	        print_failed "$package_name installation failed "
-        	    fi
-        	fi
-		fi
+        if (( attempt > max_retries )); then
+            print_failed "Failed to install $package_name after $max_retries attempts"
+        fi
     done
-    echo ""
-	print_log "package list: $packs_list"
 }
 
 # will check the package is installed or not then remove it
 function package_remove_and_check() {
-    packs_list=($@)
+    local max_retries=3
+    local attempt=1
+    local packs_list=($@)
+    
     for package_name in "${packs_list[@]}"; do
-        echo " Processing package: $package_name"
+        echo "Processing package: $package_name"
+        attempt=1
 
-        if [[ $package_name == *"*"* ]]; then
-            echo " Processing wildcard pattern: $package_name"
-			print_log "Processing wildcard pattern: $package_name"
-            if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-                packages=$(pacman -Qq | grep -E "${package_name//\*/.*}")
-            else
-                packages=$(dpkg --get-selections | awk '{print $1}' | grep -E "${package_name//\*/.*}")
-            fi
-
-            for pkg in $packages; do
-                echo " Removing matched package: $pkg"
+        while (( attempt <= max_retries )); do
+            if [[ $package_name == *"*"* ]]; then
+                echo "Processing wildcard pattern: $package_name"
                 if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-                    if pacman -Qi "$pkg" >/dev/null 2>&1; then
-                        pacman -Rnds --noconfirm "$pkg"
-                        if [ $? -eq 0 ]; then
-                            print_success "$pkg removed successfully"
-							print_log "Processing wildcard pattern: $package_name"
-                        else
-                            print_failed "Failed to remove $pkg "
+                    packages=$(pacman -Qq | grep -E "${package_name//\*/.*}")
+                else
+                    packages=$(dpkg --get-selections | awk '{print $1}' | grep -E "${package_name//\*/.*}")
+                fi
+
+                for pkg in $packages; do
+                    echo "Removing matched package: $pkg"
+                    if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+                        if pacman -Qi "$pkg" >/dev/null 2>&1; then
+                            if pacman -Rnds --noconfirm "$pkg"; then
+                                print_success "$pkg removed successfully"
+                            fi
+                        fi
+                    else
+                        if dpkg -s "$pkg" >/dev/null 2>&1; then
+                            if apt autoremove "$pkg" -y; then
+                                print_success "$pkg removed successfully"
+                            fi
+                        fi
+                    fi
+                done
+                break
+            else
+                if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+                    if pacman -Qi "$package_name" >/dev/null 2>&1; then
+                        if pacman -Rnds --noconfirm "$package_name"; then
+                            print_success "$package_name removed successfully"
+                            break
                         fi
                     fi
                 else
-                    if dpkg -s "$pkg" >/dev/null 2>&1; then
-                        apt autoremove "$pkg" -y
-                        if [ $? -eq 0 ]; then
-                            print_success "$pkg removed successfully"
-                        else
-                            print_failed "Failed to remove $pkg "
+                    if dpkg -s "$package_name" >/dev/null 2>&1; then
+                        if apt autoremove "$package_name" -y; then
+                            print_success "$package_name removed successfully"
+                            break
                         fi
                     fi
                 fi
-            done
-        else
-            if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-                if pacman -Qi "$package_name" >/dev/null 2>&1; then
-                    echo " Removing package: $package_name"
-                    pacman -Rnds --noconfirm "$package_name"
-                    if [ $? -eq 0 ]; then
-                        print_success "$package_name removed successfully"
-                    else
-                        print_failed "Failed to remove $package_name "
-                    fi
-                fi
-            else
-                if dpkg -s "$package_name" >/dev/null 2>&1; then
-                    echo " Removing package: $package_name"
-                    apt autoremove "$package_name" -y
-                    if [ $? -eq 0 ]; then
-                        print_success "$package_name removed successfully"
-                    else
-                        print_failed "Failed to remove $package_name "
-                    fi
-                fi
             fi
+
+            print_warn "Removal failed, attempt $attempt of $max_retries."
+            sleep 2
+            ((attempt++))
+        done
+
+        if (( attempt > max_retries )); then
+            print_failed "Failed to remove $package_name after $max_retries attempts"
         fi
     done
-    echo ""
-	print_log "$package_name"
 }
 
 function get_file_name_number() {
     current_file=$(basename "$0")
     folder_name="${current_file%.sh}"
     theme_number=$(echo "$folder_name" | grep -oE '[1-9][0-9]*')
-	print_log "$theme_number"
 }
 
 # get the latest version from a github releases

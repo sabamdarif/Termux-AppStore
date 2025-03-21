@@ -1,0 +1,1 @@
+Lightweight Qt Notes-Manager for Linux

@@ -3660,22 +3660,28 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def update_progress(self, progress):
         """Update the progress bar effect on button"""
-        # Use CSS custom property instead of regenerating CSS
+        # Mark the button as updating
         self.update_button.get_style_context().add_class('updating')
         
-        # Create style provider if it doesn't exist
-        if not hasattr(self, 'progress_provider'):
-            self.progress_provider = Gtk.CssProvider()
-            self.update_button.get_style_context().add_provider(
-                self.progress_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        # Remove any existing progress classes
+        for i in range(10, 101, 10):
+            self.update_button.get_style_context().remove_class(f'progress-{i}')
         
-        # Set the custom property value
-        css = f"""
-            .updating {{
-                --progress-value: {progress}%;
-            }}
-        """
-        self.progress_provider.load_from_data(css.encode())
+        # Round progress to nearest 10%
+        if progress > 0:
+            progress_rounded = int(round(progress / 10.0)) * 10
+            progress_rounded = max(10, min(100, progress_rounded))  # Ensure between 10-100
+            
+            # Add the appropriate progress class
+            self.update_button.get_style_context().add_class(f'progress-{progress_rounded}')
+            
+            # Update the button label
+            self.update_button.set_label(f"Updating... {progress}%")
+        
+        # Keep the UI responsive
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+            
         return True
 
     def update_complete(self):
@@ -3694,7 +3700,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.update_button.set_sensitive(True)
         self.update_button.set_label("Check for Updates")
         self.update_button.get_style_context().remove_class('updating')
-        self.update_progress(0)
+        
+        # Remove all progress classes
+        for i in range(10, 101, 10):
+            self.update_button.get_style_context().remove_class(f'progress-{i}')
         
         # Reset update state
         self.update_in_progress = False

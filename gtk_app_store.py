@@ -27,6 +27,7 @@ import tarfile
 import zipfile
 import random
 import fcntl
+import socket
 
 # Fuzzy search libraries
 try:
@@ -861,6 +862,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         print("\nStarting refresh process...")
         
+        # Check for internet connectivity first
+        if not self.check_internet_connection():
+            print("No internet connection available, cannot refresh")
+            self.show_error_dialog("No internet connection available. Please check your network and try again.")
+            return
+            
         # Set the refresh flag
         self.is_refreshing = True
         
@@ -2993,7 +3000,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         terminal_scroll = Gtk.ScrolledWindow()
         terminal_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        terminal_scroll.set_size_request(400, 150)
+        terminal_scroll.set_size_request(400, 150)  # Reduced from 200
         terminal_scroll.set_vexpand(True)
         terminal_scroll.set_hexpand(True)
         
@@ -3022,7 +3029,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Make the dialog resizable and set compact default size
         update_dialog.set_resizable(True)
-        update_dialog.set_default_size(400, 200)
+        update_dialog.set_default_size(400, 200)  # Reduced from 500x300
         
         def toggle_terminal(button):
             current = stack.get_visible_child_name()
@@ -3896,7 +3903,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             search_text = self.search_entry.get_text().lower()
             
             # Collect all installed apps
-            all_installed_apps = [app for app in self.apps_data if app['app_name'] in self.installed_apps]
+            all_installed_apps = [app for app in self.apps_data if app['folder_name'] in self.installed_apps]
             
             # If search text is provided, filter the apps
             if search_text:
@@ -3938,15 +3945,46 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             else:
                 filtered_apps = all_installed_apps
 
-            # Display the filtered apps
-            for app in filtered_apps:
-                GLib.idle_add(lambda a=app: self.add_app_card(a))
+            # If no apps found, show a message
+            if not filtered_apps:
+                if search_text:
+                    # Show the regular no search results message
+                    GLib.idle_add(self._show_no_apps_message, search_text)
+                else:
+                    # Show a specific "no installed apps" message
+                    GLib.idle_add(self._show_no_installed_apps_message)
+            else:
+                # Display the filtered apps
+                for app in filtered_apps:
+                    GLib.idle_add(lambda a=app: self.add_app_card(a))
 
             GLib.idle_add(self.app_list_box.show_all)
         except Exception as e:
             print(f"Error in show_installed_apps: {e}")
             import traceback
             traceback.print_exc()
+            
+    def _show_no_installed_apps_message(self):
+        """Show a message when no apps are installed"""
+        message_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        message_box.set_valign(Gtk.Align.CENTER)
+        message_box.set_halign(Gtk.Align.CENTER)
+        
+        # Add an icon
+        icon = Gtk.Image.new_from_icon_name("system-software-install", Gtk.IconSize.DIALOG)
+        message_box.pack_start(icon, False, False, 0)
+        
+        # Add message
+        message = Gtk.Label()
+        message.set_markup("<span size='larger'>No Applications Installed</span>")
+        message_box.pack_start(message, False, False, 0)
+        
+        # Add suggestion
+        suggestion = Gtk.Label()
+        suggestion.set_markup("<span>Go to the Explore tab to install applications</span>")
+        message_box.pack_start(suggestion, False, False, 10)
+        
+        self.app_list_box.pack_start(message_box, True, True, 0)
 
     def show_update_apps(self):
         """Display apps that have updates available"""
@@ -3958,7 +3996,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             search_text = self.search_entry.get_text().lower()
             
             # Collect all apps with updates
-            all_update_apps = [app for app in self.apps_data if app['app_name'] in self.pending_updates]
+            all_update_apps = [app for app in self.apps_data if app['folder_name'] in self.pending_updates]
             
             # If search text is provided, filter the apps
             if search_text:
@@ -4000,15 +4038,46 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             else:
                 filtered_apps = all_update_apps
 
-            # Display the filtered apps
-            for app in filtered_apps:
-                GLib.idle_add(lambda a=app: self.add_app_card(a))
+            # If no updates found, show a message
+            if not filtered_apps:
+                if search_text:
+                    # Show the regular no search results message
+                    GLib.idle_add(self._show_no_apps_message, search_text)
+                else:
+                    # Show a specific "no updates available" message
+                    GLib.idle_add(self._show_no_updates_message)
+            else:
+                # Display the filtered apps
+                for app in filtered_apps:
+                    GLib.idle_add(lambda a=app: self.add_app_card(a))
 
             GLib.idle_add(self.app_list_box.show_all)
         except Exception as e:
             print(f"Error in show_update_apps: {e}")
             import traceback
             traceback.print_exc()
+            
+    def _show_no_updates_message(self):
+        """Show a message when no updates are available"""
+        message_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        message_box.set_valign(Gtk.Align.CENTER)
+        message_box.set_halign(Gtk.Align.CENTER)
+        
+        # Add an icon
+        icon = Gtk.Image.new_from_icon_name("software-update-available", Gtk.IconSize.DIALOG)
+        message_box.pack_start(icon, False, False, 0)
+        
+        # Add message
+        message = Gtk.Label()
+        message.set_markup("<span size='larger'>No Updates Available</span>")
+        message_box.pack_start(message, False, False, 0)
+        
+        # Add suggestion
+        suggestion = Gtk.Label()
+        suggestion.set_markup("<span>All your applications are up to date</span>")
+        message_box.pack_start(suggestion, False, False, 10)
+        
+        self.app_list_box.pack_start(message_box, True, True, 0)
 
     def process_ui_updates(self):
         """Process UI updates in a separate thread"""
@@ -4489,6 +4558,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
         # Use GLib.idle_add to ensure UI updates from any thread
         GLib.idle_add(update_spinner)
+
+    def check_internet_connection(self):
+        """Check if there is an active internet connection"""
+        try:
+            # Try to connect to Google's DNS server
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            return True
+        except (socket.timeout, socket.error, OSError):
+            try:
+                # Fallback to trying a basic HTTP request
+                urllib.request.urlopen("https://www.google.com", timeout=3)
+                return True
+            except:
+                return False
 
 def main():
     app = AppStoreApplication()

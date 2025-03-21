@@ -1,5 +1,37 @@
 [
   {
+    "app_name": "Abiword",
+    "folder_name": "Abiword",
+    "description": "A free word processing program",
+    "categories": [
+      "Office"
+    ],
+    "app_type": "native",
+    "run_cmd": "abiword",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "abiword",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Abiword/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Abiword/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Abiword/logo.png"
+  },
+  {
+    "app_name": "Alacritty",
+    "folder_name": "Alacritty",
+    "description": "A fast, cross-platform, OpenGL terminal emulator",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "alacritty",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "alacritty",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Alacritty/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Alacritty/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Alacritty/logo.png"
+  },
+  {
     "app_name": "Atril",
     "folder_name": "Atril",
     "description": "Atril is a simple multi-page document viewer. It can display and print PostScript (PS), Encapsulated PostScript (EPS), DJVU, DVI, XPS and Portable Document Format (PDF) files",
@@ -15,6 +47,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Atril/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Atril/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Atril/logo.png"
+  },
+  {
+    "app_name": "Audacious",
+    "folder_name": "Audacious",
+    "description": "An advanced audio player",
+    "categories": [
+      "Multimedia"
+    ],
+    "app_type": "native",
+    "run_cmd": "audacious",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "audacious",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacious/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacious/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacious/logo.png"
   },
   {
     "app_name": "Audacity",
@@ -115,6 +163,86 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Darktable/logo.png"
   },
   {
+    "app_name": "Deadbeef",
+    "folder_name": "Deadbeef",
+    "description": "A modular cross-platform audio player",
+    "categories": [
+      "Multimedia"
+    ],
+    "app_type": "native",
+    "run_cmd": "deadbeef",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "deadbeef",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Deadbeef/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Deadbeef/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Deadbeef/logo.png"
+  },
+  {
+    "app_name": "Dosbox",
+    "folder_name": "Dosbox",
+    "description": "Emulator with builtin DOS for running DOS Games",
+    "categories": [
+      "Games"
+    ],
+    "app_type": "native",
+    "run_cmd": "dosbox",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "dosbox",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dosbox/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dosbox/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dosbox/logo.png"
+  },
+  {
+    "app_name": "Dosbox x",
+    "folder_name": "Dosbox-x",
+    "description": "A cross-platform DOS emulator based on the DOSBox project",
+    "categories": [
+      "Games"
+    ],
+    "app_type": "native",
+    "run_cmd": "dosbox-x",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "dosbox-x",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dosbox-x/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dosbox-x/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dosbox-x/logo.png"
+  },
+  {
+    "app_name": "Evince",
+    "folder_name": "Evince",
+    "description": "document viewer for multiple document formats",
+    "categories": [
+      "Office"
+    ],
+    "app_type": "native",
+    "run_cmd": "evince",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "evince",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Evince/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Evince/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Evince/logo.png"
+  },
+  {
+    "app_name": "Eye of gnome",
+    "folder_name": "Eye-of-gnome",
+    "description": "Eye of GNOME, an image viewing and cataloging program",
+    "categories": [
+      "Graphics"
+    ],
+    "app_type": "native",
+    "run_cmd": "eog",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "eog",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Eye-of-gnome/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Eye-of-gnome/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Eye-of-gnome/logo.png"
+  },
+  {
     "app_name": "Fastfetch",
     "folder_name": "Fastfetch",
     "description": "Fastfetch is a neofetch-like tool for fetching system information and displaying it prettily.",
@@ -128,6 +256,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fastfetch/icon-64.png"
+  },
+  {
+    "app_name": "Feathernotes",
+    "folder_name": "Feathernotes",
+    "description": "Lightweight Qt Notes-Manager for Linux",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "feathernotes",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "feathernotes",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/uninstall.sh",
+    "logo_url": null
   },
   {
     "app_name": "Firefox",
@@ -308,6 +452,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hangover/icon-64.png"
   },
   {
+    "app_name": "Hexchat",
+    "folder_name": "Hexchat",
+    "description": "A popular and easy to use graphical IRC (chat) client",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "run_cmd": "hexchat",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "hexchat",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hexchat/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hexchat/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Hexchat/logo.png"
+  },
+  {
     "app_name": "Inkscape",
     "folder_name": "Inkscape",
     "description": "Inkscape is a popular free vector graphics editor.\n\n- Flexible drawing tools\n- Broad file format compatibility\n- Powerful text tool\n- Bezier and spiro curves\n\nTo run: Menu -> Graphics -> Inkscape\nTo run in a terminal: inkscape\n\nNote: Also see the Boxy SVG tool.",
@@ -357,6 +517,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kvantum/logo.png"
   },
   {
+    "app_name": "Leafpad",
+    "folder_name": "Leafpad",
+    "description": "GTK+ based simple text editor",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "leafpad",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "leafpad",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Leafpad/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Leafpad/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Leafpad/logo.png"
+  },
+  {
     "app_name": "LibreOffice",
     "folder_name": "LibreOffice",
     "description": "LibreOffice is a free office suite including a word editor, slideshow, spreadsheet, database, and image editor.",
@@ -375,6 +551,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/icon-64.png"
   },
   {
+    "app_name": "Lximage qt",
+    "folder_name": "Lximage-qt",
+    "description": "LXQt Image Viewer",
+    "categories": [
+      "Graphics"
+    ],
+    "app_type": "native",
+    "run_cmd": "lximage-qt",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "lximage-qt",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Lximage-qt/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Lximage-qt/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Lximage-qt/logo.png"
+  },
+  {
     "app_name": "Mousepad",
     "folder_name": "Mousepad",
     "description": "Simple text editor of the desktop environment Xfce",
@@ -390,6 +582,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mousepad/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mousepad/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mousepad/logo.png"
+  },
+  {
+    "app_name": "Mpv",
+    "folder_name": "Mpv",
+    "description": "mpv is free and open-source media player software based on MPlayer, mplayer2 and FFmpeg",
+    "categories": [
+      "Multimedia"
+    ],
+    "app_type": "native",
+    "run_cmd": "mpv --player-operation-mode",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "mpv-x",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mpv/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mpv/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Mpv/logo.png"
   },
   {
     "app_name": "Neofetch",
@@ -618,6 +826,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Transmission/icon-64.png"
+  },
+  {
+    "app_name": "Uget",
+    "folder_name": "Uget",
+    "description": "GTK+ download manager featuring download classification and HTML import",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "run_cmd": "uget",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "uget",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/uninstall.sh",
+    "logo_url": null
   },
   {
     "app_name": "VLC",

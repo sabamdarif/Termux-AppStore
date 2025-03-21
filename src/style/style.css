@@ -283,7 +283,49 @@ window {
 
 /* Progress update animation */
 .updating {
-    background-color: @theme_selected_bg_color;
+    background-color: #3498db;
+    color: white;
+}
+
+/* Progress levels */
+.progress-10 {
+    background: linear-gradient(to right, #2ecc71 10%, #3498db 10%);
+}
+
+.progress-20 {
+    background: linear-gradient(to right, #2ecc71 20%, #3498db 20%);
+}
+
+.progress-30 {
+    background: linear-gradient(to right, #2ecc71 30%, #3498db 30%);
+}
+
+.progress-40 {
+    background: linear-gradient(to right, #2ecc71 40%, #3498db 40%);
+}
+
+.progress-50 {
+    background: linear-gradient(to right, #2ecc71 50%, #3498db 50%);
+}
+
+.progress-60 {
+    background: linear-gradient(to right, #2ecc71 60%, #3498db 60%);
+}
+
+.progress-70 {
+    background: linear-gradient(to right, #2ecc71 70%, #3498db 70%);
+}
+
+.progress-80 {
+    background: linear-gradient(to right, #2ecc71 80%, #3498db 80%);
+}
+
+.progress-90 {
+    background: linear-gradient(to right, #2ecc71 90%, #3498db 90%);
+}
+
+.progress-100 {
+    background: #2ecc71;
 }
 
 /* App description */

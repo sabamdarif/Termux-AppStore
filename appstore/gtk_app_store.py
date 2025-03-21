@@ -4392,15 +4392,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 
                 print("Migration completed successfully.")
                 
-                # Optionally backup old directory instead of removing
-                backup_dir = os.path.expanduser("~/.termux_appstore_backup")
-                if not os.path.exists(backup_dir):
-                    print(f"Creating backup of old data at: {backup_dir}")
-                    shutil.copytree(old_dir, backup_dir)
-                
-                # Now we can safely remove the old directory
+                # Remove the old directory without creating a backup
                 print(f"Removing old data directory: {old_dir}")
-                shutil.rmtree(old_dir)
+                try:
+                    shutil.rmtree(old_dir)
+                except Exception as rm_error:
+                    print(f"Warning: Could not remove old directory: {rm_error}")
+                    print("You may want to manually remove it later.")
             else:
                 print("No old data directory found, nothing to migrate.")
         except Exception as e:

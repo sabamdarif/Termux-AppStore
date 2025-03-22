@@ -119,6 +119,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.selected_distro = None
         self.distro_enabled = False
         self.is_refreshing = False  # Add a flag to track refresh state
+        self.connectivity_dialog_active = False  # Add flag to prevent multiple connectivity dialogs
         
         # Initialize search variables
         self.search_timeout_id = None
@@ -258,9 +259,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.set_titlebar(header)
 
             # Create box for tabs
-            tabs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-            tabs_box.get_style_context().add_class('header-tabs-box')
-            header.set_custom_title(tabs_box)
+            self.header_tabs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+            self.header_tabs_box.get_style_context().add_class('header-tabs-box')
+            header.set_custom_title(self.header_tabs_box)
 
             # Create tab buttons with icons
             self.explore_button = self.create_tab_button("Explore", "system-search-symbolic")
@@ -276,9 +277,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.explore_button.get_style_context().add_class('active')
             self.explore_button.get_style_context().add_class('selected')
 
-            tabs_box.pack_start(self.explore_button, False, False, 0)
-            tabs_box.pack_start(self.installed_button, False, False, 0)
-            tabs_box.pack_start(self.updates_button, False, False, 0)
+            self.header_tabs_box.pack_start(self.explore_button, False, False, 0)
+            self.header_tabs_box.pack_start(self.installed_button, False, False, 0)
+            self.header_tabs_box.pack_start(self.updates_button, False, False, 0)
             
             # Create menu button
             menu_button = Gtk.Button()
@@ -853,7 +854,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.loading_label.hide()
         return False
 
-    def start_refresh(self, is_manual=True):
+    def start_refresh(self, is_manual=True, skip_connectivity_check=False):
         """Start the refresh process in a background thread"""
         # Check if a refresh operation is already in progress
         if self.is_refreshing:
@@ -862,10 +863,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         print("\nStarting refresh process...")
         
-        # Check for internet connectivity first
-        if not self.check_internet_connection():
-            print("No internet connection available, cannot refresh")
-            self.show_error_dialog("No internet connection available. Please check your network and try again.")
+        # Check for internet connectivity first (unless explicitly skipped)
+        if not skip_connectivity_check and not self.check_internet_connection():
+            print("No internet connection available, showing prompt")
+            
+            # Always immediately hide spinner and loading label
+            self.spinner.stop()
+            self.spinner.hide()
+            self.loading_label.hide()
+            
+            # Force process events to ensure spinner is hidden
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+            
+            # Only show connectivity dialog if none is currently active
+            if not self.connectivity_dialog_active:
+                self.show_connectivity_dialog()
             return
             
         # Set the refresh flag
@@ -882,6 +895,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         header_bar = self.get_titlebar()
         if header_bar:
             header_bar.hide()
+            
+        # Hide the header tabs during refresh - use direct reference
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.hide()
 
         # Show and start spinner - force using direct properties for visibility
         self.spinner.set_property("visible", True)
@@ -899,6 +916,152 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         thread = threading.Thread(target=self.refresh_data_background)
         thread.daemon = True
         thread.start()
+        
+    def show_connectivity_dialog(self):
+        """Show a dialog with retry and cancel options when no internet connection is available"""
+        # Check if a dialog is already active to prevent duplicates
+        if self.connectivity_dialog_active:
+            print("Connectivity dialog already active, skipping duplicate")
+            return
+            
+        # Set the flag to indicate a dialog is active
+        self.connectivity_dialog_active = True
+        
+        # First make sure any previous UI elements are properly reset
+        self.spinner.stop()
+        self.spinner.hide()
+        self.loading_label.hide()
+        
+        # Make absolutely sure all tabs are hidden
+        # Use member variable directly, no checks needed
+        self.header_tabs_box.hide()
+        
+        # Process events to ensure UI updates immediately
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+        
+        # Create the dialog with two buttons
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            message_type=Gtk.MessageType.WARNING,
+            flags=Gtk.DialogFlags.MODAL,  # Make it modal to block other interactions
+            buttons=Gtk.ButtonsType.NONE,
+            text="No Internet Connection"
+        )
+        dialog.format_secondary_text("Please check your internet connection and try again.")
+        
+        # Add custom buttons
+        retry_button = dialog.add_button("Retry", Gtk.ResponseType.YES)
+        close_app_button = dialog.add_button("Close App", Gtk.ResponseType.CLOSE)
+        
+        # Style the buttons
+        retry_button_context = retry_button.get_style_context()
+        retry_button_context.add_class("suggested-action")
+        
+        # Add dialog styling
+        dialog_context = dialog.get_style_context()
+        dialog_context.add_class("connectivity-dialog")
+        
+        # The response handler that will be called when buttons are clicked
+        def on_response(dialog, response_id):
+            # First hide the dialog to make it visually disappear immediately
+            dialog.hide()
+            
+            # Process events to ensure dialog is visually hidden
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+                
+            # Then destroy it
+            dialog.destroy()
+            
+            # Process events again to ensure dialog is fully destroyed
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+                
+            # Reset the dialog active flag
+            self.connectivity_dialog_active = False
+            
+            # Now handle the response
+            if response_id == Gtk.ResponseType.YES:
+                # User clicked Retry - check internet connection in the main loop
+                def check_internet_and_refresh():
+                    # Make sure spinner is still hidden during check
+                    self.spinner.stop()
+                    self.spinner.hide()
+                    self.loading_label.hide()
+                    
+                    # Process events to ensure spinner is hidden
+                    while Gtk.events_pending():
+                        Gtk.main_iteration()
+                    
+                    # Check for internet connection
+                    print("Retry clicked, checking internet connection")
+                    has_internet = self.check_internet_connection()
+                    
+                    if has_internet:
+                        # Internet is available
+                        print("Internet connection available, starting refresh process")
+                        
+                        # Show spinner immediately - do this before start_refresh to ensure it's visible
+                        self.spinner.set_property("visible", True)
+                        self.spinner.set_property("active", True)
+                        self.spinner.show_all()
+                        self.spinner.start()
+                        self.loading_label.set_property("visible", True)
+                        self.loading_label.show_all()
+                        
+                        # Force UI update to show spinner
+                        while Gtk.events_pending():
+                            Gtk.main_iteration()
+                            
+                        # Start the refresh process with special flag to skip connectivity check
+                        self.start_refresh(skip_connectivity_check=True)
+                    else:
+                        # Still no internet - make absolutely sure spinner is hidden
+                        self.spinner.stop()
+                        self.spinner.hide()
+                        self.loading_label.hide()
+                        
+                        # Force update UI
+                        while Gtk.events_pending():
+                            Gtk.main_iteration()
+                        
+                        print("Still no internet connection, showing dialog again")
+                        # Show the dialog again
+                        self.show_connectivity_dialog()
+                    
+                    # Remove this function from idle queue
+                    return False
+                
+                # Schedule the internet check function to run on the main loop
+                # This ensures the dialog is fully gone before checking internet
+                GLib.idle_add(check_internet_and_refresh)
+                
+            elif response_id == Gtk.ResponseType.CLOSE:
+                # User clicked Close App - exit the application
+                def quit_app():
+                    print("Close App clicked, shutting down application")
+                    # First destroy this window
+                    self.destroy()
+                    
+                    # Then ensure the application quits completely
+                    if self.get_application():
+                        self.get_application().quit()
+                    else:
+                        # Fallback if application reference is not available
+                        Gtk.main_quit()
+                        # Additional safety - exit process
+                        import sys
+                        sys.exit(0)
+                    return False
+                
+                GLib.idle_add(quit_app)
+        
+        # Connect the response signal to our handler
+        dialog.connect("response", on_response)
+        
+        # Show the dialog
+        dialog.show_all()
 
     def check_native_package_installed(self, package_name):
         """Check if a native package is installed based on package manager"""
@@ -1335,6 +1498,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         header_bar = self.get_titlebar()
         if header_bar:
             header_bar.show()
+            
+        # Show the header tabs again - direct reference
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.show_all()
+            
+        # Process events to ensure UI updates
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
         # First load app metadata
         self.load_app_metadata()
@@ -4562,16 +4733,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def check_internet_connection(self):
         """Check if there is an active internet connection"""
         try:
-            # Try to connect to Google's DNS server
+            # Try to connect to Google's DNS server (most reliable)
             socket.create_connection(("8.8.8.8", 53), timeout=3)
+            print("Internet connection check successful: Connected to 8.8.8.8")
             return True
-        except (socket.timeout, socket.error, OSError):
+        except (socket.timeout, socket.error, OSError) as e:
+            print(f"Connection to 8.8.8.8 failed: {e}")
             try:
-                # Fallback to trying a basic HTTP request
-                urllib.request.urlopen("https://www.google.com", timeout=3)
+                # Try Cloudflare's DNS as a second option
+                socket.create_connection(("1.1.1.1", 53), timeout=3)
+                print("Internet connection check successful: Connected to 1.1.1.1")
                 return True
-            except:
-                return False
+            except (socket.timeout, socket.error, OSError) as e:
+                print(f"Connection to 1.1.1.1 failed: {e}")
+                try:
+                    # Fall back to HTTP request to Google
+                    urllib.request.urlopen("https://www.google.com", timeout=3)
+                    print("Internet connection check successful: Connected to google.com")
+                    return True
+                except Exception as e:
+                    print(f"Connection to google.com failed: {e}")
+                    try:
+                        # Try one more fallback to GitHub (where app data is hosted)
+                        urllib.request.urlopen("https://github.com", timeout=3)
+                        print("Internet connection check successful: Connected to github.com")
+                        return True
+                    except Exception as e:
+                        print(f"Connection to github.com failed: {e}")
+                        print("All connection attempts failed, no internet connectivity detected")
+                        return False
 
 def main():
     app = AppStoreApplication()

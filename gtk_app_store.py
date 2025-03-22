@@ -225,34 +225,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print("Continuing without custom styles")
 
         try:
-            # Create main container with overlay
-            self.overlay = Gtk.Overlay()
-            self.add(self.overlay)
-
-            # Create main content box
-            self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            self.overlay.add(self.main_box)
-
-            # Create spinner for initial load
-            self.spinner = Gtk.Spinner()
-            self.spinner.set_size_request(64, 64)
-            self.spinner.set_property("visible", True) # Make sure spinner widget is visible
-            self.spinner.set_property("active", False) # Initially stopped
-
-            # Create a label for the loading message
-            self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
-            self.loading_label.set_halign(Gtk.Align.CENTER)
-            self.loading_label.hide()
-
-            spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            spinner_box.pack_start(self.spinner, True, True, 0)
-            spinner_box.pack_start(self.loading_label, True, True, 0)
-            spinner_box.set_valign(Gtk.Align.CENTER)
-            spinner_box.set_halign(Gtk.Align.CENTER)
-            spinner_box.set_property("visible", True) # Make sure the container is visible
-            self.overlay.add_overlay(spinner_box)
-
-            # Create header bar
+            # Create header bar first (so it's always visible)
             header = Gtk.HeaderBar()
             header.set_show_close_button(True)
             header.props.title = "Termux AppStore"
@@ -287,10 +260,39 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             menu_button.get_style_context().add_class('menu-button')
             menu_button.connect("clicked", self.on_menu_clicked)
             header.pack_end(menu_button)
+
+            # Create main container as a stack (for showing content or spinner)
+            self.main_stack = Gtk.Stack()
+            self.main_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+            self.main_stack.set_transition_duration(150)
+            self.add(self.main_stack)
+
+            # Create main content box
+            self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.main_stack.add_named(self.main_box, "content")
             
             # Create content box for app list
             self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             self.main_box.pack_start(self.content_box, True, True, 0)
+
+            # Create spinner page (separate from content)
+            spinner_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            spinner_page.set_valign(Gtk.Align.CENTER)
+            spinner_page.set_halign(Gtk.Align.CENTER)
+            self.main_stack.add_named(spinner_page, "spinner")
+            
+            # Add spinner and loading text to spinner page
+            self.spinner = Gtk.Spinner()
+            self.spinner.set_size_request(64, 64)
+            spinner_page.pack_start(self.spinner, False, False, 0)
+            
+            self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
+            self.loading_label.set_margin_top(10)
+            spinner_page.pack_start(self.loading_label, False, False, 0)
+            
+            # Show content by default
+            self.main_stack.set_visible_child_name("content")
+            
         except Exception as e:
             print(f"Error creating UI: {e}")
             raise
@@ -848,11 +850,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         GLib.idle_add(self.hide_loading_indicators)  # Add this line to hide both spinner and label
 
     def hide_loading_indicators(self):
-        """Hide both spinner and loading label"""
+        """Hide all loading indicators"""
         self.spinner.stop()
-        self.spinner.hide()
-        self.loading_label.hide()
-        return False
+        # Switch back to content view
+        if hasattr(self, 'main_stack'):
+            self.main_stack.set_visible_child_name("content")
+        # Process events to ensure UI updates
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
     def start_refresh(self, is_manual=True, skip_connectivity_check=False):
         """Start the refresh process in a background thread"""
@@ -869,10 +874,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # Always immediately hide spinner and loading label
             self.spinner.stop()
-            self.spinner.hide()
-            self.loading_label.hide()
             
-            # Force process events to ensure spinner is hidden
+            # Force process events to ensure UI updates
             while Gtk.events_pending():
                 Gtk.main_iteration()
             
@@ -891,22 +894,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         for child in self.content_box.get_children():
             child.destroy()
 
-        # Hide the header bar during refresh
-        header_bar = self.get_titlebar()
-        if header_bar:
-            header_bar.hide()
-            
-        # Hide the header tabs during refresh - use direct reference
+        # Only hide the tab buttons, keep the header bar visible for window controls
         if hasattr(self, 'header_tabs_box'):
             self.header_tabs_box.hide()
-
-        # Show and start spinner - force using direct properties for visibility
-        self.spinner.set_property("visible", True)
-        self.spinner.set_property("active", True)
-        self.spinner.show_all()
+        
+        # Show the spinner page instead of content
+        self.main_stack.set_visible_child_name("spinner")
+        
+        # Start the spinner
         self.spinner.start()
-        self.loading_label.set_property("visible", True)
-        self.loading_label.show_all()
         
         # Process pending events to ensure UI updates
         while Gtk.events_pending():
@@ -927,14 +923,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Set the flag to indicate a dialog is active
         self.connectivity_dialog_active = True
         
-        # First make sure any previous UI elements are properly reset
+        # First make sure any previous spinner is stopped
         self.spinner.stop()
-        self.spinner.hide()
-        self.loading_label.hide()
         
-        # Make absolutely sure all tabs are hidden
-        # Use member variable directly, no checks needed
-        self.header_tabs_box.hide()
+        # Switch back to content view (from spinner view, if active)
+        self.main_stack.set_visible_child_name("content")
+        
+        # Only hide tab buttons, but keep header bar visible for window controls
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.hide()
         
         # Process events to ensure UI updates immediately
         while Gtk.events_pending():
@@ -1234,9 +1231,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Ensure spinner is visible
             self.ensure_spinner_visible()
             
-            # Keep header bar hidden throughout the refresh process
-            GLib.idle_add(self._ensure_header_hidden)
-            
             # 1. First ensure old_json directory exists
             os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
             old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
@@ -1469,23 +1463,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         return False
 
     def _ensure_header_hidden(self):
-        """Make sure the header bar remains hidden during refresh"""
-        header_bar = self.get_titlebar()
-        if header_bar:
-            header_bar.hide()
+        """Make sure only the header tabs are hidden, but keep window controls visible"""
+        # Don't hide the entire header bar, just the tabs
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.hide()
         return False  # Don't repeat this idle callback
 
     def refresh_complete(self):
-        """Called when refresh is complete"""
-        print('Refresh complete!')
-        
-        # Reset the refreshing flag
+        """Called when background refresh is complete"""
+        print("Refresh completed")
         self.is_refreshing = False
         
-        # Hide spinner and loading message
+        # Stop the spinner
         self.spinner.stop()
-        self.spinner.hide()
-        self.loading_label.hide()
+        
+        # Switch back to content view
+        self.main_stack.set_visible_child_name("content")
         
         # Update last version check timestamp
         from datetime import datetime as dt  # Local import to avoid conflicts
@@ -1494,15 +1487,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             f.write(str(current_time.timestamp()))
         print(f"Updated last version check timestamp: {current_time}")
         
-        # Make header bar visible again
-        header_bar = self.get_titlebar()
-        if header_bar:
-            header_bar.show()
-            
-        # Show the header tabs again - direct reference
+        # Show header tabs box again
         if hasattr(self, 'header_tabs_box'):
-            self.header_tabs_box.show_all()
-            
+            self.header_tabs_box.show()
+        
         # Process events to ensure UI updates
         while Gtk.events_pending():
             Gtk.main_iteration()

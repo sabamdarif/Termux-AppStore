@@ -123,7 +123,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Initialize search variables
         self.search_timeout_id = None
-        self.search_delay = 15  # milliseconds
+        self.search_delay = 100  # milliseconds
+        
+        # Set up keyboard accelerators
+        accel_group = Gtk.AccelGroup()
+        self.add_accel_group(accel_group)
+        
+        # Add Ctrl+F for search
+        key, mod = Gtk.accelerator_parse("<Control>f")
+        accel_group.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_search_accelerator)
+        
+        # Add Ctrl+Q for quit
+        key, mod = Gtk.accelerator_parse("<Control>q")
+        accel_group.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
         
         # Set up scaling for hi-dpi screens
         self.set_default_size(1000, 650)
@@ -260,6 +272,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             menu_button.get_style_context().add_class('menu-button')
             menu_button.connect("clicked", self.on_menu_clicked)
             header.pack_end(menu_button)
+            
+            # Create search button to toggle search bar visibility
+            self.search_button = Gtk.Button()
+            self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+            self.search_button.get_style_context().add_class('menu-button')
+            self.search_button.set_tooltip_text("Show Search")
+            self.search_button.connect("clicked", self.on_search_button_clicked)
+            header.pack_end(self.search_button)
 
             # Create main container as a stack (for showing content or spinner)
             self.main_stack = Gtk.Stack()
@@ -356,6 +376,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         box.show_all()
         popover.add(box)
         popover.popup()
+        
+    def on_search_button_clicked(self, button):
+        """Toggle the visibility of the search bar"""
+        if hasattr(self, 'search_box'):
+            if self.search_box.get_visible():
+                # Hide search bar
+                self.search_box.hide()
+                # Update button icon to indicate search is hidden
+                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_tooltip_text("Show Search")
+            else:
+                # Show search bar
+                self.search_box.show()
+                # Update button icon to indicate search is visible
+                self.search_button.set_image(Gtk.Image.new_from_icon_name("window-close-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_tooltip_text("Hide Search")
+                # Give focus to the search entry
+                if hasattr(self, 'search_entry'):
+                    self.search_entry.grab_focus()
 
     def on_settings_clicked(self, widget):
         """Show settings window"""
@@ -614,66 +653,62 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.selected_distro = None
 
     def check_for_updates(self):
-        print('Checking for updates...')
+        """Check for app updates when the application starts"""
+        # Make sure we have connectivity (but don't show the dialog)
+        if not self.check_internet_connection():
+            print("No internet connection detected during initial check, skipping auto-refresh")
+            return
+
         try:
-            # Check if auto-refresh is disabled
-            if not self.get_setting("enable_auto_refresh", True):
-                print("Auto-refresh is disabled, skipping automatic version check...")
-                # Load app metadata and setup UI first
-                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
-                thread.daemon = True
-                thread.start()
+            # Load installed apps first to have them available
+            self.load_installed_apps()
+            
+            # Check if auto-refresh is enabled
+            auto_refresh = self.get_setting("enable_auto_refresh", True)
+            if not auto_refresh:
+                print("Auto-refresh is disabled, skipping")
                 return
                 
-            # Create directory if it doesn't exist
-            os.makedirs(APPSTORE_DIR, exist_ok=True)
-            
-            # Check when was the last version update
-            last_version_check_file = LAST_VERSION_CHECK_FILE
-            current_time = datetime.now()
-
-            # If apps.json doesn't exist, force a refresh
-            if not os.path.exists(APPSTORE_JSON):
-                print("No apps.json found, performing initial setup...")
-                self.start_refresh(is_manual=False)
-                return
-
-            if os.path.exists(last_version_check_file):
+            # Check when the last refresh was performed
+            refresh_interval = 24 * 60 * 60  # 24 hours in seconds
+            if os.path.exists(LAST_VERSION_CHECK_FILE):
                 try:
-                    with open(last_version_check_file, 'r') as f:
-                        file_content = f.read().strip()
-                        if file_content:  # Make sure file has content
-                            last_check = datetime.fromtimestamp(float(file_content))
-                            if current_time - last_check < timedelta(days=1):
-                                print(f"Version check performed within last 24 hours ({last_check}), skipping...")
-                                # Load app metadata and setup UI first
-                                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
-                                thread.daemon = True
-                                thread.start()
-                                return
-                        else:
-                            print("Last version check file is empty, will refresh")
-                except (ValueError, OSError) as e:
-                    print(f"Error reading last version check file: {e}, will refresh")
+                    with open(LAST_VERSION_CHECK_FILE, 'r') as f:
+                        last_check = float(f.read().strip())
+                    
+                    now = datetime.now().timestamp()
+                    time_since_last_check = now - last_check
+                    
+                    if time_since_last_check < refresh_interval:
+                        print(f"Last check was {time_since_last_check:.2f} seconds ago, skipping auto-refresh")
+                        
+                        # Just load metadata and set up UI
+                        self.load_app_metadata_and_setup_ui()
+                        
+                        # Make sure search box stays hidden
+                        GLib.timeout_add(500, self._ensure_search_box_hidden)
+                        return
+                    else:
+                        print(f"Last check was {time_since_last_check:.2f} seconds ago, performing auto-refresh")
+                except Exception as e:
+                    print(f"Error reading last check time: {e}, performing auto-refresh")
             else:
-                print("No previous version check found, will perform initial check")
-
-            # If we reach here, we need to update versions
-            print("Performing daily version check...")
+                print("No last check time found, performing initial auto-refresh")
+        
+            # Perform auto-refresh
+            print("Starting automatic refresh in background")
             self.start_refresh(is_manual=False)
             
-            # Update last check time is now handled in refresh_complete method
-
+            # Make sure search box stays hidden
+            GLib.timeout_add(500, self._ensure_search_box_hidden)
         except Exception as e:
-            print(f"Error checking updates: {e}")
-            # Load app metadata to ensure UI is functional even if refresh fails
-            try:
-                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
-                thread.daemon = True
-                thread.start()
-            except:
-                # Last resort - force a refresh if load fails
-                self.start_refresh(is_manual=False)
+            print(f"Error during update check: {e}")
+            
+            # Even on error, try to load metadata and set up UI
+            self.load_app_metadata_and_setup_ui()
+            
+            # Make sure search box stays hidden
+            GLib.timeout_add(500, self._ensure_search_box_hidden)
 
     def update_app_versions(self):
         """Update versions for all apps in the background"""
@@ -1507,7 +1542,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         if not hasattr(self, 'is_manual_refresh') or self.is_manual_refresh:
             # Schedule section display AFTER UI is set up
             GLib.timeout_add(100, self._show_initial_section)
-            
+        
+        # Make sure search box stays hidden by default after refresh
+        GLib.timeout_add(200, self._ensure_search_box_hidden)
+        
         # Process UI events to make sure changes take effect
         while Gtk.events_pending():
             Gtk.main_iteration()
@@ -1725,7 +1763,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.sidebar.set_margin_top(10)
         self.sidebar.set_margin_bottom(10)  # Add bottom margin
         self.content_box.pack_start(self.sidebar, False, True, 0)
-
+        
         # Category list
         categories_label = Gtk.Label()
         categories_label.set_markup("<b>Categories</b>")
@@ -1734,7 +1772,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         categories_label.set_margin_top(10)
         categories_label.set_margin_bottom(10)
         self.sidebar.pack_start(categories_label, False, True, 0)
-
+        
         # Add "All Apps" button first
         all_button = Gtk.Button(label="All Apps")
         all_button.connect("clicked", self.on_category_clicked)
@@ -1758,19 +1796,28 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.content_box.pack_start(self.right_panel, True, True, 0)
 
         # Add search entry at the top of app list
-        search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        search_box.set_margin_start(10)
-        search_box.set_margin_end(10)
-        search_box.set_margin_top(10)
+        self.search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.search_box.set_margin_start(10)
+        self.search_box.set_margin_end(10)
+        self.search_box.set_margin_top(10)
+        self.search_box.get_style_context().add_class('search-box')
         self.search_entry = Gtk.Entry()
         self.search_entry.set_placeholder_text("Search apps...")
         self.search_entry.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "system-search-symbolic")
         self.search_entry.set_icon_activatable(Gtk.EntryIconPosition.PRIMARY, False)
         self.search_entry.get_style_context().add_class('search-entry')
         self.search_entry.connect("changed", self.on_search_changed)
+        # Connect Enter key to trigger a focus change to the app list
+        self.search_entry.connect("activate", self.on_search_entry_activate)
         self.search_entry.set_size_request(-1, 40)
-        search_box.pack_start(self.search_entry, True, True, 0)
-        self.right_panel.pack_start(search_box, False, True, 0)
+        self.search_box.pack_start(self.search_entry, True, True, 0)
+        self.right_panel.pack_start(self.search_box, False, True, 0)
+        
+        # Hide search box by default - will be shown when search button is clicked
+        self.search_box.hide()
+        
+        # Schedule another hide call with a delay to ensure it stays hidden
+        GLib.timeout_add(100, self._ensure_search_box_hidden)
 
         # Create check for updates button (initially hidden)
         self.update_button = Gtk.Button(label="Check for Updates")
@@ -1788,6 +1835,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolled.set_vexpand(True)
         self.right_panel.pack_start(scrolled, True, True, 0)
+        
+        # Connect to vadjustment value-changed signal to detect scrolling
+        vadj = scrolled.get_vadjustment()
+        vadj.connect("value-changed", self.on_scroll_value_changed)
+        self.last_scroll_position = 0  # Track scroll position
 
         # App list box
         self.app_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -1811,6 +1863,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         category = button.get_label()
         print(f"Category selected: {category}")
+        
+        # Hide search box when changing categories
+        if hasattr(self, 'search_box') and self.search_box.get_visible():
+            self.search_box.hide()
+            # Update search button icon and tooltip
+            if hasattr(self, 'search_button'):
+                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_tooltip_text("Show Search")
         
         # Get current search text before clearing
         current_search = self.search_entry.get_text()
@@ -2700,12 +2760,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # print(f"Search changed: '{search_text}'")
         
         # Remove any existing timeout
-        if self.search_timeout_id:
+        if hasattr(self, 'search_timeout_id') and self.search_timeout_id:
             GLib.source_remove(self.search_timeout_id)
             self.search_timeout_id = None
         
         # Add a small delay to avoid unnecessary refreshes while typing
-        self.search_timeout_id = GLib.timeout_add(self.search_delay, self._do_search, search_text)
+        self.search_timeout_id = GLib.timeout_add(300, self._do_search, search_text)
+    
+    def on_search_entry_activate(self, entry):
+        """Handle Enter key in search entry - give focus back to the app list"""
+        if hasattr(self, 'app_list_box'):
+            self.app_list_box.grab_focus()
 
     def _do_search(self, search_text):
         """Process the search after delay"""
@@ -3029,6 +3094,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_quit_accelerator(self, accel_group, acceleratable, keyval, modifier):
         """Handle Ctrl+Q accelerator"""
         self.on_delete_event(None, None)
+        return True
+        
+    def on_search_accelerator(self, accel_group, acceleratable, keyval, modifier):
+        """Handle Ctrl+F accelerator to toggle search bar"""
+        self.on_search_button_clicked(None)
         return True
 
     def load_pending_updates(self):
@@ -3960,6 +4030,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 button.get_style_context().add_class('selected')
                 button.get_style_context().add_class('active')
             
+            # Hide search box when changing tabs
+            if hasattr(self, 'search_box') and hasattr(self, 'search_button'):
+                self.search_box.hide()
+                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_tooltip_text("Show Search")
+            
             # Safety check for UI initialization
             if not hasattr(self, 'search_entry') or not hasattr(self, 'app_list_box'):
                 print("Warning: UI not fully initialized yet, deferring section display")
@@ -4750,6 +4826,27 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         print(f"Connection to github.com failed: {e}")
                         print("All connection attempts failed, no internet connectivity detected")
                         return False
+
+    def _ensure_search_box_hidden(self):
+        """Make sure the search box stays hidden during UI initialization"""
+        if hasattr(self, 'search_box'):
+            self.search_box.hide()
+        return False  # Don't repeat this callback
+
+    def on_scroll_value_changed(self, adjustment):
+        """Handle scroll event to hide search box when scrolling"""
+        # Check if scroll position changed significantly (to avoid minor adjustments)
+        if abs(adjustment.get_value() - self.last_scroll_position) > 5:
+            # Only hide if it's currently visible
+            if hasattr(self, 'search_box') and self.search_box.get_visible():
+                self.search_box.hide()
+                # Update search button icon and tooltip
+                if hasattr(self, 'search_button'):
+                    self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                    self.search_button.set_tooltip_text("Show Search")
+        
+        # Update last position
+        self.last_scroll_position = adjustment.get_value()
 
 def main():
     app = AppStoreApplication()

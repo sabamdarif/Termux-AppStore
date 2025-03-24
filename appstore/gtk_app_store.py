@@ -3022,9 +3022,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             mark = buf.create_mark(None, buf.get_end_iter(), False)
             terminal_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
             buf.delete_mark(mark)
-            # Process GTK events to update the UI
-            while Gtk.events_pending():
-                Gtk.main_iteration_do(False)
+            # Don't process events here to avoid recursion (This is causing RecursionError when called from GLib.idle_add)
         
         # Function to save output to file
         def on_save_clicked(button):

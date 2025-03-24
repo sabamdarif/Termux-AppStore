@@ -120,6 +120,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.distro_enabled = False
         self.is_refreshing = False  # Add a flag to track refresh state
         self.connectivity_dialog_active = False  # Add flag to prevent multiple connectivity dialogs
+        self.cancellation_in_progress = False  # Add flag to track dialog cancellation
         
         # Initialize search variables
         self.search_timeout_id = None
@@ -1530,6 +1531,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         while Gtk.events_pending():
             Gtk.main_iteration()
 
+        # Skip full UI rebuild if we're just handling cancellation
+        if hasattr(self, 'cancellation_in_progress') and self.cancellation_in_progress:
+            # Just make sure spinner is stopped and we're in content view
+            # No need to rebuild the UI or switch sections during cancellation
+            return False
+            
         # First load app metadata
         self.load_app_metadata()
         
@@ -1964,8 +1971,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     except Exception as e:
                         print(f"Error removing script file: {e}")
                 
-                # Add a small delay before destroying the dialog
-                GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog else None)
+                # Make sure the dialog is destroyed only once
+                if progress_dialog and progress_dialog.get_visible():
+                    # Set a flag to avoid multiple calls to show_apps
+                    self.cancellation_in_progress = True
+                    
+                    # Try to disconnect the response signal using the saved handler ID
+                    try:
+                        nonlocal dialog_response_handler_id
+                        progress_dialog.handler_disconnect(dialog_response_handler_id)
+                    except Exception as e:
+                        # Ignore errors if the handler can't be disconnected
+                        print(f"Note: Could not disconnect dialog handler: {e}")
+                    
+                    # Add a small delay before destroying the dialog
+                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog and progress_dialog.get_visible() else None)
+                    # Clear the flag after dialog is destroyed
+                    GLib.timeout_add(600, lambda: setattr(self, 'cancellation_in_progress', False))
+                
                 return True
 
             # Connect the response signal
@@ -1998,6 +2021,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             else:
                 print("Warning: Cancel button not found in dialog")
 
+            def on_dialog_response(dialog, response_id):
+                """Handle dialog responses that might come through the window manager"""
+                if response_id == Gtk.ResponseType.CANCEL or response_id == Gtk.ResponseType.DELETE_EVENT:
+                    # Use the same cancel handler for consistency
+                    on_cancel_clicked()
+            
+            # Store the handler ID for later disconnection if needed
+            dialog_response_handler_id = progress_dialog.connect("response", on_dialog_response)
+            
             def update_progress(fraction, status_text):
                 if not status_text:
                     return False
@@ -2311,16 +2343,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     except Exception as e:
                         print(f"Error terminating process: {e}")
                     
-                    # Clean up the script file
-                    if script_file and os.path.exists(script_file):
-                        try:
-                            os.remove(script_file)
-                            print(f"Cleaned up script: {script_file}")
-                        except Exception as e:
-                            print(f"Error removing script file: {e}")
+                # Clean up the script file
+                if script_file and os.path.exists(script_file):
+                    try:
+                        os.remove(script_file)
+                        print(f"Cleaned up script: {script_file}")
+                    except Exception as e:
+                        print(f"Error removing script file: {e}")
+                    
+                # Make sure the dialog is destroyed only once
+                if progress_dialog and progress_dialog.get_visible():
+                    # Set a flag to avoid multiple calls to show_apps
+                    self.cancellation_in_progress = True
                     
                     # Add a small delay before destroying the dialog
-                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog else None)
+                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog and progress_dialog.get_visible() else None)
+                    # Clear the flag after dialog is destroyed
+                    GLib.timeout_add(600, lambda: setattr(self, 'cancellation_in_progress', False))
+                
                 return True
 
             def update_progress(fraction, status_text):
@@ -4348,8 +4388,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.installation_cancelled = False
         self.current_installation = None
         self.hide_loading_indicators()
-        GLib.idle_add(self.refresh_complete)
-        GLib.idle_add(self.show_apps)
+        
+        # Only refresh UI if not in the middle of cancellation
+        # This prevents double UI refreshes when cancelling
+        if not hasattr(self, 'cancellation_in_progress') or not self.cancellation_in_progress:
+            GLib.idle_add(self.refresh_complete)
+            
+            # Use a small delay for showing apps to ensure proper UI state
+            if hasattr(self, 'current_section') and self.current_section == "explore":
+                # Keep the same category selection
+                GLib.timeout_add(100, lambda: self.show_apps(self._get_selected_category()))
+            elif hasattr(self, 'current_section'):
+                # Handle other sections
+                if self.current_section == "installed":
+                    GLib.timeout_add(100, self.show_installed_apps)
+                elif self.current_section == "updates":
+                    GLib.timeout_add(100, self.show_update_apps)
+        else:
+            # If cancellation is in progress, we only need to refresh the current view
+            # without rebuilding the entire UI
+            GLib.timeout_add(100, lambda: self._refresh_current_view())
+    
+    def _get_selected_category(self):
+        """Helper to get the currently selected category"""
+        if hasattr(self, 'category_buttons'):
+            for cat_button in self.category_buttons:
+                if cat_button.get_style_context().has_class('selected'):
+                    category = cat_button.get_label()
+                    return None if category == "All Apps" else category
+        return None
 
     def update_terminal(self, terminal_view, text):
         """Update the terminal view with new text and append to log file if logging is active"""
@@ -4533,11 +4600,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.logging_active = False
                 self.log_file_path = None
             
+            # Only handle the dialog destruction if not already being handled by on_cancel_clicked
             if response_id == Gtk.ResponseType.CANCEL:
-                dialog.destroy()
-                self.cleanup_installation_state()
+                if not hasattr(self, 'cancellation_in_progress') or not self.cancellation_in_progress:
+                    dialog.destroy()
+                    self.cleanup_installation_state()
+                else:
+                    # Dialog destruction is already being handled elsewhere
+                    pass
         
-        progress_dialog.connect("response", on_dialog_response)
+        # Don't connect the response signal here, let the callers do it to avoid duplication
+        # progress_dialog.connect("response", on_dialog_response)
         
         # Function to save log content to file
         def on_save_log_clicked(button):
@@ -4847,6 +4920,47 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Update last position
         self.last_scroll_position = adjustment.get_value()
+
+    def _refresh_current_view(self):
+        """Refresh only the current view without rebuilding the UI"""
+        try:
+            # Just refresh the content in the current section
+            if hasattr(self, 'current_section'):
+                if self.current_section == "explore":
+                    # Keep the same category selection and refresh
+                    selected_category = self._get_selected_category()
+                    self.clear_app_list_box()
+                    self.show_apps(selected_category)
+                elif self.current_section == "installed":
+                    self.clear_app_list_box()
+                    self.show_installed_apps()
+                elif self.current_section == "updates":
+                    self.clear_app_list_box()
+                    self.show_update_apps()
+            
+            # Make sure the UI elements for the current section are properly shown/hidden
+            if hasattr(self, 'current_section'):
+                # Handle UI elements based on section
+                if self.current_section == "explore":
+                    if hasattr(self, 'sidebar'):
+                        self.sidebar.show()
+                    if hasattr(self, 'update_button'):
+                        self.update_button.hide()
+                elif self.current_section == "installed":
+                    if hasattr(self, 'sidebar'):
+                        self.sidebar.hide()
+                    if hasattr(self, 'update_button'):
+                        self.update_button.hide()
+                elif self.current_section == "updates":
+                    if hasattr(self, 'sidebar'):
+                        self.sidebar.hide()
+                    if hasattr(self, 'update_button'):
+                        self.update_button.show()
+        except Exception as e:
+            print(f"Error in _refresh_current_view: {e}")
+            import traceback
+            traceback.print_exc()
+        return False
 
 def main():
     app = AppStoreApplication()

@@ -872,7 +872,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print("Saved pending updates")
 
             # Refresh the UI to show updated versions
-            GLib.idle_add(self.show_apps)
+            # Get current category before refreshing
+            current_category = self._get_selected_category()
+            GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
 
         except Exception as e:
             print(f"Error updating app versions: {e}")
@@ -1598,7 +1600,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         elif not installed and app_name in self.installed_apps:
             self.installed_apps.remove(app_name)
         self.save_installed_apps()
-        GLib.idle_add(self.show_apps)
+        # Get current category before refreshing
+        current_category = self._get_selected_category()
+        GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
 
     def is_arch_compatible(self, app_arch):
         """Check if the app's architecture is compatible with the system"""
@@ -2157,7 +2161,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         
                         time.sleep(1)
                         GLib.idle_add(progress_dialog.destroy)
-                        GLib.idle_add(self.show_apps)  # Refresh the UI
+                        # Get current category before refreshing
+                        current_category = self._get_selected_category()
+                        GLib.idle_add(lambda cat=current_category: self.show_apps(cat))  # Refresh the UI with current category
                     else:
                         GLib.idle_add(update_progress, 1.0, "Installation failed or cancelled!")
                         
@@ -2453,7 +2459,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
                         self.installed_apps.remove(app['folder_name'])
                         self.save_installed_apps()
-                        GLib.idle_add(self.show_apps)
+                        # Get current category before refreshing
+                        current_category = self._get_selected_category()
+                        GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
                         msg = "Uninstallation complete!"
                         GLib.idle_add(update_progress, 1.0, msg)
                         GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))

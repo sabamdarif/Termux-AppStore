@@ -4855,6 +4855,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         def update_spinner():
             self.spinner.set_property("visible", True)
             self.spinner.set_property("active", True) 
+            self.spinner.start()  # Add this explicit call to start the animation
             self.spinner.show_all()
             self.loading_label.set_property("visible", True)
             self.loading_label.show_all()

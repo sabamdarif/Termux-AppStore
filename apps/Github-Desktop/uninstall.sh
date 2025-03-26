@@ -1,4 +1,4 @@
-#! /data/data/com.termux/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 
 if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]]; then
     distro_run "apt remove github-desktop -y"

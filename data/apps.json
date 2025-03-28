@@ -945,6 +945,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Webcord/logo.png"
   },
   {
+    "app_name": "Windsurf",
+    "folder_name": "Windsurf",
+    "description": "The Windsurf Editor is where the work of developers and AI truly flow together, allowing for a coding experience that feels like literal magic",
+    "categories": [
+      "Development"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/opt/windsurf/windsurf --no-sandbox",
+    "supported_arch": "aarch64",
+    "version": "v1.3.4",
+    "supported_distro": "all",
+    "package_name": "windsurf",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Windsurf/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Windsurf/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Windsurf/logo.png"
+  },
+  {
     "app_name": "Xpdf Reader",
     "folder_name": "Xpdf-Reader",
     "description": "Xpdf is a lightweight PDF reader for viewing documents.",

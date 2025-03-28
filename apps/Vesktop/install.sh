@@ -41,7 +41,7 @@ print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/vesktop.desktop >/dev/null
 [Desktop Entry]
 Name=Vesktop
-Exec=${run_cmd} --no-sandbox
+Exec=pdrun ${run_cmd} --no-sandbox
 Terminal=false
 Type=Application
 Icon=${HOME}/.appstore/logo/vesktop/logo.png

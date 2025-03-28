@@ -198,32 +198,32 @@ if [[ "\$selected_distro" == "ubuntu" ]] || [[ "\$selected_distro" == "debian" ]
 cd \$working_dir
 filename="${filename_pattern}"
 distro_run "
-check_and_delete "/root/\${filename}"
+check_and_delete '/root/\${filename}'
 "
 download_file "${page_url}/releases/download/${version}/${filename}"
 distro_run "
 sudo apt install ./\${filename} -y
-check_and_delete "/root/\${filename}"
+check_and_delete '/root/\${filename}'
 "
 elif [[ "\$selected_distro" == "fedora" ]]; then
 cd \$working_dir
 filename="${filename_pattern}"
 distro_run "
-check_and_delete "/root/\${filename}"
+check_and_delete '/root/\${filename}'
 "
 download_file "\${page_url}/releases/download/\${version}/\${filename}"
 distro_run "
 cd /root
-check_and_delete "app_installer"
-check_and_create_directory "app_installer"
+check_and_delete 'app_installer'
+check_and_create_directory 'app_installer'
 mv \${filename} app_installer/
 cd app_installer
 sudo dnf install -y ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3
 ar x \${filename}
-extract "data.tar.xz"
+extract 'data.tar.xz'
 mv opt/* /opt
 cd /root
-check_and_delete "app_installer"
+check_and_delete 'app_installer'
 "
 else
     print_failed "Unsupported distro"
@@ -279,9 +279,9 @@ echo "\$(pwd)"
 download_file "\${page_url}/releases/download/\${version}/${filename_pattern}"
 distro_run "
 cd /opt/$package_name
-echo "\$(pwd)"
-extract "${filename_pattern}"
-check_and_delete "${filename_pattern}"
+echo '\$(pwd)'
+extract '${filename_pattern}'
+check_and_delete '${filename_pattern}'
 "
 
 # Determine which logo file to use
@@ -362,7 +362,7 @@ sudo apt remove $package_name -y
 "
 elif [[ "\$selected_distro" == "fedora" ]]; then
 distro_run "
-rm -rf "/opt/$package_name"
+rm -rf '/opt/$package_name'
 "
 else
     print_failed "Unsupported distro"

@@ -4,16 +4,33 @@ termux_desktop_path="/data/data/com.termux/files/usr/etc/termux-desktop"
 config_file="$termux_desktop_path/configuration.conf"
 
 function print_success() {
-    echo "[✓] $1"
+    echo -e "\033[32m[✓]\033[0m $1"
 }
 
 function print_failed() {
-    echo "[✗] $1"
+    echo -e "\033[31m[✗]\033[0m $1"
     exit 1
 }
 
 function print_warn() {
-    echo "[!] $1"
+    echo -e "\033[33m[!]\033[0m $1"
+}
+
+function print_status() {
+    echo -e "\033[36m[*]\033[0m $1"
+}
+
+function print_cmd() {
+    echo -e "\033[35m[$]\033[0m \033[1m$1\033[0m"
+}
+
+function print_header() {
+    echo -e "\033[1;44;97m $1 \033[0m"
+}
+
+function print_section() {
+    echo 
+    echo -e "\033[1;34m=== $1 ===\033[0m"
 }
 
 function wait_for_keypress() {
@@ -230,8 +247,15 @@ function package_install_and_check() {
         echo "Processing package: $package_name"
         attempt=1
 
+        # For APT systems, run dpkg --configure -a before attempting the install
+        if [[ "$PACKAGE_MANAGER" != "pacman" ]]; then
+            echo "Checking and fixing any corrupted installations..."
+            dpkg --configure -a
+        fi
+
         while (( attempt <= max_retries )); do
             if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+                # Check if package is already installed
                 if pacman -Qi "$package_name" >/dev/null 2>&1; then
                     break
                 fi
@@ -253,37 +277,20 @@ function package_install_and_check() {
                     fi
                 fi
             else
-                if [[ $package_name == *"*"* ]]; then
-                    echo "Processing wildcard pattern: $package_name"
-                    packages_by_name=$(apt-cache search "${package_name%*}" | awk "/^${package_name}/ {print \$1}")
-                    packages_by_description=$(apt-cache search "${package_name%*}" | grep -Ei "\b${package_name%*}\b" | awk '{print $1}')
-                    packages=$(echo -e "${packages_by_name}\n${packages_by_description}" | sort -u)
-                    for pkgs in $packages; do
-                        echo "Installing matched package: $pkgs"
-                        if dpkg -s "$pkgs" >/dev/null 2>&1; then
-                            dpkg --configure -a
-                            apt-get reinstall "$pkgs" -y
-                        else
-                            dpkg --configure -a
-                            apt-get install "$pkgs" -y
-                        fi
-                        if dpkg -s "$pkgs" >/dev/null 2>&1; then
-                            print_success "$pkgs installed successfully"
-                        fi
-                    done
-                    break
+                # For APT-based systems, first check if the package is installed
+                if dpkg -s "$package_name" >/dev/null 2>&1; then
+                    echo "Package already installed. Attempting reconfiguration and reinstallation..."
+                    dpkg --configure -a
+                    apt-get reinstall "$package_name" -y
                 else
-                    if dpkg -s "$package_name" >/dev/null 2>&1; then
-                        dpkg --configure -a
-                        apt-get reinstall "$package_name" -y
-                    else
-                        dpkg --configure -a
-                        apt-get install "$package_name" -y
-                    fi
-                    if dpkg -s "$package_name" >/dev/null 2>&1; then
-                        print_success "$package_name installed successfully"
-                        break
-                    fi
+                    echo "Installing package after fixing potential issues..."
+                    dpkg --configure -a
+                    apt-get install "$package_name" -y
+                fi
+
+                if dpkg -s "$package_name" >/dev/null 2>&1; then
+                    print_success "$package_name installed successfully"
+                    break
                 fi
             fi
 
@@ -307,6 +314,12 @@ function package_remove_and_check() {
     for package_name in "${packs_list[@]}"; do
         echo "Processing package: $package_name"
         attempt=1
+
+        # For APT-based systems, attempt to fix any broken installations before removal
+        if [[ "$PACKAGE_MANAGER" != "pacman" ]]; then
+            echo "Fixing any potential broken installations before removal..."
+            dpkg --configure -a
+        fi
 
         while (( attempt <= max_retries )); do
             if [[ $package_name == *"*"* ]]; then

@@ -2943,34 +2943,31 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.show_error_dialog(f"Error opening app: {e}")
             
     def show_command_output_window(self, app_name, run_cmd):
-        """Show a terminal-like window with command output"""
+        """Show a window with the command output"""
         # Create dialog
-        dialog = Gtk.Window(title=f"{app_name} - Command Output")
-        dialog.set_default_size(700, 400)
-        dialog.set_transient_for(self)
-        dialog.set_modal(True)
-        dialog.connect("delete-event", lambda w, e: w.destroy())
+        dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
+        dialog.set_title(f"Running {app_name}")
+        dialog.set_default_size(600, 400)
+        dialog.set_border_width(10)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
+        dialog.set_destroy_with_parent(True)
         dialog.get_style_context().add_class("command-output-dialog")
         
+        # Set window icon
+        icon_name = "utilities-terminal"
+        icon_theme = Gtk.IconTheme.get_default()
+        if icon_theme.has_icon(icon_name):
+            dialog.set_icon_name(icon_name)
+            
         # Create main box
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        main_box.set_margin_start(12)
-        main_box.set_margin_end(12)
-        main_box.set_margin_top(12)
-        main_box.set_margin_bottom(12)
         dialog.add(main_box)
         
-        # Create command label
-        command_label = Gtk.Label()
-        command_label.set_markup(f"<b>Command:</b> <span font_family='monospace'>{GLib.markup_escape_text(run_cmd)}</span>")
-        command_label.set_halign(Gtk.Align.START)
-        command_label.set_margin_bottom(6)
-        main_box.pack_start(command_label, False, False, 0)
-        
-        # Create ScrolledWindow for terminal
+        # Create scrolled window for terminal
         scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled_window.set_shadow_type(Gtk.ShadowType.IN)
+        scrolled_window.set_hexpand(True)
+        scrolled_window.set_vexpand(True)
         
         # Create TextView for terminal output
         terminal_view = Gtk.TextView()
@@ -2979,9 +2976,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         terminal_view.get_style_context().add_class("terminal-view")
         
-        # Set terminal colors
-        terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
-        terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
+        # Initialize terminal emulator
+        terminal_emulator = TerminalEmulator(terminal_view)
         
         scrolled_window.add(terminal_view)
         main_box.pack_start(scrolled_window, True, True, 0)
@@ -3004,31 +3000,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         close_button.get_style_context().add_class("command-output-close-button")
         button_box.pack_start(close_button, False, False, 0)
         
-        # Set up text buffer
-        buffer = terminal_view.get_buffer()
-        end_iter = buffer.get_end_iter()
-        buffer.insert(end_iter, f"Starting {app_name}...\n")
+        # Initial text
+        terminal_emulator.append_text(f"Starting {app_name}...\n")
         
         # Show all widgets
         dialog.show_all()
         
         # Function to update the terminal
         def update_terminal_output(text):
-            # Get end iterator and insert text
-            buf = terminal_view.get_buffer()
-            end = buf.get_end_iter()
-            buf.insert(end, text)
-            # Scroll to end
-            mark = buf.create_mark(None, buf.get_end_iter(), False)
-            terminal_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
-            buf.delete_mark(mark)
-            # Don't process events here to avoid recursion (This is causing RecursionError when called from GLib.idle_add)
+            terminal_emulator.append_text(text)
         
         # Function to save output to file
         def on_save_clicked(button):
-            buf = terminal_view.get_buffer()
-            start, end = buf.get_bounds()
-            text = buf.get_text(start, end, False)
+            text = terminal_emulator.get_text()
             
             # Create file chooser dialog
             file_dialog = Gtk.FileChooserDialog(
@@ -3051,15 +3035,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if response == Gtk.ResponseType.OK:
                 filename = file_dialog.get_filename()
                 try:
+                    # Save current content
                     with open(filename, 'w') as f:
-                        f.write(text)
+                        # Write the clean text without ANSI codes
+                        f.write(AnsiColorParser().strip_ansi(text))
                     update_terminal_output(f"\nOutput saved to {filename}\n")
                 except Exception as e:
                     update_terminal_output(f"\nError saving output: {e}\n")
             
             file_dialog.destroy()
         
-        # Connect save button
+        # Connect save button click
         save_button.connect("clicked", on_save_clicked)
         
         # Connect close button
@@ -3288,6 +3274,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Set terminal colors using CSS classes
         terminal_view.get_style_context().add_class('terminal-view')
+        
+        # Initialize the terminal emulator
+        terminal_emulator = TerminalEmulator(terminal_view)
         
         # Add terminal view to scroll window
         terminal_scroll.add(terminal_view)
@@ -4428,28 +4417,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Update the terminal view with new text and append to log file if logging is active"""
         if not text:
             return
-            
-        buffer = terminal_view.get_buffer()
-        end_iter = buffer.get_end_iter()
-        
-        # Add newline if buffer is not empty
-        if buffer.get_char_count() > 0:
-            buffer.insert(end_iter, "\n")
-            # Also append newline to log file if logging is active
-            if self.logging_active and self.log_file:
-                try:
-                    self.log_file.write("\n")
-                    self.log_file.flush()  # Ensure it's written immediately
-                except Exception:
-                    pass  # Ignore errors in logging
-            
-        # Insert the new text
-        buffer.insert(end_iter, text)
-        
+    
+        # Create a terminal emulator for the text view if it doesn't exist yet
+        if not hasattr(terminal_view, 'terminal_emulator'):
+            terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
+    
+        # Process and append the text
+        terminal_view.terminal_emulator.append_text(text)
+    
         # Append to log file if continuous logging is active
         if self.logging_active and self.log_file:
             try:
-                self.log_file.write(text)
+                # Strip ANSI codes when writing to log file
+                clean_text = AnsiColorParser().strip_ansi(text)
+                
+                # Write to log file, ensuring a newline is added if needed
+                if self.log_file.tell() > 0:
+                    # Move to the position before the last character
+                    self.log_file.seek(self.log_file.tell() - 1, 0)
+                    last_char = self.log_file.read(1)
+                    self.log_file.seek(0, 2)  # Move back to the end
+                    
+                    # If the last character isn't a newline and the new text doesn't start with one,
+                    # add a newline before writing
+                    if last_char != '\n' and not clean_text.startswith('\n'):
+                        self.log_file.write('\n')
+                        
+                self.log_file.write(clean_text)
                 self.log_file.flush()  # Ensure it's written immediately
             except Exception:
                 # If there's an error writing to the log file, disable logging
@@ -4460,11 +4454,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.log_file = None
                 self.logging_active = False
                 self.log_file_path = None
-        
-        # Scroll to the end
-        mark = buffer.create_mark(None, buffer.get_end_iter(), False)
-        terminal_view.scroll_mark_onscreen(mark)
-        buffer.delete_mark(mark)
+    
         return False
 
     def create_progress_dialog(self, title="Installing...", allow_cancel=True):
@@ -4559,6 +4549,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Set terminal colors using CSS classes
         terminal_view.get_style_context().add_class('terminal-view')
+        
+        # Initialize the terminal emulator
+        terminal_emulator = TerminalEmulator(terminal_view)
         
         # Add terminal view to scroll window
         terminal_scroll.add(terminal_view)
@@ -4968,6 +4961,277 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             import traceback
             traceback.print_exc()
         return False
+
+class AnsiColorParser:
+    """Class to parse ANSI escape sequences and apply formatting to a GTK TextView"""
+    
+    # ANSI escape sequence regex
+    ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[((?:\d+;)*\d+)?([A-Za-z])')
+    
+    # Basic ANSI color codes
+    COLORS = {
+        # Foreground colors
+        '30': (0.0, 0.0, 0.0),      # Black
+        '31': (0.8, 0.0, 0.0),      # Red
+        '32': (0.0, 0.8, 0.0),      # Green
+        '33': (0.8, 0.8, 0.0),      # Yellow
+        '34': (0.0, 0.0, 0.8),      # Blue
+        '35': (0.8, 0.0, 0.8),      # Magenta
+        '36': (0.0, 0.8, 0.8),      # Cyan
+        '37': (0.8, 0.8, 0.8),      # White
+        '90': (0.5, 0.5, 0.5),      # Bright Black (Gray)
+        '91': (1.0, 0.0, 0.0),      # Bright Red
+        '92': (0.0, 1.0, 0.0),      # Bright Green
+        '93': (1.0, 1.0, 0.0),      # Bright Yellow
+        '94': (0.0, 0.0, 1.0),      # Bright Blue
+        '95': (1.0, 0.0, 1.0),      # Bright Magenta
+        '96': (0.0, 1.0, 1.0),      # Bright Cyan
+        '97': (1.0, 1.0, 1.0),      # Bright White
+        # Background colors
+        '40': (0.0, 0.0, 0.0),      # Black
+        '41': (0.8, 0.0, 0.0),      # Red
+        '42': (0.0, 0.8, 0.0),      # Green
+        '43': (0.8, 0.8, 0.0),      # Yellow
+        '44': (0.0, 0.0, 0.8),      # Blue
+        '45': (0.8, 0.0, 0.8),      # Magenta
+        '46': (0.0, 0.8, 0.8),      # Cyan
+        '47': (0.8, 0.8, 0.8),      # White
+        '100': (0.5, 0.5, 0.5),     # Bright Black (Gray)
+        '101': (1.0, 0.0, 0.0),     # Bright Red
+        '102': (0.0, 1.0, 0.0),     # Bright Green
+        '103': (1.0, 1.0, 0.0),     # Bright Yellow
+        '104': (0.0, 0.0, 1.0),     # Bright Blue
+        '105': (1.0, 0.0, 1.0),     # Bright Magenta
+        '106': (0.0, 1.0, 1.0),     # Bright Cyan
+        '107': (1.0, 1.0, 1.0),     # Bright White
+    }
+    
+    # Text attributes
+    ATTRIBUTES = {
+        '0': 'reset',        # Reset all attributes
+        '1': 'bold',         # Bold or increased intensity
+        '2': 'dim',          # Dim or decreased intensity
+        '3': 'italic',       # Italic
+        '4': 'underline',    # Underline
+        '5': 'blink',        # Blink (not widely supported)
+        '7': 'reverse',      # Reverse (swap fg and bg colors)
+        '9': 'strikethrough' # Strikethrough
+    }
+    
+    def __init__(self):
+        # Initialize tag table for the TextView buffer
+        self.tags = {}
+    
+    def ensure_tag(self, buffer, tag_name, properties):
+        """Ensure a tag exists in the buffer with the specified properties"""
+        if tag_name not in self.tags:
+            tag = buffer.create_tag(tag_name)
+            for prop, value in properties.items():
+                tag.set_property(prop, value)
+            self.tags[tag_name] = tag
+        return self.tags[tag_name]
+    
+    def apply_formatting(self, buffer, text):
+        """Parse text with ANSI escape sequences and insert into buffer with appropriate formatting"""
+        end_iter = buffer.get_end_iter()
+        cursor_pos = 0
+        
+        # Current formatting state
+        fg_color = None
+        bg_color = None
+        bold = False
+        italic = False
+        underline = False
+        
+        # Process the text and find ANSI escape sequences
+        for match in self.ANSI_ESCAPE_PATTERN.finditer(text):
+            # Insert the text before the escape sequence
+            start_pos = match.start()
+            if start_pos > cursor_pos:
+                plain_text = text[cursor_pos:start_pos]
+                # Apply current formatting to plain text
+                tags = []
+                
+                # Create and apply color tags
+                if fg_color:
+                    fg_tag_name = f"fg_{fg_color[0]}_{fg_color[1]}_{fg_color[2]}"
+                    fg_tag = self.ensure_tag(buffer, fg_tag_name, {
+                        "foreground-rgba": Gdk.RGBA(*fg_color, 1.0)
+                    })
+                    tags.append(fg_tag)
+                
+                if bg_color:
+                    bg_tag_name = f"bg_{bg_color[0]}_{bg_color[1]}_{bg_color[2]}"
+                    bg_tag = self.ensure_tag(buffer, bg_tag_name, {
+                        "background-rgba": Gdk.RGBA(*bg_color, 1.0)
+                    })
+                    tags.append(bg_tag)
+                
+                # Apply text attribute tags
+                if bold:
+                    bold_tag = self.ensure_tag(buffer, "bold", {"weight": Pango.Weight.BOLD})
+                    tags.append(bold_tag)
+                
+                if italic:
+                    italic_tag = self.ensure_tag(buffer, "italic", {"style": Pango.Style.ITALIC})
+                    tags.append(italic_tag)
+                
+                if underline:
+                    underline_tag = self.ensure_tag(buffer, "underline", 
+                                                   {"underline": Pango.Underline.SINGLE})
+                    tags.append(underline_tag)
+                
+                # Insert text with all applicable tags
+                start_mark = buffer.create_mark(None, end_iter, True)
+                buffer.insert(end_iter, plain_text)
+                for tag in tags:
+                    start_iter = buffer.get_iter_at_mark(start_mark)
+                    buffer.apply_tag(tag, start_iter, end_iter)
+                buffer.delete_mark(start_mark)
+            
+            # Process the escape sequence
+            params = match.group(1)
+            command = match.group(2)
+            
+            if command == 'm' and params:  # SGR (Select Graphic Rendition)
+                for param in params.split(';'):
+                    if not param:
+                        continue
+                        
+                    # Reset all attributes
+                    if param == '0':
+                        fg_color = None
+                        bg_color = None
+                        bold = False
+                        italic = False
+                        underline = False
+                    
+                    # Process text attributes
+                    elif param in self.ATTRIBUTES:
+                        attr = self.ATTRIBUTES[param]
+                        if attr == 'bold':
+                            bold = True
+                        elif attr == 'italic':
+                            italic = True
+                        elif attr == 'underline':
+                            underline = True
+                    
+                    # Process foreground colors
+                    elif param in self.COLORS and int(param) < 40:
+                        fg_color = self.COLORS[param]
+                    
+                    # Process background colors
+                    elif param in self.COLORS and int(param) >= 40:
+                        bg_color = self.COLORS[param]
+            
+            # Update cursor position
+            cursor_pos = match.end()
+        
+        # Insert any remaining text
+        if cursor_pos < len(text):
+            remaining_text = text[cursor_pos:]
+            # Apply current formatting to remaining text
+            tags = []
+            
+            # Create and apply color tags
+            if fg_color:
+                fg_tag_name = f"fg_{fg_color[0]}_{fg_color[1]}_{fg_color[2]}"
+                fg_tag = self.ensure_tag(buffer, fg_tag_name, {
+                    "foreground-rgba": Gdk.RGBA(*fg_color, 1.0)
+                })
+                tags.append(fg_tag)
+            
+            if bg_color:
+                bg_tag_name = f"bg_{bg_color[0]}_{bg_color[1]}_{bg_color[2]}"
+                bg_tag = self.ensure_tag(buffer, bg_tag_name, {
+                    "background-rgba": Gdk.RGBA(*bg_color, 1.0)
+                })
+                tags.append(bg_tag)
+            
+            # Apply text attribute tags
+            if bold:
+                bold_tag = self.ensure_tag(buffer, "bold", {"weight": Pango.Weight.BOLD})
+                tags.append(bold_tag)
+            
+            if italic:
+                italic_tag = self.ensure_tag(buffer, "italic", {"style": Pango.Style.ITALIC})
+                tags.append(italic_tag)
+            
+            if underline:
+                underline_tag = self.ensure_tag(buffer, "underline", 
+                                               {"underline": Pango.Underline.SINGLE})
+                tags.append(underline_tag)
+            
+            # Insert text with all applicable tags
+            start_mark = buffer.create_mark(None, end_iter, True)
+            buffer.insert(end_iter, remaining_text)
+            for tag in tags:
+                start_iter = buffer.get_iter_at_mark(start_mark)
+                buffer.apply_tag(tag, start_iter, end_iter)
+            buffer.delete_mark(start_mark)
+    
+    def strip_ansi(self, text):
+        """Remove ANSI escape sequences from text"""
+        return self.ANSI_ESCAPE_PATTERN.sub('', text)
+
+class TerminalEmulator:
+    """Emulates a terminal in a GTK TextView"""
+    
+    def __init__(self, text_view):
+        self.text_view = text_view
+        self.buffer = text_view.get_buffer()
+        self.ansi_parser = AnsiColorParser()
+        
+        # Ensure monospace font for terminal-like appearance
+        self.text_view.set_monospace(True)
+        
+        # Set initial terminal colors
+        self.text_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
+        self.text_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
+        
+        # Add terminal view style class
+        self.text_view.get_style_context().add_class("terminal-view")
+    
+    def append_text(self, text, with_ansi=True):
+        """Append text to the terminal view, processing ANSI escape sequences if with_ansi is True"""
+        if not text:
+            return
+            
+        # Check if we need to add a newline before the new text
+        if self.buffer.get_char_count() > 0:
+            # Get the last character in the buffer
+            end_iter = self.buffer.get_end_iter()
+            start_iter = end_iter.copy()
+            if start_iter.backward_char():  # This returns False if we can't move back (empty buffer)
+                last_char = self.buffer.get_text(start_iter, end_iter, False)
+                
+                # If the last character isn't a newline and the new text doesn't start with one,
+                # add a newline before the new text
+                if last_char != '\n' and not text.startswith('\n'):
+                    # Insert a newline first
+                    self.buffer.insert(end_iter, '\n')
+            
+        # Process text with ANSI escape sequences
+        if with_ansi:
+            self.ansi_parser.apply_formatting(self.buffer, text)
+        else:
+            # Just append the text without processing
+            end_iter = self.buffer.get_end_iter()
+            self.buffer.insert(end_iter, text)
+        
+        # Scroll to the end
+        mark = self.buffer.create_mark(None, self.buffer.get_end_iter(), False)
+        self.text_view.scroll_mark_onscreen(mark)
+        self.buffer.delete_mark(mark)
+    
+    def clear(self):
+        """Clear the terminal view"""
+        self.buffer.delete(self.buffer.get_start_iter(), self.buffer.get_end_iter())
+    
+    def get_text(self):
+        """Get the terminal contents"""
+        start_iter, end_iter = self.buffer.get_bounds()
+        return self.buffer.get_text(start_iter, end_iter, False)
 
 def main():
     app = AppStoreApplication()

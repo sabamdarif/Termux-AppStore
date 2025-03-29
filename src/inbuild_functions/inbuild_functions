@@ -4,16 +4,33 @@ termux_desktop_path="/data/data/com.termux/files/usr/etc/termux-desktop"
 config_file="$termux_desktop_path/configuration.conf"
 
 function print_success() {
-    echo "[✓] $1"
+    echo -e "\033[32m[✓]\033[0m $1"
 }
 
 function print_failed() {
-    echo "[✗] $1"
+    echo -e "\033[31m[✗]\033[0m $1"
     exit 1
 }
 
 function print_warn() {
-    echo "[!] $1"
+    echo -e "\033[33m[!]\033[0m $1"
+}
+
+function print_status() {
+    echo -e "\033[36m[*]\033[0m $1"
+}
+
+function print_cmd() {
+    echo -e "\033[35m[$]\033[0m \033[1m$1\033[0m"
+}
+
+function print_header() {
+    echo -e "\033[1;44;97m $1 \033[0m"
+}
+
+function print_section() {
+    echo 
+    echo -e "\033[1;34m=== $1 ===\033[0m"
 }
 
 function wait_for_keypress() {

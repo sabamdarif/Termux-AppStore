@@ -2092,8 +2092,32 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(update_progress, 0.3, "Preparing installation...")
                     os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
 
+                    # Count the number of significant lines in the script to track progress
+                    total_lines = 0
+                    significant_lines = []
+                    try:
+                        with open(script_file, 'r') as f:
+                            for line in f:
+                                # Skip empty lines and comments
+                                line = line.strip()
+                                if line and not line.startswith('#'):
+                                    total_lines += 1
+                                    significant_lines.append(line)
+                        # Ensure we have at least one line
+                        total_lines = max(1, total_lines)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                    except Exception as e:
+                        print(f"Error counting script lines: {e}")
+                        # Default to a reasonable number if counting fails
+                        total_lines = 100
+                    
+                    # Calculate base progress (downloading and preparation = 30%)
+                    base_progress = 0.3
+                    # Calculate line progress (each line contributes to 60% of progress)
+                    line_progress_weight = 0.6 / total_lines
+                    
                     # Execute script with better progress tracking
-                    GLib.idle_add(update_progress, 0.4, "Starting installation...")
+                    GLib.idle_add(update_progress, base_progress, "Starting installation...")
                     install_process = subprocess.Popen(
                         ['bash', script_file],
                         stdout=subprocess.PIPE,
@@ -2102,6 +2126,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         bufsize=1,
                         preexec_fn=os.setsid  # Create new process group
                     )
+                    
+                    # Track current line
+                    current_line = 0
                     
                     while True:
                         if install_cancelled:
@@ -2121,33 +2148,41 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if not line:
                             continue
 
-                        progress = 0.4
+                        # Update current line and calculate progress
+                        current_line += 1
+                        # Ensure we don't exceed our total for any reason
+                        current_line = min(current_line, total_lines)
+                        
+                        # Calculate current progress
+                        # Base progress + line progress contribution
+                        current_progress = base_progress + (current_line * line_progress_weight)
+                        
+                        # Cap progress at 90% - the final 10% is reserved for completion tasks
+                        current_progress = min(0.9, current_progress)
+                        
+                        # Update progress
+                        GLib.idle_add(update_progress, current_progress, line)
+                        
+                        # Update terminal
+                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
 
-                        # Update progress based on specific actions
-                        if "download" in line.lower():
-                            progress = 0.5
-                        elif "extracting" in line.lower() or "tar" in line.lower():
-                            progress = 0.7
-                        elif "installing" in line.lower():
-                            progress = 0.8
-                        elif "creating desktop entry" in line.lower():
-                            progress = 0.9
-
-                        GLib.idle_add(update_progress, progress, line)
-
-                    install_process.wait()
-                    if install_process.returncode == 0 and not install_cancelled:
+                    if install_process.wait() == 0 and not install_cancelled:
+                        # Update installation status (95%)
                         GLib.idle_add(update_progress, 0.95, "Finalizing installation...")
-                        GLib.idle_add(lambda: self.update_installation_status(app['folder_name'], True))
+                        self.update_installation_status(app['folder_name'], True)
                         
                         # Remove from pending updates if this was an update
                         if app['folder_name'] in self.pending_updates:
                             del self.pending_updates[app['folder_name']]
                             self.save_pending_updates()
                         
-                        time.sleep(0.5)
-                        GLib.idle_add(update_progress, 1.0, "Installation complete!")
+                        # Get current category before refreshing
+                        current_category = self._get_selected_category()
+                        GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
                         
+                        # Complete (100%)
+                        GLib.idle_add(update_progress, 1.0, "Installation complete!")
+
                         # Close log file if logging is active
                         if self.logging_active and self.log_file:
                             try:
@@ -2158,28 +2193,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             self.log_file = None
                             self.logging_active = False
                             self.log_file_path = None
-                        
-                        time.sleep(1)
-                        GLib.idle_add(progress_dialog.destroy)
-                        # Get current category before refreshing
-                        current_category = self._get_selected_category()
-                        GLib.idle_add(lambda cat=current_category: self.show_apps(cat))  # Refresh the UI with current category
-                    else:
-                        GLib.idle_add(update_progress, 1.0, "Installation failed or cancelled!")
-                        
-                        # Close log file if logging is active
-                        if self.logging_active and self.log_file:
-                            try:
-                                self.log_file.write("\n--- Installation failed or cancelled ---\n")
-                                self.log_file.close()
-                            except Exception:
-                                pass
-                            self.log_file = None
-                            self.logging_active = False
-                            self.log_file_path = None
-                        
+
+                        # Delay closing the dialog a bit to show the completion message
                         time.sleep(2)
-                        GLib.idle_add(progress_dialog.destroy)
+                    else:
+                        if not install_cancelled:  # Only show error if not cancelled
+                            GLib.idle_add(update_progress, 1.0, "Installation failed!")
+                            
+                            # Close log file if logging is active
+                            if self.logging_active and self.log_file:
+                                try:
+                                    self.log_file.write("\n--- Installation failed ---\n")
+                                    self.log_file.close()
+                                except Exception:
+                                    pass
+                                self.log_file = None
+                                self.logging_active = False
+                                self.log_file_path = None
+                                
+                            time.sleep(2)
+                    
+                    # Clean up and close dialog
+                    GLib.idle_add(progress_dialog.destroy)
+                    if script_file and os.path.exists(script_file):
+                        try:
+                            os.remove(script_file)
+                        except:
+                            pass
 
                 except Exception as e:
                     print(f"Installation error: {str(e)}")
@@ -2424,10 +2464,39 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.idle_add(progress_dialog.destroy)
                         return
 
-                    # Execute uninstall script
+                    # Make script executable
                     os.chmod(script_file, 0o755)
-                    status_msg = "Starting uninstallation..."
+                    status_msg = "Preparing uninstallation..."
                     GLib.idle_add(update_progress, 0.2, status_msg)
+                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
+
+                    # Count the number of significant lines in the script to track progress
+                    total_lines = 0
+                    significant_lines = []
+                    try:
+                        with open(script_file, 'r') as f:
+                            for line in f:
+                                # Skip empty lines and comments
+                                line = line.strip()
+                                if line and not line.startswith('#'):
+                                    total_lines += 1
+                                    significant_lines.append(line)
+                        # Ensure we have at least one line
+                        total_lines = max(1, total_lines)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                    except Exception as e:
+                        print(f"Error counting script lines: {e}")
+                        # Default to a reasonable number if counting fails
+                        total_lines = 100
+                    
+                    # Calculate base progress (downloading and preparation = 20%)
+                    base_progress = 0.2
+                    # Calculate line progress (each line contributes to 70% of progress)
+                    line_progress_weight = 0.7 / total_lines
+                    
+                    # Execute script with better progress tracking
+                    status_msg = "Starting uninstallation..."
+                    GLib.idle_add(update_progress, base_progress, status_msg)
                     GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
 
                     uninstall_process = subprocess.Popen(
@@ -2439,6 +2508,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         preexec_fn=os.setsid
                     )
 
+                    # Track current line
+                    current_line = 0
+
                     for line in uninstall_process.stdout:
                         if uninstall_cancelled:
                             os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
@@ -2449,7 +2521,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             GLib.idle_add(progress_dialog.destroy)
                             return
                         
-                        GLib.idle_add(update_progress, 0.5, line.strip())
+                        # Update current line and calculate progress
+                        current_line += 1
+                        # Ensure we don't exceed our total for any reason
+                        current_line = min(current_line, total_lines)
+                        
+                        # Calculate current progress
+                        # Base progress + line progress contribution
+                        current_progress = base_progress + (current_line * line_progress_weight)
+                        
+                        # Cap progress at 90% - the final 10% is reserved for completion tasks
+                        current_progress = min(0.9, current_progress)
+                        
+                        # Update progress
+                        GLib.idle_add(update_progress, current_progress, line.strip())
+                        
+                        # Update terminal
                         GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
 
                     uninstall_process.wait()
@@ -3453,8 +3540,32 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.idle_add(update_progress, 0.3, "Preparing update...")
                         os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
 
+                        # Count the number of significant lines in the script to track progress
+                        total_lines = 0
+                        significant_lines = []
+                        try:
+                            with open(script_file, 'r') as f:
+                                for line in f:
+                                    # Skip empty lines and comments
+                                    line = line.strip()
+                                    if line and not line.startswith('#'):
+                                        total_lines += 1
+                                        significant_lines.append(line)
+                            # Ensure we have at least one line
+                            total_lines = max(1, total_lines)
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                        except Exception as e:
+                            print(f"Error counting script lines: {e}")
+                            # Default to a reasonable number if counting fails
+                            total_lines = 100
+                        
+                        # Calculate base progress (downloading and preparation = 30%)
+                        base_progress = 0.3
+                        # Calculate line progress (each line contributes to 60% of progress)
+                        line_progress_weight = 0.6 / total_lines
+
                         # Execute script with better progress tracking
-                        GLib.idle_add(update_progress, 0.4, "Starting update...")
+                        GLib.idle_add(update_progress, base_progress, "Starting update...")
                         update_process = subprocess.Popen(
                             ['bash', script_file],
                             stdout=subprocess.PIPE,
@@ -3463,6 +3574,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             bufsize=1,
                             preexec_fn=os.setsid
                         )
+
+                        # Track current line
+                        current_line = 0
 
                         while True:
                             if update_cancelled:
@@ -3482,20 +3596,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if not line:
                                 continue
 
-                            progress = 0.4
-
-                            # Update progress based on specific actions
-                            if "download" in line.lower():
-                                progress = 0.5
-                            elif "extracting" in line.lower() or "tar" in line.lower():
-                                progress = 0.7
-                            elif "installing" in line.lower():
-                                progress = 0.8
-                            elif "creating desktop entry" in line.lower():
-                                progress = 0.9
-
-                            if line:  # Only update if line is not empty
-                                GLib.idle_add(update_progress, progress, line)
+                            # Update current line and calculate progress
+                            current_line += 1
+                            # Ensure we don't exceed our total for any reason
+                            current_line = min(current_line, total_lines)
+                            
+                            # Calculate current progress
+                            # Base progress + line progress contribution
+                            current_progress = base_progress + (current_line * line_progress_weight)
+                            
+                            # Cap progress at 90% - the final 10% is reserved for completion tasks
+                            current_progress = min(0.9, current_progress)
+                            
+                            # Update progress
+                            GLib.idle_add(update_progress, current_progress, line)
+                            
+                            # Update terminal
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
 
                         update_process.wait()
                         if update_process.returncode == 0 and not update_cancelled:

@@ -2457,6 +2457,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         msg = "Finalizing uninstallation..."
                         GLib.idle_add(update_progress, 0.95, msg)
                         GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        
+                        # Disable cancel button as uninstallation is almost complete
+                        if cancel_button:
+                            GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                            GLib.idle_add(lambda: cancel_button.set_tooltip_text("Uninstallation is almost complete and cannot be cancelled"))
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUninstallation is almost complete and cannot be cancelled\n"))
+                        
                         self.installed_apps.remove(app['folder_name'])
                         self.save_installed_apps()
                         # Get current category before refreshing
@@ -3417,6 +3424,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # Make sure terminal view is shown if setting is enabled
                     if stack and self.get_setting("use_terminal_for_progress", False):
                         GLib.idle_add(lambda s=stack: s.set_visible_child_name("terminal"))
+                    
+                    # Disable cancel button if installation is near completion (90% or more)
+                    if fraction >= 0.9 and cancel_button:
+                        GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                        if not hasattr(cancel_button, 'tooltip_set'):
+                            cancel_button.set_tooltip_text("Update is almost complete and cannot be cancelled")
+                            setattr(cancel_button, 'tooltip_set', True)
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUpdate is almost complete and cannot be cancelled\n"))
                     
                     progress_bar.set_fraction(fraction)
                     progress_bar.set_text(f"{int(fraction * 100)}%")

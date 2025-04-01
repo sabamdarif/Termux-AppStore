@@ -271,7 +271,7 @@
     "package_name": "feathernotes",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/uninstall.sh",
-    "logo_url": null
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/logo.svg"
   },
   {
     "app_name": "Firefox",
@@ -857,7 +857,7 @@
     "package_name": "uget",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/uninstall.sh",
-    "logo_url": null
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/logo.svg"
   },
   {
     "app_name": "VLC",

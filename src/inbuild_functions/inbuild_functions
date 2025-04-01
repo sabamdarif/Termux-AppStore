@@ -2,49 +2,35 @@
 
 termux_desktop_path="/data/data/com.termux/files/usr/etc/termux-desktop"
 config_file="$termux_desktop_path/configuration.conf"
-log_file="/data/data/com.termux/files/home/.appstore/app-install.log"
-
-function print_log() {
-    local call_stack=""
-
-    for ((i = 1; i < ${#FUNCNAME[@]}; i++)); do
-        if [[ -n "${FUNCNAME[$i]}" ]]; then
-            call_stack+="${FUNCNAME[$i]} -> "
-        fi
-    done
-
-    # Remove the trailing " -> "
-    call_stack="${call_stack::-4}"
-
-    # Print the logs in a structured way
-    {
-      	echo "========== $(date '+%Y-%m-%d %H:%M:%S') under ${call_stack:-main} =========="
-
-        # If multiple arguments are passed, print each on a new line
-        if [[ $# -gt 1 ]]; then
-            for arg in "$@"; do
-                echo "$arg"
-            done
-        else
-            # Print single argument as-is
-            echo "$1"
-        fi
-
-		echo "========================================"
-    } >> "$log_file"
-}
 
 function print_success() {
-    echo "[✓] $1"
+    echo -e "\033[32m[✓]\033[0m $1"
 }
 
 function print_failed() {
-    echo "[✗] $1"
+    echo -e "\033[31m[✗]\033[0m $1"
     exit 1
 }
 
 function print_warn() {
-    echo "[!] $1"
+    echo -e "\033[33m[!]\033[0m $1"
+}
+
+function print_status() {
+    echo -e "\033[36m[*]\033[0m $1"
+}
+
+function print_cmd() {
+    echo -e "\033[35m[$]\033[0m \033[1m$1\033[0m"
+}
+
+function print_header() {
+    echo -e "\033[1;44;97m $1 \033[0m"
+}
+
+function print_section() {
+    echo 
+    echo -e "\033[1;34m=== $1 ===\033[0m"
 }
 
 function wait_for_keypress() {
@@ -242,14 +228,13 @@ function check_and_restore() {
 function detact_package_manager() {
     source "/data/data/com.termux/files/usr/bin/termux-setup-package-manager"
     if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then
-        PACKAGE_MANAGER="apt"
+        PACKAGE_MANAGER="apt-get"
     elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then
         PACKAGE_MANAGER="pacman"
     else
         PACKAGE_MANAGER="pkg"
         print_warn "Using pkg as fallback package manager"
     fi
-    print_log "Package manager: $PACKAGE_MANAGER"
 }
 
 # will check if the package is already installed or not, if it installed then it will reinstall it and at the end it will print success/failed message
@@ -262,8 +247,15 @@ function package_install_and_check() {
         echo "Processing package: $package_name"
         attempt=1
 
+        # For APT systems, run dpkg --configure -a before attempting the install
+        if [[ "$PACKAGE_MANAGER" != "pacman" ]]; then
+            echo "Checking and fixing any corrupted installations..."
+            dpkg --configure -a
+        fi
+
         while (( attempt <= max_retries )); do
             if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+                # Check if package is already installed
                 if pacman -Qi "$package_name" >/dev/null 2>&1; then
                     break
                 fi
@@ -285,33 +277,20 @@ function package_install_and_check() {
                     fi
                 fi
             else
-                if [[ $package_name == *"*"* ]]; then
-                    echo "Processing wildcard pattern: $package_name"
-                    packages_by_name=$(apt-cache search "${package_name%*}" | awk "/^${package_name}/ {print \$1}")
-                    packages_by_description=$(apt-cache search "${package_name%*}" | grep -Ei "\b${package_name%*}\b" | awk '{print $1}')
-                    packages=$(echo -e "${packages_by_name}\n${packages_by_description}" | sort -u)
-                    for pkgs in $packages; do
-                        echo "Installing matched package: $pkgs"
-                        if dpkg -s "$pkgs" >/dev/null 2>&1; then
-                            pkg reinstall "$pkgs" -y
-                        else
-                            pkg install "$pkgs" -y
-                        fi
-                        if dpkg -s "$pkgs" >/dev/null 2>&1; then
-                            print_success "$pkgs installed successfully"
-                        fi
-                    done
-                    break
+                # For APT-based systems, first check if the package is installed
+                if dpkg -s "$package_name" >/dev/null 2>&1; then
+                    echo "Package already installed. Attempting reconfiguration and reinstallation..."
+                    dpkg --configure -a
+                    apt-get reinstall "$package_name" -y
                 else
-                    if dpkg -s "$package_name" >/dev/null 2>&1; then
-                        pkg reinstall "$package_name" -y
-                    else
-                        pkg install "$package_name" -y
-                    fi
-                    if dpkg -s "$package_name" >/dev/null 2>&1; then
-                        print_success "$package_name installed successfully"
-                        break
-                    fi
+                    echo "Installing package after fixing potential issues..."
+                    dpkg --configure -a
+                    apt-get install "$package_name" -y
+                fi
+
+                if dpkg -s "$package_name" >/dev/null 2>&1; then
+                    print_success "$package_name installed successfully"
+                    break
                 fi
             fi
 
@@ -336,6 +315,12 @@ function package_remove_and_check() {
         echo "Processing package: $package_name"
         attempt=1
 
+        # For APT-based systems, attempt to fix any broken installations before removal
+        if [[ "$PACKAGE_MANAGER" != "pacman" ]]; then
+            echo "Fixing any potential broken installations before removal..."
+            dpkg --configure -a
+        fi
+
         while (( attempt <= max_retries )); do
             if [[ $package_name == *"*"* ]]; then
                 echo "Processing wildcard pattern: $package_name"
@@ -355,7 +340,8 @@ function package_remove_and_check() {
                         fi
                     else
                         if dpkg -s "$pkg" >/dev/null 2>&1; then
-                            if apt autoremove "$pkg" -y; then
+                            dpkg --configure -a
+                            if apt-get autoremove "$pkg" -y; then
                                 print_success "$pkg removed successfully"
                             fi
                         fi
@@ -372,7 +358,8 @@ function package_remove_and_check() {
                     fi
                 else
                     if dpkg -s "$package_name" >/dev/null 2>&1; then
-                        if apt autoremove "$package_name" -y; then
+                        dpkg --configure -a
+                        if apt-get autoremove "$package_name" -y; then
                             print_success "$package_name removed successfully"
                             break
                         fi
@@ -427,8 +414,8 @@ function update_sys() {
     if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
         pacman -Syu --noconfirm
     else
-        pkg update -y -o Dpkg::Options::="--force-confnew"
-        pkg upgrade -y -o Dpkg::Options::="--force-confnew"
+        apt-get update -y -o Dpkg::Options::="--force-confnew"
+        apt-get upgrade -y -o Dpkg::Options::="--force-confnew"
     fi
 }
 
@@ -491,7 +478,7 @@ config_file="$termux_desktop_path/configuration.conf"
 log_file="/data/data/com.termux/files/home/termux-desktop.log"
 
 EOF
-    typeset -f print_log print_success print_failed check_and_delete check_and_create_directory extract check_and_restore >> "$script_path"
+    typeset -f print_success print_failed check_and_delete check_and_create_directory extract check_and_restore >> "$script_path"
     echo "$shell_setup_content" >> "$script_path"
     
     # Make script executable

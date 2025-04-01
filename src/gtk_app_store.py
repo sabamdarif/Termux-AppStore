@@ -119,10 +119,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.selected_distro = None
         self.distro_enabled = False
         self.is_refreshing = False  # Add a flag to track refresh state
+        self.connectivity_dialog_active = False  # Add flag to prevent multiple connectivity dialogs
+        self.cancellation_in_progress = False  # Add flag to track dialog cancellation
         
         # Initialize search variables
         self.search_timeout_id = None
-        self.search_delay = 15  # milliseconds
+        self.search_delay = 100  # milliseconds
+        
+        # Set up keyboard accelerators
+        accel_group = Gtk.AccelGroup()
+        self.add_accel_group(accel_group)
+        
+        # Add Ctrl+F for search
+        key, mod = Gtk.accelerator_parse("<Control>f")
+        accel_group.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_search_accelerator)
+        
+        # Add Ctrl+Q for quit
+        key, mod = Gtk.accelerator_parse("<Control>q")
+        accel_group.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
         
         # Set up scaling for hi-dpi screens
         self.set_default_size(1000, 650)
@@ -224,43 +238,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print("Continuing without custom styles")
 
         try:
-            # Create main container with overlay
-            self.overlay = Gtk.Overlay()
-            self.add(self.overlay)
-
-            # Create main content box
-            self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            self.overlay.add(self.main_box)
-
-            # Create spinner for initial load
-            self.spinner = Gtk.Spinner()
-            self.spinner.set_size_request(64, 64)
-            self.spinner.set_property("visible", True) # Make sure spinner widget is visible
-            self.spinner.set_property("active", False) # Initially stopped
-
-            # Create a label for the loading message
-            self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
-            self.loading_label.set_halign(Gtk.Align.CENTER)
-            self.loading_label.hide()
-
-            spinner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            spinner_box.pack_start(self.spinner, True, True, 0)
-            spinner_box.pack_start(self.loading_label, True, True, 0)
-            spinner_box.set_valign(Gtk.Align.CENTER)
-            spinner_box.set_halign(Gtk.Align.CENTER)
-            spinner_box.set_property("visible", True) # Make sure the container is visible
-            self.overlay.add_overlay(spinner_box)
-
-            # Create header bar
+            # Create header bar first (so it's always visible)
             header = Gtk.HeaderBar()
             header.set_show_close_button(True)
             header.props.title = "Termux AppStore"
             self.set_titlebar(header)
 
             # Create box for tabs
-            tabs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-            tabs_box.get_style_context().add_class('header-tabs-box')
-            header.set_custom_title(tabs_box)
+            self.header_tabs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+            self.header_tabs_box.get_style_context().add_class('header-tabs-box')
+            header.set_custom_title(self.header_tabs_box)
 
             # Create tab buttons with icons
             self.explore_button = self.create_tab_button("Explore", "system-search-symbolic")
@@ -276,9 +263,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.explore_button.get_style_context().add_class('active')
             self.explore_button.get_style_context().add_class('selected')
 
-            tabs_box.pack_start(self.explore_button, False, False, 0)
-            tabs_box.pack_start(self.installed_button, False, False, 0)
-            tabs_box.pack_start(self.updates_button, False, False, 0)
+            self.header_tabs_box.pack_start(self.explore_button, False, False, 0)
+            self.header_tabs_box.pack_start(self.installed_button, False, False, 0)
+            self.header_tabs_box.pack_start(self.updates_button, False, False, 0)
             
             # Create menu button
             menu_button = Gtk.Button()
@@ -287,9 +274,46 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             menu_button.connect("clicked", self.on_menu_clicked)
             header.pack_end(menu_button)
             
+            # Create search button to toggle search bar visibility
+            self.search_button = Gtk.Button()
+            self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+            self.search_button.get_style_context().add_class('menu-button')
+            self.search_button.set_tooltip_text("Show Search")
+            self.search_button.connect("clicked", self.on_search_button_clicked)
+            header.pack_end(self.search_button)
+
+            # Create main container as a stack (for showing content or spinner)
+            self.main_stack = Gtk.Stack()
+            self.main_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+            self.main_stack.set_transition_duration(150)
+            self.add(self.main_stack)
+
+            # Create main content box
+            self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.main_stack.add_named(self.main_box, "content")
+            
             # Create content box for app list
             self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             self.main_box.pack_start(self.content_box, True, True, 0)
+
+            # Create spinner page (separate from content)
+            spinner_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            spinner_page.set_valign(Gtk.Align.CENTER)
+            spinner_page.set_halign(Gtk.Align.CENTER)
+            self.main_stack.add_named(spinner_page, "spinner")
+            
+            # Add spinner and loading text to spinner page
+            self.spinner = Gtk.Spinner()
+            self.spinner.set_size_request(64, 64)
+            spinner_page.pack_start(self.spinner, False, False, 0)
+            
+            self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
+            self.loading_label.set_margin_top(10)
+            spinner_page.pack_start(self.loading_label, False, False, 0)
+            
+            # Show content by default
+            self.main_stack.set_visible_child_name("content")
+            
         except Exception as e:
             print(f"Error creating UI: {e}")
             raise
@@ -353,6 +377,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         box.show_all()
         popover.add(box)
         popover.popup()
+        
+    def on_search_button_clicked(self, button):
+        """Toggle the visibility of the search bar"""
+        if hasattr(self, 'search_box'):
+            if self.search_box.get_visible():
+                # Hide search bar
+                self.search_box.hide()
+                # Update button icon to indicate search is hidden
+                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_tooltip_text("Show Search")
+            else:
+                # Show search bar
+                self.search_box.show()
+                # Update button icon to indicate search is visible
+                self.search_button.set_image(Gtk.Image.new_from_icon_name("window-close-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_tooltip_text("Hide Search")
+                # Give focus to the search entry
+                if hasattr(self, 'search_entry'):
+                    self.search_entry.grab_focus()
 
     def on_settings_clicked(self, widget):
         """Show settings window"""
@@ -498,7 +541,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Set dialog properties
         about_dialog.set_program_name("Termux App Store")
-        about_dialog.set_version("0.5.3-beta")
+        about_dialog.set_version("0.5.3")
         about_dialog.set_comments("A modern graphical package manager for Termux")
         about_dialog.set_copyright("© 2025 Termux Desktop (sabamdarif)")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)
@@ -611,66 +654,62 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.selected_distro = None
 
     def check_for_updates(self):
-        print('Checking for updates...')
+        """Check for app updates when the application starts"""
+        # Make sure we have connectivity (but don't show the dialog)
+        if not self.check_internet_connection():
+            print("No internet connection detected during initial check, skipping auto-refresh")
+            return
+
         try:
-            # Check if auto-refresh is disabled
-            if not self.get_setting("enable_auto_refresh", True):
-                print("Auto-refresh is disabled, skipping automatic version check...")
-                # Load app metadata and setup UI first
-                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
-                thread.daemon = True
-                thread.start()
+            # Load installed apps first to have them available
+            self.load_installed_apps()
+            
+            # Check if auto-refresh is enabled
+            auto_refresh = self.get_setting("enable_auto_refresh", True)
+            if not auto_refresh:
+                print("Auto-refresh is disabled, skipping")
                 return
                 
-            # Create directory if it doesn't exist
-            os.makedirs(APPSTORE_DIR, exist_ok=True)
-            
-            # Check when was the last version update
-            last_version_check_file = LAST_VERSION_CHECK_FILE
-            current_time = datetime.now()
-
-            # If apps.json doesn't exist, force a refresh
-            if not os.path.exists(APPSTORE_JSON):
-                print("No apps.json found, performing initial setup...")
-                self.start_refresh(is_manual=False)
-                return
-
-            if os.path.exists(last_version_check_file):
+            # Check when the last refresh was performed
+            refresh_interval = 24 * 60 * 60  # 24 hours in seconds
+            if os.path.exists(LAST_VERSION_CHECK_FILE):
                 try:
-                    with open(last_version_check_file, 'r') as f:
-                        file_content = f.read().strip()
-                        if file_content:  # Make sure file has content
-                            last_check = datetime.fromtimestamp(float(file_content))
-                            if current_time - last_check < timedelta(days=1):
-                                print(f"Version check performed within last 24 hours ({last_check}), skipping...")
-                                # Load app metadata and setup UI first
-                                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
-                                thread.daemon = True
-                                thread.start()
-                                return
-                        else:
-                            print("Last version check file is empty, will refresh")
-                except (ValueError, OSError) as e:
-                    print(f"Error reading last version check file: {e}, will refresh")
+                    with open(LAST_VERSION_CHECK_FILE, 'r') as f:
+                        last_check = float(f.read().strip())
+                    
+                    now = datetime.now().timestamp()
+                    time_since_last_check = now - last_check
+                    
+                    if time_since_last_check < refresh_interval:
+                        print(f"Last check was {time_since_last_check:.2f} seconds ago, skipping auto-refresh")
+                        
+                        # Just load metadata and set up UI
+                        self.load_app_metadata_and_setup_ui()
+                        
+                        # Make sure search box stays hidden
+                        GLib.timeout_add(500, self._ensure_search_box_hidden)
+                        return
+                    else:
+                        print(f"Last check was {time_since_last_check:.2f} seconds ago, performing auto-refresh")
+                except Exception as e:
+                    print(f"Error reading last check time: {e}, performing auto-refresh")
             else:
-                print("No previous version check found, will perform initial check")
-
-            # If we reach here, we need to update versions
-            print("Performing daily version check...")
+                print("No last check time found, performing initial auto-refresh")
+        
+            # Perform auto-refresh
+            print("Starting automatic refresh in background")
             self.start_refresh(is_manual=False)
             
-            # Update last check time is now handled in refresh_complete method
-
+            # Make sure search box stays hidden
+            GLib.timeout_add(500, self._ensure_search_box_hidden)
         except Exception as e:
-            print(f"Error checking updates: {e}")
-            # Load app metadata to ensure UI is functional even if refresh fails
-            try:
-                thread = threading.Thread(target=self.load_app_metadata_and_setup_ui)
-                thread.daemon = True
-                thread.start()
-            except:
-                # Last resort - force a refresh if load fails
-                self.start_refresh(is_manual=False)
+            print(f"Error during update check: {e}")
+            
+            # Even on error, try to load metadata and set up UI
+            self.load_app_metadata_and_setup_ui()
+            
+            # Make sure search box stays hidden
+            GLib.timeout_add(500, self._ensure_search_box_hidden)
 
     def update_app_versions(self):
         """Update versions for all apps in the background"""
@@ -833,7 +872,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print("Saved pending updates")
 
             # Refresh the UI to show updated versions
-            GLib.idle_add(self.show_apps)
+            # Get current category before refreshing
+            current_category = self._get_selected_category()
+            GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
 
         except Exception as e:
             print(f"Error updating app versions: {e}")
@@ -847,13 +888,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         GLib.idle_add(self.hide_loading_indicators)  # Add this line to hide both spinner and label
 
     def hide_loading_indicators(self):
-        """Hide both spinner and loading label"""
+        """Hide all loading indicators"""
         self.spinner.stop()
-        self.spinner.hide()
-        self.loading_label.hide()
-        return False
+        # Switch back to content view
+        if hasattr(self, 'main_stack'):
+            self.main_stack.set_visible_child_name("content")
+        # Process events to ensure UI updates
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
-    def start_refresh(self, is_manual=True):
+    def start_refresh(self, is_manual=True, skip_connectivity_check=False):
         """Start the refresh process in a background thread"""
         # Check if a refresh operation is already in progress
         if self.is_refreshing:
@@ -862,10 +906,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         print("\nStarting refresh process...")
         
-        # Check for internet connectivity first
-        if not self.check_internet_connection():
-            print("No internet connection available, cannot refresh")
-            self.show_error_dialog("No internet connection available. Please check your network and try again.")
+        # Check for internet connectivity first (unless explicitly skipped)
+        if not skip_connectivity_check and not self.check_internet_connection():
+            print("No internet connection available, showing prompt")
+            
+            # Always immediately hide spinner and loading label
+            self.spinner.stop()
+            
+            # Force process events to ensure UI updates
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+            
+            # Only show connectivity dialog if none is currently active
+            if not self.connectivity_dialog_active:
+                self.show_connectivity_dialog()
             return
             
         # Set the refresh flag
@@ -878,18 +932,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         for child in self.content_box.get_children():
             child.destroy()
 
-        # Hide the header bar during refresh
-        header_bar = self.get_titlebar()
-        if header_bar:
-            header_bar.hide()
-
-        # Show and start spinner - force using direct properties for visibility
-        self.spinner.set_property("visible", True)
-        self.spinner.set_property("active", True)
-        self.spinner.show_all()
+        # Only hide the tab buttons, keep the header bar visible for window controls
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.hide()
+        
+        # Show the spinner page instead of content
+        self.main_stack.set_visible_child_name("spinner")
+        
+        # Start the spinner
         self.spinner.start()
-        self.loading_label.set_property("visible", True)
-        self.loading_label.show_all()
         
         # Process pending events to ensure UI updates
         while Gtk.events_pending():
@@ -899,6 +950,153 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         thread = threading.Thread(target=self.refresh_data_background)
         thread.daemon = True
         thread.start()
+        
+    def show_connectivity_dialog(self):
+        """Show a dialog with retry and cancel options when no internet connection is available"""
+        # Check if a dialog is already active to prevent duplicates
+        if self.connectivity_dialog_active:
+            print("Connectivity dialog already active, skipping duplicate")
+            return
+            
+        # Set the flag to indicate a dialog is active
+        self.connectivity_dialog_active = True
+        
+        # First make sure any previous spinner is stopped
+        self.spinner.stop()
+        
+        # Switch back to content view (from spinner view, if active)
+        self.main_stack.set_visible_child_name("content")
+        
+        # Only hide tab buttons, but keep header bar visible for window controls
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.hide()
+        
+        # Process events to ensure UI updates immediately
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+        
+        # Create the dialog with two buttons
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            message_type=Gtk.MessageType.WARNING,
+            flags=Gtk.DialogFlags.MODAL,  # Make it modal to block other interactions
+            buttons=Gtk.ButtonsType.NONE,
+            text="No Internet Connection"
+        )
+        dialog.format_secondary_text("Please check your internet connection and try again.")
+        
+        # Add custom buttons
+        retry_button = dialog.add_button("Retry", Gtk.ResponseType.YES)
+        close_app_button = dialog.add_button("Close App", Gtk.ResponseType.CLOSE)
+        
+        # Style the buttons
+        retry_button_context = retry_button.get_style_context()
+        retry_button_context.add_class("suggested-action")
+        
+        # Add dialog styling
+        dialog_context = dialog.get_style_context()
+        dialog_context.add_class("connectivity-dialog")
+        
+        # The response handler that will be called when buttons are clicked
+        def on_response(dialog, response_id):
+            # First hide the dialog to make it visually disappear immediately
+            dialog.hide()
+            
+            # Process events to ensure dialog is visually hidden
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+                
+            # Then destroy it
+            dialog.destroy()
+            
+            # Process events again to ensure dialog is fully destroyed
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+                
+            # Reset the dialog active flag
+            self.connectivity_dialog_active = False
+            
+            # Now handle the response
+            if response_id == Gtk.ResponseType.YES:
+                # User clicked Retry - check internet connection in the main loop
+                def check_internet_and_refresh():
+                    # Make sure spinner is still hidden during check
+                    self.spinner.stop()
+                    self.spinner.hide()
+                    self.loading_label.hide()
+                    
+                    # Process events to ensure spinner is hidden
+                    while Gtk.events_pending():
+                        Gtk.main_iteration()
+                    
+                    # Check for internet connection
+                    print("Retry clicked, checking internet connection")
+                    has_internet = self.check_internet_connection()
+                    
+                    if has_internet:
+                        # Internet is available
+                        print("Internet connection available, starting refresh process")
+                        
+                        # Show spinner immediately - do this before start_refresh to ensure it's visible
+                        self.spinner.set_property("visible", True)
+                        self.spinner.set_property("active", True)
+                        self.spinner.show_all()
+                        self.spinner.start()
+                        self.loading_label.set_property("visible", True)
+                        self.loading_label.show_all()
+                        
+                        # Force UI update to show spinner
+                        while Gtk.events_pending():
+                            Gtk.main_iteration()
+                            
+                        # Start the refresh process with special flag to skip connectivity check
+                        self.start_refresh(skip_connectivity_check=True)
+                    else:
+                        # Still no internet - make absolutely sure spinner is hidden
+                        self.spinner.stop()
+                        self.spinner.hide()
+                        self.loading_label.hide()
+                        
+                        # Force update UI
+                        while Gtk.events_pending():
+                            Gtk.main_iteration()
+                        
+                        print("Still no internet connection, showing dialog again")
+                        # Show the dialog again
+                        self.show_connectivity_dialog()
+                    
+                    # Remove this function from idle queue
+                    return False
+                
+                # Schedule the internet check function to run on the main loop
+                # This ensures the dialog is fully gone before checking internet
+                GLib.idle_add(check_internet_and_refresh)
+                
+            elif response_id == Gtk.ResponseType.CLOSE:
+                # User clicked Close App - exit the application
+                def quit_app():
+                    print("Close App clicked, shutting down application")
+                    # First destroy this window
+                    self.destroy()
+                    
+                    # Then ensure the application quits completely
+                    if self.get_application():
+                        self.get_application().quit()
+                    else:
+                        # Fallback if application reference is not available
+                        Gtk.main_quit()
+                        # Additional safety - exit process
+                        import sys
+                        sys.exit(0)
+                    return False
+                
+                GLib.idle_add(quit_app)
+        
+        # Connect the response signal to our handler
+        dialog.connect("response", on_response)
+        
+        # Show the dialog
+        dialog.show_all()
 
     def check_native_package_installed(self, package_name):
         """Check if a native package is installed based on package manager"""
@@ -1070,9 +1268,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # Ensure spinner is visible
             self.ensure_spinner_visible()
-            
-            # Keep header bar hidden throughout the refresh process
-            GLib.idle_add(self._ensure_header_hidden)
             
             # 1. First ensure old_json directory exists
             os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
@@ -1306,23 +1501,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         return False
 
     def _ensure_header_hidden(self):
-        """Make sure the header bar remains hidden during refresh"""
-        header_bar = self.get_titlebar()
-        if header_bar:
-            header_bar.hide()
+        """Make sure only the header tabs are hidden, but keep window controls visible"""
+        # Don't hide the entire header bar, just the tabs
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.hide()
         return False  # Don't repeat this idle callback
 
     def refresh_complete(self):
-        """Called when refresh is complete"""
-        print('Refresh complete!')
-        
-        # Reset the refreshing flag
+        """Called when background refresh is complete"""
+        print("Refresh completed")
         self.is_refreshing = False
         
-        # Hide spinner and loading message
+        # Stop the spinner
         self.spinner.stop()
-        self.spinner.hide()
-        self.loading_label.hide()
+        
+        # Switch back to content view
+        self.main_stack.set_visible_child_name("content")
         
         # Update last version check timestamp
         from datetime import datetime as dt  # Local import to avoid conflicts
@@ -1331,11 +1525,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             f.write(str(current_time.timestamp()))
         print(f"Updated last version check timestamp: {current_time}")
         
-        # Make header bar visible again
-        header_bar = self.get_titlebar()
-        if header_bar:
-            header_bar.show()
+        # Show header tabs box again
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.show()
+        
+        # Process events to ensure UI updates
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
+        # Skip full UI rebuild if we're just handling cancellation
+        if hasattr(self, 'cancellation_in_progress') and self.cancellation_in_progress:
+            # Just make sure spinner is stopped and we're in content view
+            # No need to rebuild the UI or switch sections during cancellation
+            return False
+            
         # First load app metadata
         self.load_app_metadata()
         
@@ -1348,7 +1551,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         if not hasattr(self, 'is_manual_refresh') or self.is_manual_refresh:
             # Schedule section display AFTER UI is set up
             GLib.timeout_add(100, self._show_initial_section)
-            
+        
+        # Make sure search box stays hidden by default after refresh
+        GLib.timeout_add(200, self._ensure_search_box_hidden)
+        
         # Process UI events to make sure changes take effect
         while Gtk.events_pending():
             Gtk.main_iteration()
@@ -1394,7 +1600,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         elif not installed and app_name in self.installed_apps:
             self.installed_apps.remove(app_name)
         self.save_installed_apps()
-        GLib.idle_add(self.show_apps)
+        # Get current category before refreshing
+        current_category = self._get_selected_category()
+        GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
 
     def is_arch_compatible(self, app_arch):
         """Check if the app's architecture is compatible with the system"""
@@ -1566,7 +1774,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.sidebar.set_margin_top(10)
         self.sidebar.set_margin_bottom(10)  # Add bottom margin
         self.content_box.pack_start(self.sidebar, False, True, 0)
-
+        
         # Category list
         categories_label = Gtk.Label()
         categories_label.set_markup("<b>Categories</b>")
@@ -1575,7 +1783,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         categories_label.set_margin_top(10)
         categories_label.set_margin_bottom(10)
         self.sidebar.pack_start(categories_label, False, True, 0)
-
+        
         # Add "All Apps" button first
         all_button = Gtk.Button(label="All Apps")
         all_button.connect("clicked", self.on_category_clicked)
@@ -1599,19 +1807,28 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.content_box.pack_start(self.right_panel, True, True, 0)
 
         # Add search entry at the top of app list
-        search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        search_box.set_margin_start(10)
-        search_box.set_margin_end(10)
-        search_box.set_margin_top(10)
+        self.search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.search_box.set_margin_start(10)
+        self.search_box.set_margin_end(10)
+        self.search_box.set_margin_top(10)
+        self.search_box.get_style_context().add_class('search-box')
         self.search_entry = Gtk.Entry()
         self.search_entry.set_placeholder_text("Search apps...")
         self.search_entry.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "system-search-symbolic")
         self.search_entry.set_icon_activatable(Gtk.EntryIconPosition.PRIMARY, False)
         self.search_entry.get_style_context().add_class('search-entry')
         self.search_entry.connect("changed", self.on_search_changed)
+        # Connect Enter key to trigger a focus change to the app list
+        self.search_entry.connect("activate", self.on_search_entry_activate)
         self.search_entry.set_size_request(-1, 40)
-        search_box.pack_start(self.search_entry, True, True, 0)
-        self.right_panel.pack_start(search_box, False, True, 0)
+        self.search_box.pack_start(self.search_entry, True, True, 0)
+        self.right_panel.pack_start(self.search_box, False, True, 0)
+        
+        # Hide search box by default - will be shown when search button is clicked
+        self.search_box.hide()
+        
+        # Schedule another hide call with a delay to ensure it stays hidden
+        GLib.timeout_add(100, self._ensure_search_box_hidden)
 
         # Create check for updates button (initially hidden)
         self.update_button = Gtk.Button(label="Check for Updates")
@@ -1629,6 +1846,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolled.set_vexpand(True)
         self.right_panel.pack_start(scrolled, True, True, 0)
+        
+        # Connect to vadjustment value-changed signal to detect scrolling
+        vadj = scrolled.get_vadjustment()
+        vadj.connect("value-changed", self.on_scroll_value_changed)
+        self.last_scroll_position = 0  # Track scroll position
 
         # App list box
         self.app_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -1652,6 +1874,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         category = button.get_label()
         print(f"Category selected: {category}")
+        
+        # Hide search box when changing categories
+        if hasattr(self, 'search_box') and self.search_box.get_visible():
+            self.search_box.hide()
+            # Update search button icon and tooltip
+            if hasattr(self, 'search_button'):
+                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_tooltip_text("Show Search")
         
         # Get current search text before clearing
         current_search = self.search_entry.get_text()
@@ -1745,8 +1975,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     except Exception as e:
                         print(f"Error removing script file: {e}")
                 
-                # Add a small delay before destroying the dialog
-                GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog else None)
+                # Make sure the dialog is destroyed only once
+                if progress_dialog and progress_dialog.get_visible():
+                    # Set a flag to avoid multiple calls to show_apps
+                    self.cancellation_in_progress = True
+                    
+                    # Try to disconnect the response signal using the saved handler ID
+                    try:
+                        nonlocal dialog_response_handler_id
+                        progress_dialog.handler_disconnect(dialog_response_handler_id)
+                    except Exception as e:
+                        # Ignore errors if the handler can't be disconnected
+                        print(f"Note: Could not disconnect dialog handler: {e}")
+                    
+                    # Add a small delay before destroying the dialog
+                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog and progress_dialog.get_visible() else None)
+                    # Clear the flag after dialog is destroyed
+                    GLib.timeout_add(600, lambda: setattr(self, 'cancellation_in_progress', False))
+                
                 return True
 
             # Connect the response signal
@@ -1779,6 +2025,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             else:
                 print("Warning: Cancel button not found in dialog")
 
+            def on_dialog_response(dialog, response_id):
+                """Handle dialog responses that might come through the window manager"""
+                if response_id == Gtk.ResponseType.CANCEL or response_id == Gtk.ResponseType.DELETE_EVENT:
+                    # Use the same cancel handler for consistency
+                    on_cancel_clicked()
+            
+            # Store the handler ID for later disconnection if needed
+            dialog_response_handler_id = progress_dialog.connect("response", on_dialog_response)
+            
             def update_progress(fraction, status_text):
                 if not status_text:
                     return False
@@ -1837,8 +2092,32 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(update_progress, 0.3, "Preparing installation...")
                     os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
 
+                    # Count the number of significant lines in the script to track progress
+                    total_lines = 0
+                    significant_lines = []
+                    try:
+                        with open(script_file, 'r') as f:
+                            for line in f:
+                                # Skip empty lines and comments
+                                line = line.strip()
+                                if line and not line.startswith('#'):
+                                    total_lines += 1
+                                    significant_lines.append(line)
+                        # Ensure we have at least one line
+                        total_lines = max(1, total_lines)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                    except Exception as e:
+                        print(f"Error counting script lines: {e}")
+                        # Default to a reasonable number if counting fails
+                        total_lines = 100
+                    
+                    # Calculate base progress (downloading and preparation = 30%)
+                    base_progress = 0.3
+                    # Calculate line progress (each line contributes to 60% of progress)
+                    line_progress_weight = 0.6 / total_lines
+                    
                     # Execute script with better progress tracking
-                    GLib.idle_add(update_progress, 0.4, "Starting installation...")
+                    GLib.idle_add(update_progress, base_progress, "Starting installation...")
                     install_process = subprocess.Popen(
                         ['bash', script_file],
                         stdout=subprocess.PIPE,
@@ -1847,6 +2126,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         bufsize=1,
                         preexec_fn=os.setsid  # Create new process group
                     )
+                    
+                    # Track current line
+                    current_line = 0
                     
                     while True:
                         if install_cancelled:
@@ -1866,33 +2148,41 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if not line:
                             continue
 
-                        progress = 0.4
+                        # Update current line and calculate progress
+                        current_line += 1
+                        # Ensure we don't exceed our total for any reason
+                        current_line = min(current_line, total_lines)
+                        
+                        # Calculate current progress
+                        # Base progress + line progress contribution
+                        current_progress = base_progress + (current_line * line_progress_weight)
+                        
+                        # Cap progress at 90% - the final 10% is reserved for completion tasks
+                        current_progress = min(0.9, current_progress)
+                        
+                        # Update progress
+                        GLib.idle_add(update_progress, current_progress, line)
+                        
+                        # Update terminal
+                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
 
-                        # Update progress based on specific actions
-                        if "download" in line.lower():
-                            progress = 0.5
-                        elif "extracting" in line.lower() or "tar" in line.lower():
-                            progress = 0.7
-                        elif "installing" in line.lower():
-                            progress = 0.8
-                        elif "creating desktop entry" in line.lower():
-                            progress = 0.9
-
-                        GLib.idle_add(update_progress, progress, line)
-
-                    install_process.wait()
-                    if install_process.returncode == 0 and not install_cancelled:
+                    if install_process.wait() == 0 and not install_cancelled:
+                        # Update installation status (95%)
                         GLib.idle_add(update_progress, 0.95, "Finalizing installation...")
-                        GLib.idle_add(lambda: self.update_installation_status(app['folder_name'], True))
+                        self.update_installation_status(app['folder_name'], True)
                         
                         # Remove from pending updates if this was an update
                         if app['folder_name'] in self.pending_updates:
                             del self.pending_updates[app['folder_name']]
                             self.save_pending_updates()
                         
-                        time.sleep(0.5)
-                        GLib.idle_add(update_progress, 1.0, "Installation complete!")
+                        # Get current category before refreshing
+                        current_category = self._get_selected_category()
+                        GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
                         
+                        # Complete (100%)
+                        GLib.idle_add(update_progress, 1.0, "Installation complete!")
+
                         # Close log file if logging is active
                         if self.logging_active and self.log_file:
                             try:
@@ -1903,26 +2193,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             self.log_file = None
                             self.logging_active = False
                             self.log_file_path = None
-                        
-                        time.sleep(1)
-                        GLib.idle_add(progress_dialog.destroy)
-                        GLib.idle_add(self.show_apps)  # Refresh the UI
-                    else:
-                        GLib.idle_add(update_progress, 1.0, "Installation failed or cancelled!")
-                        
-                        # Close log file if logging is active
-                        if self.logging_active and self.log_file:
-                            try:
-                                self.log_file.write("\n--- Installation failed or cancelled ---\n")
-                                self.log_file.close()
-                            except Exception:
-                                pass
-                            self.log_file = None
-                            self.logging_active = False
-                            self.log_file_path = None
-                        
+
+                        # Delay closing the dialog a bit to show the completion message
                         time.sleep(2)
-                        GLib.idle_add(progress_dialog.destroy)
+                    else:
+                        if not install_cancelled:  # Only show error if not cancelled
+                            GLib.idle_add(update_progress, 1.0, "Installation failed!")
+                            
+                            # Close log file if logging is active
+                            if self.logging_active and self.log_file:
+                                try:
+                                    self.log_file.write("\n--- Installation failed ---\n")
+                                    self.log_file.close()
+                                except Exception:
+                                    pass
+                                self.log_file = None
+                                self.logging_active = False
+                                self.log_file_path = None
+                                
+                            time.sleep(2)
+                    
+                    # Clean up and close dialog
+                    GLib.idle_add(progress_dialog.destroy)
+                    if script_file and os.path.exists(script_file):
+                        try:
+                            os.remove(script_file)
+                        except:
+                            pass
 
                 except Exception as e:
                     print(f"Installation error: {str(e)}")
@@ -2092,16 +2389,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     except Exception as e:
                         print(f"Error terminating process: {e}")
                     
-                    # Clean up the script file
-                    if script_file and os.path.exists(script_file):
-                        try:
-                            os.remove(script_file)
-                            print(f"Cleaned up script: {script_file}")
-                        except Exception as e:
-                            print(f"Error removing script file: {e}")
+                # Clean up the script file
+                if script_file and os.path.exists(script_file):
+                    try:
+                        os.remove(script_file)
+                        print(f"Cleaned up script: {script_file}")
+                    except Exception as e:
+                        print(f"Error removing script file: {e}")
+                    
+                # Make sure the dialog is destroyed only once
+                if progress_dialog and progress_dialog.get_visible():
+                    # Set a flag to avoid multiple calls to show_apps
+                    self.cancellation_in_progress = True
                     
                     # Add a small delay before destroying the dialog
-                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog else None)
+                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog and progress_dialog.get_visible() else None)
+                    # Clear the flag after dialog is destroyed
+                    GLib.timeout_add(600, lambda: setattr(self, 'cancellation_in_progress', False))
+                
                 return True
 
             def update_progress(fraction, status_text):
@@ -2159,10 +2464,39 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.idle_add(progress_dialog.destroy)
                         return
 
-                    # Execute uninstall script
+                    # Make script executable
                     os.chmod(script_file, 0o755)
-                    status_msg = "Starting uninstallation..."
+                    status_msg = "Preparing uninstallation..."
                     GLib.idle_add(update_progress, 0.2, status_msg)
+                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
+
+                    # Count the number of significant lines in the script to track progress
+                    total_lines = 0
+                    significant_lines = []
+                    try:
+                        with open(script_file, 'r') as f:
+                            for line in f:
+                                # Skip empty lines and comments
+                                line = line.strip()
+                                if line and not line.startswith('#'):
+                                    total_lines += 1
+                                    significant_lines.append(line)
+                        # Ensure we have at least one line
+                        total_lines = max(1, total_lines)
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                    except Exception as e:
+                        print(f"Error counting script lines: {e}")
+                        # Default to a reasonable number if counting fails
+                        total_lines = 100
+                    
+                    # Calculate base progress (downloading and preparation = 20%)
+                    base_progress = 0.2
+                    # Calculate line progress (each line contributes to 70% of progress)
+                    line_progress_weight = 0.7 / total_lines
+                    
+                    # Execute script with better progress tracking
+                    status_msg = "Starting uninstallation..."
+                    GLib.idle_add(update_progress, base_progress, status_msg)
                     GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
 
                     uninstall_process = subprocess.Popen(
@@ -2174,6 +2508,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         preexec_fn=os.setsid
                     )
 
+                    # Track current line
+                    current_line = 0
+
                     for line in uninstall_process.stdout:
                         if uninstall_cancelled:
                             os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
@@ -2184,7 +2521,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             GLib.idle_add(progress_dialog.destroy)
                             return
                         
-                        GLib.idle_add(update_progress, 0.5, line.strip())
+                        # Update current line and calculate progress
+                        current_line += 1
+                        # Ensure we don't exceed our total for any reason
+                        current_line = min(current_line, total_lines)
+                        
+                        # Calculate current progress
+                        # Base progress + line progress contribution
+                        current_progress = base_progress + (current_line * line_progress_weight)
+                        
+                        # Cap progress at 90% - the final 10% is reserved for completion tasks
+                        current_progress = min(0.9, current_progress)
+                        
+                        # Update progress
+                        GLib.idle_add(update_progress, current_progress, line.strip())
+                        
+                        # Update terminal
                         GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
 
                     uninstall_process.wait()
@@ -2192,9 +2544,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         msg = "Finalizing uninstallation..."
                         GLib.idle_add(update_progress, 0.95, msg)
                         GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        
+                        # Disable cancel button as uninstallation is almost complete
+                        if cancel_button:
+                            GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                            GLib.idle_add(lambda: cancel_button.set_tooltip_text("Uninstallation is almost complete and cannot be cancelled"))
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUninstallation is almost complete and cannot be cancelled\n"))
+                        
                         self.installed_apps.remove(app['folder_name'])
                         self.save_installed_apps()
-                        GLib.idle_add(self.show_apps)
+                        # Get current category before refreshing
+                        current_category = self._get_selected_category()
+                        GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
                         msg = "Uninstallation complete!"
                         GLib.idle_add(update_progress, 1.0, msg)
                         GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
@@ -2541,12 +2902,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # print(f"Search changed: '{search_text}'")
         
         # Remove any existing timeout
-        if self.search_timeout_id:
+        if hasattr(self, 'search_timeout_id') and self.search_timeout_id:
             GLib.source_remove(self.search_timeout_id)
             self.search_timeout_id = None
         
         # Add a small delay to avoid unnecessary refreshes while typing
-        self.search_timeout_id = GLib.timeout_add(self.search_delay, self._do_search, search_text)
+        self.search_timeout_id = GLib.timeout_add(300, self._do_search, search_text)
+    
+    def on_search_entry_activate(self, entry):
+        """Handle Enter key in search entry - give focus back to the app list"""
+        if hasattr(self, 'app_list_box'):
+            self.app_list_box.grab_focus()
 
     def _do_search(self, search_text):
         """Process the search after delay"""
@@ -2671,34 +3037,31 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.show_error_dialog(f"Error opening app: {e}")
             
     def show_command_output_window(self, app_name, run_cmd):
-        """Show a terminal-like window with command output"""
+        """Show a window with the command output"""
         # Create dialog
-        dialog = Gtk.Window(title=f"{app_name} - Command Output")
-        dialog.set_default_size(700, 400)
-        dialog.set_transient_for(self)
-        dialog.set_modal(True)
-        dialog.connect("delete-event", lambda w, e: w.destroy())
+        dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
+        dialog.set_title(f"Running {app_name}")
+        dialog.set_default_size(600, 400)
+        dialog.set_border_width(10)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
+        dialog.set_destroy_with_parent(True)
         dialog.get_style_context().add_class("command-output-dialog")
         
+        # Set window icon
+        icon_name = "utilities-terminal"
+        icon_theme = Gtk.IconTheme.get_default()
+        if icon_theme.has_icon(icon_name):
+            dialog.set_icon_name(icon_name)
+            
         # Create main box
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        main_box.set_margin_start(12)
-        main_box.set_margin_end(12)
-        main_box.set_margin_top(12)
-        main_box.set_margin_bottom(12)
         dialog.add(main_box)
         
-        # Create command label
-        command_label = Gtk.Label()
-        command_label.set_markup(f"<b>Command:</b> <span font_family='monospace'>{GLib.markup_escape_text(run_cmd)}</span>")
-        command_label.set_halign(Gtk.Align.START)
-        command_label.set_margin_bottom(6)
-        main_box.pack_start(command_label, False, False, 0)
-        
-        # Create ScrolledWindow for terminal
+        # Create scrolled window for terminal
         scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled_window.set_shadow_type(Gtk.ShadowType.IN)
+        scrolled_window.set_hexpand(True)
+        scrolled_window.set_vexpand(True)
         
         # Create TextView for terminal output
         terminal_view = Gtk.TextView()
@@ -2707,9 +3070,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         terminal_view.get_style_context().add_class("terminal-view")
         
-        # Set terminal colors
-        terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
-        terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
+        # Initialize terminal emulator
+        terminal_emulator = TerminalEmulator(terminal_view)
         
         scrolled_window.add(terminal_view)
         main_box.pack_start(scrolled_window, True, True, 0)
@@ -2732,33 +3094,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         close_button.get_style_context().add_class("command-output-close-button")
         button_box.pack_start(close_button, False, False, 0)
         
-        # Set up text buffer
-        buffer = terminal_view.get_buffer()
-        end_iter = buffer.get_end_iter()
-        buffer.insert(end_iter, f"Starting {app_name}...\n")
+        # Initial text
+        terminal_emulator.append_text(f"Starting {app_name}...\n")
         
         # Show all widgets
         dialog.show_all()
         
         # Function to update the terminal
         def update_terminal_output(text):
-            # Get end iterator and insert text
-            buf = terminal_view.get_buffer()
-            end = buf.get_end_iter()
-            buf.insert(end, text)
-            # Scroll to end
-            mark = buf.create_mark(None, buf.get_end_iter(), False)
-            terminal_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
-            buf.delete_mark(mark)
-            # Process GTK events to update the UI
-            while Gtk.events_pending():
-                Gtk.main_iteration_do(False)
+            terminal_emulator.append_text(text)
         
         # Function to save output to file
         def on_save_clicked(button):
-            buf = terminal_view.get_buffer()
-            start, end = buf.get_bounds()
-            text = buf.get_text(start, end, False)
+            text = terminal_emulator.get_text()
             
             # Create file chooser dialog
             file_dialog = Gtk.FileChooserDialog(
@@ -2781,15 +3129,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if response == Gtk.ResponseType.OK:
                 filename = file_dialog.get_filename()
                 try:
+                    # Save current content
                     with open(filename, 'w') as f:
-                        f.write(text)
+                        # Write the clean text without ANSI codes
+                        f.write(AnsiColorParser().strip_ansi(text))
                     update_terminal_output(f"\nOutput saved to {filename}\n")
                 except Exception as e:
                     update_terminal_output(f"\nError saving output: {e}\n")
             
             file_dialog.destroy()
         
-        # Connect save button
+        # Connect save button click
         save_button.connect("clicked", on_save_clicked)
         
         # Connect close button
@@ -2870,6 +3220,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_quit_accelerator(self, accel_group, acceleratable, keyval, modifier):
         """Handle Ctrl+Q accelerator"""
         self.on_delete_event(None, None)
+        return True
+        
+    def on_search_accelerator(self, accel_group, acceleratable, keyval, modifier):
+        """Handle Ctrl+F accelerator to toggle search bar"""
+        self.on_search_button_clicked(None)
         return True
 
     def load_pending_updates(self):
@@ -3014,6 +3369,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Set terminal colors using CSS classes
         terminal_view.get_style_context().add_class('terminal-view')
         
+        # Initialize the terminal emulator
+        terminal_emulator = TerminalEmulator(terminal_view)
+        
         # Add terminal view to scroll window
         terminal_scroll.add(terminal_view)
         terminal_box.pack_start(terminal_scroll, True, True, 0)
@@ -3154,6 +3512,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if stack and self.get_setting("use_terminal_for_progress", False):
                         GLib.idle_add(lambda s=stack: s.set_visible_child_name("terminal"))
                     
+                    # Disable cancel button if installation is near completion (90% or more)
+                    if fraction >= 0.9 and cancel_button:
+                        GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                        if not hasattr(cancel_button, 'tooltip_set'):
+                            cancel_button.set_tooltip_text("Update is almost complete and cannot be cancelled")
+                            setattr(cancel_button, 'tooltip_set', True)
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUpdate is almost complete and cannot be cancelled\n"))
+                    
                     progress_bar.set_fraction(fraction)
                     progress_bar.set_text(f"{int(fraction * 100)}%")
                     return False
@@ -3174,8 +3540,32 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.idle_add(update_progress, 0.3, "Preparing update...")
                         os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
 
+                        # Count the number of significant lines in the script to track progress
+                        total_lines = 0
+                        significant_lines = []
+                        try:
+                            with open(script_file, 'r') as f:
+                                for line in f:
+                                    # Skip empty lines and comments
+                                    line = line.strip()
+                                    if line and not line.startswith('#'):
+                                        total_lines += 1
+                                        significant_lines.append(line)
+                            # Ensure we have at least one line
+                            total_lines = max(1, total_lines)
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                        except Exception as e:
+                            print(f"Error counting script lines: {e}")
+                            # Default to a reasonable number if counting fails
+                            total_lines = 100
+                        
+                        # Calculate base progress (downloading and preparation = 30%)
+                        base_progress = 0.3
+                        # Calculate line progress (each line contributes to 60% of progress)
+                        line_progress_weight = 0.6 / total_lines
+
                         # Execute script with better progress tracking
-                        GLib.idle_add(update_progress, 0.4, "Starting update...")
+                        GLib.idle_add(update_progress, base_progress, "Starting update...")
                         update_process = subprocess.Popen(
                             ['bash', script_file],
                             stdout=subprocess.PIPE,
@@ -3184,6 +3574,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             bufsize=1,
                             preexec_fn=os.setsid
                         )
+
+                        # Track current line
+                        current_line = 0
 
                         while True:
                             if update_cancelled:
@@ -3203,20 +3596,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if not line:
                                 continue
 
-                            progress = 0.4
-
-                            # Update progress based on specific actions
-                            if "download" in line.lower():
-                                progress = 0.5
-                            elif "extracting" in line.lower() or "tar" in line.lower():
-                                progress = 0.7
-                            elif "installing" in line.lower():
-                                progress = 0.8
-                            elif "creating desktop entry" in line.lower():
-                                progress = 0.9
-
-                            if line:  # Only update if line is not empty
-                                GLib.idle_add(update_progress, progress, line)
+                            # Update current line and calculate progress
+                            current_line += 1
+                            # Ensure we don't exceed our total for any reason
+                            current_line = min(current_line, total_lines)
+                            
+                            # Calculate current progress
+                            # Base progress + line progress contribution
+                            current_progress = base_progress + (current_line * line_progress_weight)
+                            
+                            # Cap progress at 90% - the final 10% is reserved for completion tasks
+                            current_progress = min(0.9, current_progress)
+                            
+                            # Update progress
+                            GLib.idle_add(update_progress, current_progress, line)
+                            
+                            # Update terminal
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
 
                         update_process.wait()
                         if update_process.returncode == 0 and not update_cancelled:
@@ -3801,6 +4197,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 button.get_style_context().add_class('selected')
                 button.get_style_context().add_class('active')
             
+            # Hide search box when changing tabs
+            if hasattr(self, 'search_box') and hasattr(self, 'search_button'):
+                self.search_box.hide()
+                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_tooltip_text("Show Search")
+            
             # Safety check for UI initialization
             if not hasattr(self, 'search_entry') or not hasattr(self, 'app_list_box'):
                 print("Warning: UI not fully initialized yet, deferring section display")
@@ -4113,35 +4515,67 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.installation_cancelled = False
         self.current_installation = None
         self.hide_loading_indicators()
-        GLib.idle_add(self.refresh_complete)
-        GLib.idle_add(self.show_apps)
+        
+        # Only refresh UI if not in the middle of cancellation
+        # This prevents double UI refreshes when cancelling
+        if not hasattr(self, 'cancellation_in_progress') or not self.cancellation_in_progress:
+            GLib.idle_add(self.refresh_complete)
+            
+            # Use a small delay for showing apps to ensure proper UI state
+            if hasattr(self, 'current_section') and self.current_section == "explore":
+                # Keep the same category selection
+                GLib.timeout_add(100, lambda: self.show_apps(self._get_selected_category()))
+            elif hasattr(self, 'current_section'):
+                # Handle other sections
+                if self.current_section == "installed":
+                    GLib.timeout_add(100, self.show_installed_apps)
+                elif self.current_section == "updates":
+                    GLib.timeout_add(100, self.show_update_apps)
+        else:
+            # If cancellation is in progress, we only need to refresh the current view
+            # without rebuilding the entire UI
+            GLib.timeout_add(100, lambda: self._refresh_current_view())
+    
+    def _get_selected_category(self):
+        """Helper to get the currently selected category"""
+        if hasattr(self, 'category_buttons'):
+            for cat_button in self.category_buttons:
+                if cat_button.get_style_context().has_class('selected'):
+                    category = cat_button.get_label()
+                    return None if category == "All Apps" else category
+        return None
 
     def update_terminal(self, terminal_view, text):
         """Update the terminal view with new text and append to log file if logging is active"""
         if not text:
             return
-            
-        buffer = terminal_view.get_buffer()
-        end_iter = buffer.get_end_iter()
-        
-        # Add newline if buffer is not empty
-        if buffer.get_char_count() > 0:
-            buffer.insert(end_iter, "\n")
-            # Also append newline to log file if logging is active
-            if self.logging_active and self.log_file:
-                try:
-                    self.log_file.write("\n")
-                    self.log_file.flush()  # Ensure it's written immediately
-                except Exception:
-                    pass  # Ignore errors in logging
-            
-        # Insert the new text
-        buffer.insert(end_iter, text)
-        
+    
+        # Create a terminal emulator for the text view if it doesn't exist yet
+        if not hasattr(terminal_view, 'terminal_emulator'):
+            terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
+    
+        # Process and append the text
+        terminal_view.terminal_emulator.append_text(text)
+    
         # Append to log file if continuous logging is active
         if self.logging_active and self.log_file:
             try:
-                self.log_file.write(text)
+                # Strip ANSI codes when writing to log file
+                clean_text = AnsiColorParser().strip_ansi(text)
+                
+                # Write to log file, ensuring a newline is added if needed
+                if self.log_file.tell() > 0:
+                    # Move to the position before the last character
+                    self.log_file.seek(self.log_file.tell() - 1, 0)
+                    last_char = self.log_file.read(1)
+                    self.log_file.seek(0, 2)  # Move back to the end
+                    
+                    # If the last character isn't a newline and the new text doesn't start with one,
+                    # add a newline before writing
+                    if last_char != '\n' and not clean_text.startswith('\n'):
+                        self.log_file.write('\n')
+                        
+                self.log_file.write(clean_text)
                 self.log_file.flush()  # Ensure it's written immediately
             except Exception:
                 # If there's an error writing to the log file, disable logging
@@ -4152,11 +4586,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.log_file = None
                 self.logging_active = False
                 self.log_file_path = None
-        
-        # Scroll to the end
-        mark = buffer.create_mark(None, buffer.get_end_iter(), False)
-        terminal_view.scroll_mark_onscreen(mark)
-        buffer.delete_mark(mark)
+    
         return False
 
     def create_progress_dialog(self, title="Installing...", allow_cancel=True):
@@ -4252,6 +4682,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Set terminal colors using CSS classes
         terminal_view.get_style_context().add_class('terminal-view')
         
+        # Initialize the terminal emulator
+        terminal_emulator = TerminalEmulator(terminal_view)
+        
         # Add terminal view to scroll window
         terminal_scroll.add(terminal_view)
         terminal_box.pack_start(terminal_scroll, True, True, 0)
@@ -4298,11 +4731,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.logging_active = False
                 self.log_file_path = None
             
+            # Only handle the dialog destruction if not already being handled by on_cancel_clicked
             if response_id == Gtk.ResponseType.CANCEL:
-                dialog.destroy()
-                self.cleanup_installation_state()
+                if not hasattr(self, 'cancellation_in_progress') or not self.cancellation_in_progress:
+                    dialog.destroy()
+                    self.cleanup_installation_state()
+                else:
+                    # Dialog destruction is already being handled elsewhere
+                    pass
         
-        progress_dialog.connect("response", on_dialog_response)
+        # Don't connect the response signal here, let the callers do it to avoid duplication
+        # progress_dialog.connect("response", on_dialog_response)
         
         # Function to save log content to file
         def on_save_log_clicked(button):
@@ -4541,6 +4980,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         def update_spinner():
             self.spinner.set_property("visible", True)
             self.spinner.set_property("active", True) 
+            self.spinner.start()  # Add this explicit call to start the animation
             self.spinner.show_all()
             self.loading_label.set_property("visible", True)
             self.loading_label.show_all()
@@ -4562,16 +5002,368 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def check_internet_connection(self):
         """Check if there is an active internet connection"""
         try:
-            # Try to connect to Google's DNS server
+            # Try to connect to Google's DNS server (most reliable)
             socket.create_connection(("8.8.8.8", 53), timeout=3)
+            print("Internet connection check successful: Connected to 8.8.8.8")
             return True
-        except (socket.timeout, socket.error, OSError):
+        except (socket.timeout, socket.error, OSError) as e:
+            print(f"Connection to 8.8.8.8 failed: {e}")
             try:
-                # Fallback to trying a basic HTTP request
-                urllib.request.urlopen("https://www.google.com", timeout=3)
+                # Try Cloudflare's DNS as a second option
+                socket.create_connection(("1.1.1.1", 53), timeout=3)
+                print("Internet connection check successful: Connected to 1.1.1.1")
                 return True
-            except:
-                return False
+            except (socket.timeout, socket.error, OSError) as e:
+                print(f"Connection to 1.1.1.1 failed: {e}")
+                try:
+                    # Fall back to HTTP request to Google
+                    urllib.request.urlopen("https://www.google.com", timeout=3)
+                    print("Internet connection check successful: Connected to google.com")
+                    return True
+                except Exception as e:
+                    print(f"Connection to google.com failed: {e}")
+                    try:
+                        # Try one more fallback to GitHub (where app data is hosted)
+                        urllib.request.urlopen("https://github.com", timeout=3)
+                        print("Internet connection check successful: Connected to github.com")
+                        return True
+                    except Exception as e:
+                        print(f"Connection to github.com failed: {e}")
+                        print("All connection attempts failed, no internet connectivity detected")
+                        return False
+
+    def _ensure_search_box_hidden(self):
+        """Make sure the search box stays hidden during UI initialization"""
+        if hasattr(self, 'search_box'):
+            self.search_box.hide()
+        return False  # Don't repeat this callback
+
+    def on_scroll_value_changed(self, adjustment):
+        """Handle scroll event to hide search box when scrolling"""
+        # Check if scroll position changed significantly (to avoid minor adjustments)
+        if abs(adjustment.get_value() - self.last_scroll_position) > 5:
+            # Only hide if it's currently visible
+            if hasattr(self, 'search_box') and self.search_box.get_visible():
+                self.search_box.hide()
+                # Update search button icon and tooltip
+                if hasattr(self, 'search_button'):
+                    self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                    self.search_button.set_tooltip_text("Show Search")
+        
+        # Update last position
+        self.last_scroll_position = adjustment.get_value()
+
+    def _refresh_current_view(self):
+        """Refresh only the current view without rebuilding the UI"""
+        try:
+            # Just refresh the content in the current section
+            if hasattr(self, 'current_section'):
+                if self.current_section == "explore":
+                    # Keep the same category selection and refresh
+                    selected_category = self._get_selected_category()
+                    self.clear_app_list_box()
+                    self.show_apps(selected_category)
+                elif self.current_section == "installed":
+                    self.clear_app_list_box()
+                    self.show_installed_apps()
+                elif self.current_section == "updates":
+                    self.clear_app_list_box()
+                    self.show_update_apps()
+            
+            # Make sure the UI elements for the current section are properly shown/hidden
+            if hasattr(self, 'current_section'):
+                # Handle UI elements based on section
+                if self.current_section == "explore":
+                    if hasattr(self, 'sidebar'):
+                        self.sidebar.show()
+                    if hasattr(self, 'update_button'):
+                        self.update_button.hide()
+                elif self.current_section == "installed":
+                    if hasattr(self, 'sidebar'):
+                        self.sidebar.hide()
+                    if hasattr(self, 'update_button'):
+                        self.update_button.hide()
+                elif self.current_section == "updates":
+                    if hasattr(self, 'sidebar'):
+                        self.sidebar.hide()
+                    if hasattr(self, 'update_button'):
+                        self.update_button.show()
+        except Exception as e:
+            print(f"Error in _refresh_current_view: {e}")
+            import traceback
+            traceback.print_exc()
+        return False
+
+class AnsiColorParser:
+    """Class to parse ANSI escape sequences and apply formatting to a GTK TextView"""
+    
+    # ANSI escape sequence regex
+    ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[((?:\d+;)*\d+)?([A-Za-z])')
+    
+    # Basic ANSI color codes
+    COLORS = {
+        # Foreground colors
+        '30': (0.0, 0.0, 0.0),      # Black
+        '31': (0.8, 0.0, 0.0),      # Red
+        '32': (0.0, 0.8, 0.0),      # Green
+        '33': (0.8, 0.8, 0.0),      # Yellow
+        '34': (0.0, 0.0, 0.8),      # Blue
+        '35': (0.8, 0.0, 0.8),      # Magenta
+        '36': (0.0, 0.8, 0.8),      # Cyan
+        '37': (0.8, 0.8, 0.8),      # White
+        '90': (0.5, 0.5, 0.5),      # Bright Black (Gray)
+        '91': (1.0, 0.0, 0.0),      # Bright Red
+        '92': (0.0, 1.0, 0.0),      # Bright Green
+        '93': (1.0, 1.0, 0.0),      # Bright Yellow
+        '94': (0.0, 0.0, 1.0),      # Bright Blue
+        '95': (1.0, 0.0, 1.0),      # Bright Magenta
+        '96': (0.0, 1.0, 1.0),      # Bright Cyan
+        '97': (1.0, 1.0, 1.0),      # Bright White
+        # Background colors
+        '40': (0.0, 0.0, 0.0),      # Black
+        '41': (0.8, 0.0, 0.0),      # Red
+        '42': (0.0, 0.8, 0.0),      # Green
+        '43': (0.8, 0.8, 0.0),      # Yellow
+        '44': (0.0, 0.0, 0.8),      # Blue
+        '45': (0.8, 0.0, 0.8),      # Magenta
+        '46': (0.0, 0.8, 0.8),      # Cyan
+        '47': (0.8, 0.8, 0.8),      # White
+        '100': (0.5, 0.5, 0.5),     # Bright Black (Gray)
+        '101': (1.0, 0.0, 0.0),     # Bright Red
+        '102': (0.0, 1.0, 0.0),     # Bright Green
+        '103': (1.0, 1.0, 0.0),     # Bright Yellow
+        '104': (0.0, 0.0, 1.0),     # Bright Blue
+        '105': (1.0, 0.0, 1.0),     # Bright Magenta
+        '106': (0.0, 1.0, 1.0),     # Bright Cyan
+        '107': (1.0, 1.0, 1.0),     # Bright White
+    }
+    
+    # Text attributes
+    ATTRIBUTES = {
+        '0': 'reset',        # Reset all attributes
+        '1': 'bold',         # Bold or increased intensity
+        '2': 'dim',          # Dim or decreased intensity
+        '3': 'italic',       # Italic
+        '4': 'underline',    # Underline
+        '5': 'blink',        # Blink (not widely supported)
+        '7': 'reverse',      # Reverse (swap fg and bg colors)
+        '9': 'strikethrough' # Strikethrough
+    }
+    
+    def __init__(self):
+        # Initialize tag table for the TextView buffer
+        self.tags = {}
+    
+    def ensure_tag(self, buffer, tag_name, properties):
+        """Ensure a tag exists in the buffer with the specified properties"""
+        if tag_name not in self.tags:
+            tag = buffer.create_tag(tag_name)
+            for prop, value in properties.items():
+                tag.set_property(prop, value)
+            self.tags[tag_name] = tag
+        return self.tags[tag_name]
+    
+    def apply_formatting(self, buffer, text):
+        """Parse text with ANSI escape sequences and insert into buffer with appropriate formatting"""
+        end_iter = buffer.get_end_iter()
+        cursor_pos = 0
+        
+        # Current formatting state
+        fg_color = None
+        bg_color = None
+        bold = False
+        italic = False
+        underline = False
+        
+        # Process the text and find ANSI escape sequences
+        for match in self.ANSI_ESCAPE_PATTERN.finditer(text):
+            # Insert the text before the escape sequence
+            start_pos = match.start()
+            if start_pos > cursor_pos:
+                plain_text = text[cursor_pos:start_pos]
+                # Apply current formatting to plain text
+                tags = []
+                
+                # Create and apply color tags
+                if fg_color:
+                    fg_tag_name = f"fg_{fg_color[0]}_{fg_color[1]}_{fg_color[2]}"
+                    fg_tag = self.ensure_tag(buffer, fg_tag_name, {
+                        "foreground-rgba": Gdk.RGBA(*fg_color, 1.0)
+                    })
+                    tags.append(fg_tag)
+                
+                if bg_color:
+                    bg_tag_name = f"bg_{bg_color[0]}_{bg_color[1]}_{bg_color[2]}"
+                    bg_tag = self.ensure_tag(buffer, bg_tag_name, {
+                        "background-rgba": Gdk.RGBA(*bg_color, 1.0)
+                    })
+                    tags.append(bg_tag)
+                
+                # Apply text attribute tags
+                if bold:
+                    bold_tag = self.ensure_tag(buffer, "bold", {"weight": Pango.Weight.BOLD})
+                    tags.append(bold_tag)
+                
+                if italic:
+                    italic_tag = self.ensure_tag(buffer, "italic", {"style": Pango.Style.ITALIC})
+                    tags.append(italic_tag)
+                
+                if underline:
+                    underline_tag = self.ensure_tag(buffer, "underline", 
+                                                   {"underline": Pango.Underline.SINGLE})
+                    tags.append(underline_tag)
+                
+                # Insert text with all applicable tags
+                start_mark = buffer.create_mark(None, end_iter, True)
+                buffer.insert(end_iter, plain_text)
+                for tag in tags:
+                    start_iter = buffer.get_iter_at_mark(start_mark)
+                    buffer.apply_tag(tag, start_iter, end_iter)
+                buffer.delete_mark(start_mark)
+            
+            # Process the escape sequence
+            params = match.group(1)
+            command = match.group(2)
+            
+            if command == 'm' and params:  # SGR (Select Graphic Rendition)
+                for param in params.split(';'):
+                    if not param:
+                        continue
+                        
+                    # Reset all attributes
+                    if param == '0':
+                        fg_color = None
+                        bg_color = None
+                        bold = False
+                        italic = False
+                        underline = False
+                    
+                    # Process text attributes
+                    elif param in self.ATTRIBUTES:
+                        attr = self.ATTRIBUTES[param]
+                        if attr == 'bold':
+                            bold = True
+                        elif attr == 'italic':
+                            italic = True
+                        elif attr == 'underline':
+                            underline = True
+                    
+                    # Process foreground colors
+                    elif param in self.COLORS and int(param) < 40:
+                        fg_color = self.COLORS[param]
+                    
+                    # Process background colors
+                    elif param in self.COLORS and int(param) >= 40:
+                        bg_color = self.COLORS[param]
+            
+            # Update cursor position
+            cursor_pos = match.end()
+        
+        # Insert any remaining text
+        if cursor_pos < len(text):
+            remaining_text = text[cursor_pos:]
+            # Apply current formatting to remaining text
+            tags = []
+            
+            # Create and apply color tags
+            if fg_color:
+                fg_tag_name = f"fg_{fg_color[0]}_{fg_color[1]}_{fg_color[2]}"
+                fg_tag = self.ensure_tag(buffer, fg_tag_name, {
+                    "foreground-rgba": Gdk.RGBA(*fg_color, 1.0)
+                })
+                tags.append(fg_tag)
+            
+            if bg_color:
+                bg_tag_name = f"bg_{bg_color[0]}_{bg_color[1]}_{bg_color[2]}"
+                bg_tag = self.ensure_tag(buffer, bg_tag_name, {
+                    "background-rgba": Gdk.RGBA(*bg_color, 1.0)
+                })
+                tags.append(bg_tag)
+            
+            # Apply text attribute tags
+            if bold:
+                bold_tag = self.ensure_tag(buffer, "bold", {"weight": Pango.Weight.BOLD})
+                tags.append(bold_tag)
+            
+            if italic:
+                italic_tag = self.ensure_tag(buffer, "italic", {"style": Pango.Style.ITALIC})
+                tags.append(italic_tag)
+            
+            if underline:
+                underline_tag = self.ensure_tag(buffer, "underline", 
+                                               {"underline": Pango.Underline.SINGLE})
+                tags.append(underline_tag)
+            
+            # Insert text with all applicable tags
+            start_mark = buffer.create_mark(None, end_iter, True)
+            buffer.insert(end_iter, remaining_text)
+            for tag in tags:
+                start_iter = buffer.get_iter_at_mark(start_mark)
+                buffer.apply_tag(tag, start_iter, end_iter)
+            buffer.delete_mark(start_mark)
+    
+    def strip_ansi(self, text):
+        """Remove ANSI escape sequences from text"""
+        return self.ANSI_ESCAPE_PATTERN.sub('', text)
+
+class TerminalEmulator:
+    """Emulates a terminal in a GTK TextView"""
+    
+    def __init__(self, text_view):
+        self.text_view = text_view
+        self.buffer = text_view.get_buffer()
+        self.ansi_parser = AnsiColorParser()
+        
+        # Ensure monospace font for terminal-like appearance
+        self.text_view.set_monospace(True)
+        
+        # Set initial terminal colors
+        self.text_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
+        self.text_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
+        
+        # Add terminal view style class
+        self.text_view.get_style_context().add_class("terminal-view")
+    
+    def append_text(self, text, with_ansi=True):
+        """Append text to the terminal view, processing ANSI escape sequences if with_ansi is True"""
+        if not text:
+            return
+            
+        # Check if we need to add a newline before the new text
+        if self.buffer.get_char_count() > 0:
+            # Get the last character in the buffer
+            end_iter = self.buffer.get_end_iter()
+            start_iter = end_iter.copy()
+            if start_iter.backward_char():  # This returns False if we can't move back (empty buffer)
+                last_char = self.buffer.get_text(start_iter, end_iter, False)
+                
+                # If the last character isn't a newline and the new text doesn't start with one,
+                # add a newline before the new text
+                if last_char != '\n' and not text.startswith('\n'):
+                    # Insert a newline first
+                    self.buffer.insert(end_iter, '\n')
+            
+        # Process text with ANSI escape sequences
+        if with_ansi:
+            self.ansi_parser.apply_formatting(self.buffer, text)
+        else:
+            # Just append the text without processing
+            end_iter = self.buffer.get_end_iter()
+            self.buffer.insert(end_iter, text)
+        
+        # Scroll to the end
+        mark = self.buffer.create_mark(None, self.buffer.get_end_iter(), False)
+        self.text_view.scroll_mark_onscreen(mark)
+        self.buffer.delete_mark(mark)
+    
+    def clear(self):
+        """Clear the terminal view"""
+        self.buffer.delete(self.buffer.get_start_iter(), self.buffer.get_end_iter())
+    
+    def get_text(self):
+        """Get the terminal contents"""
+        start_iter, end_iter = self.buffer.get_bounds()
+        return self.buffer.get_text(start_iter, end_iter, False)
 
 def main():
     app = AppStoreApplication()

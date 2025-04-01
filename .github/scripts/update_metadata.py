@@ -9,11 +9,20 @@ from PIL import Image
 GITHUB_REPO = "sabamdarif/Termux-AppStore"
 GITHUB_RAW_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 
+def is_svg(file_path):
+    """Check if the file is an SVG file."""
+    return str(file_path).lower().endswith('.svg')
+
 def compress_image(image_path, min_size=50, max_size=100):
     """
     Compress the image to ensure its dimensions are between min_size and max_size.
-    Keeps the aspect ratio intact.
+    Keeps the aspect ratio intact. Skips SVG files as they are vector graphics.
     """
+    # Skip compression for SVG files
+    if is_svg(image_path):
+        print(f"{image_path} is an SVG file, skipping compression.")
+        return
+        
     try:
         with Image.open(image_path) as img:
             width, height = img.size
@@ -84,10 +93,11 @@ def get_urls(app_folder_name, app_folder):
     # Format the folder name for URLs by replacing spaces with hyphens
     url_safe_folder_name = app_folder_name.replace(' ', '-')
 
-    # Priority order for logo/icon files
-    priority_order = ['logo.png', 'icon.png'] + \
-                     [f"logo-{i}.png" for i in range(100)] + \
-                     [f"icon-{i}.png" for i in range(100)]
+    # Priority order for logo/icon files - include both PNG and SVG
+    priority_order = [
+        'logo.png', 'icon.png', 'logo.svg', 'icon.svg'
+    ] + [f"logo-{i}.png" for i in range(100)] + [f"icon-{i}.png" for i in range(100)] \
+      + [f"logo-{i}.svg" for i in range(100)] + [f"icon-{i}.svg" for i in range(100)]
 
     def get_logo_file():
         """Select the logo file based on priority and size."""
@@ -95,9 +105,9 @@ def get_urls(app_folder_name, app_folder):
         selected_priority = float('inf')
         selected_size = 0
 
-        # Scan for all .png files in the app folder
+        # Scan for all image files in the app folder
         for filename in os.listdir(app_folder):
-            if filename.endswith('.png'):
+            if filename.endswith(('.png', '.svg')):
                 file_path = os.path.join(app_folder, filename)
                 file_size = os.path.getsize(file_path)
 
@@ -124,7 +134,7 @@ def get_urls(app_folder_name, app_folder):
                 compress_image(logo_path)
                 logo_url = f"{GITHUB_RAW_URL}/apps/{url_safe_folder_name}/{selected_file_name}"
             except Exception as e:
-                print(f"Error compressing {logo_path}: {e}")
+                print(f"Error processing {logo_path}: {e}")
                 logo_url = None
         else:
             print(f'Warning: Logo file {logo_path} does not exist.')

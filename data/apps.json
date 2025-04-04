@@ -665,6 +665,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Qbittorrent/logo.png"
   },
   {
+    "app_name": "Quassel",
+    "folder_name": "Quassel",
+    "description": "Quassel IRC is a modern, cross-platform, distributed IRC client",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "run_cmd": "quassel",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "quassel",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Quassel/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Quassel/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Quassel/logo.png"
+  },
+  {
     "app_name": "Rclone",
     "folder_name": "Rclone",
     "description": "Rclone is an open source, multi threaded, command line computer program to manage or migrate content on cloud and other high latency storage.",
@@ -978,6 +994,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Xpdf-Reader/logo.png"
+  },
+  {
+    "app_name": "Yazi",
+    "folder_name": "Yazi",
+    "description": "Blazing fast terminal file manager written in Rust, based on async I/O",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "yazi",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "yazi",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Yazi/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Yazi/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Yazi/logo.png"
   },
   {
     "app_name": "Zen",

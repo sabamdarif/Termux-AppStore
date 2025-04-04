@@ -2,7 +2,7 @@
 
 supported_arch="aarch64,arm"
 package_name="yazi"
-run_cmd="yazi"
+# run_cmd="yazi"
 version="termux_local_version"
 app_type="native"
 package_install_and_check "$package_name"

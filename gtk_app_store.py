@@ -2671,13 +2671,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
                     filtered_apps = [app for app, score in fuzzy_matches]
                 else:
-                    # Use regular search (substring matching)
-                    filtered_apps = [
-                        app for app in filtered_apps
-                        if search_text in app['app_name'].lower()
-                        or search_text in app['description'].lower()
-                        or any(search_text in cat.lower() for cat in app['categories'])
-                    ]
+                    # First, try to find matches in app names only
+                    name_matches = [app for app in filtered_apps if search_text in app['app_name'].lower()]
+                    
+                    # If no matches in names, try descriptions and categories
+                    if not name_matches:
+                        desc_matches = [app for app in filtered_apps 
+                                       if search_text in app['description'].lower()]
+                        cat_matches = [app for app in filtered_apps 
+                                      if any(search_text in cat.lower() for cat in app['categories'])]
+                        
+                        # Combine description and category matches, ensuring no duplicates
+                        filtered_apps = list({app['app_name']: app for app in desc_matches + cat_matches}.values())
+                    else:
+                        # Use the name matches
+                        filtered_apps = name_matches
                 # print(f"Search filtered {original_count} -> {len(filtered_apps)} apps")
             
             # Add filtered apps to the list using idle_add
@@ -2711,6 +2719,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             message = Gtk.Label()
             message.set_markup(f"<span size='larger'>No apps match: <i>{GLib.markup_escape_text(search_text)}</i></span>")
             message_box.pack_start(message, False, False, 0)
+            
+            # Add explanation about how search works
+            explanation = Gtk.Label()
+            explanation.set_markup("<span>We've searched in app names, descriptions, and categories.</span>")
+            message_box.pack_start(explanation, False, False, 0)
             
             # Add suggestion
             suggestion = Gtk.Label()
@@ -2758,6 +2771,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             card_box.set_margin_end(12)
             card_box.set_margin_top(12)
             card_box.set_margin_bottom(12)
+
+            # Check if this app is a result of description search
+            search_text = self.search_entry.get_text().lower()
+            found_in_description = False
+            if search_text and search_text not in app['app_name'].lower() and search_text in app['description'].lower():
+                found_in_description = True
 
             # App logo with error handling
             logo_path = None

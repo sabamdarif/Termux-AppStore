@@ -2112,6 +2112,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Ensure we have at least one line
                         total_lines = max(1, total_lines)
                         GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                        
+                        # Check if script contains any download_file commands
+                        # If it does, disable cancel button preemptively
+                        has_download_operations = any("download_file" in line.lower() for line in significant_lines)
+                        has_extract_operations = any("extract" in line.lower() for line in significant_lines)
+                        
+                        # If script has critical operations, disable cancel button
+                        if (has_download_operations or has_extract_operations) and cancel_button and not cancel_button_disabled:
+                            msg = "Installation contains critical operations and cannot be cancelled once started"
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, f"\n*** {msg} ***\n"))
+                            GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                            GLib.idle_add(lambda: cancel_button.set_tooltip_text(msg))
+                            cancel_button_disabled = True
+                            
                     except Exception as e:
                         print(f"Error counting script lines: {e}")
                         # Default to a reasonable number if counting fails
@@ -2135,6 +2149,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     
                     # Track current line
                     current_line = 0
+                    accumulated_weight = 0.0  # Track accumulated weight of processed operations
+                    cancel_button_disabled = False  # Track if cancel button is disabled
+                    
+                    # Forcibly disable cancel button for certain patterns known to be critical
+                    if cancel_button:
+                        for line in significant_lines:
+                            if ("download_file" in line.lower() or 
+                                "extract" in line.lower() or 
+                                "check_and_delete" in line.lower() or
+                                "check_and_create_directory" in line.lower() or
+                                "/opt/brave-browser" in line.lower()):
+                                GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                                GLib.idle_add(lambda: cancel_button.set_tooltip_text("Installation is processing critical operations and cannot be cancelled"))
+                                GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nInstallation is processing critical operations and cannot be cancelled\n"))
+                                cancel_button_disabled = True
+                                break
                     
                     while True:
                         if install_cancelled:
@@ -2153,24 +2183,108 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         line = line.strip()
                         if not line:
                             continue
+                            
+                        # Check if this is a heavy operation that should disable cancel button
+                        if not cancel_button_disabled and self.is_heavy_operation(line) and cancel_button:
+                            GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                            GLib.idle_add(lambda: cancel_button.set_tooltip_text("Installation is processing critical operations and cannot be cancelled"))
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nInstallation is processing critical operations and cannot be cancelled\n"))
+                            cancel_button_disabled = True
 
                         # Update current line and calculate progress
                         current_line += 1
                         # Ensure we don't exceed our total for any reason
                         current_line = min(current_line, total_lines)
                         
+                        # Calculate line weight for more accurate progress
+                        line_weight = self.estimate_line_weight(line)
+                        
                         # Calculate current progress
-                        # Base progress + line progress contribution
-                        current_progress = base_progress + (current_line * line_progress_weight)
-                        
-                        # Cap progress at 90% - the final 10% is reserved for completion tasks
-                        current_progress = min(0.9, current_progress)
-                        
-                        # Update progress
-                        GLib.idle_add(update_progress, current_progress, line)
-                        
-                        # Update terminal
-                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                        # Base progress + (current line / total lines) * remaining progress
+                        # This still uses line count but shows slower progress for heavy operations
+                        if self.is_heavy_operation(line):
+                            # For heavy operations, wait for the operation to complete
+                            # Start progress from current point
+                            current_progress = base_progress + (current_line - 1) * line_progress_weight
+                            # End progress is what it would be after this operation
+                            next_progress = base_progress + current_line * line_progress_weight
+                            # Cap at 90%
+                            next_progress = min(0.9, next_progress)
+                            
+                            # Update terminal immediately
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                            
+                            # Special handling for download_file operations which need more progress feedback
+                            if "download_file" in line.lower():
+                                # Make sure we show progress immediately
+                                GLib.idle_add(update_progress, current_progress, f"Downloading: {line}")
+                                
+                                # Create a thread to monitor download progress
+                                def monitor_download_progress():
+                                    steps = 100  # More steps for smoother progress during downloads
+                                    step_size = (next_progress - current_progress) / steps
+                                    download_duration = 15.0  # Longer duration for downloads
+                                    step_time = download_duration / steps
+                                    
+                                    # First wait to let the download start
+                                    time.sleep(0.5)
+                                    
+                                    # Get the file name being downloaded if possible
+                                    file_name = None
+                                    match = re.search(r'download_file.*"([^"]+)"', line)
+                                    if match:
+                                        file_name = os.path.basename(match.group(1))
+                                        print(f"Monitoring download of: {file_name}")
+                                    
+                                    for step in range(steps):
+                                        # Check if installation is cancelled
+                                        if install_cancelled:
+                                            return
+                                        
+                                        # Calculate intermediate progress
+                                        intermediate_progress = current_progress + (step_size * step)
+                                        
+                                        # Update progress with file name if available
+                                        status_text = f"Downloading{''+f': {file_name}' if file_name else ''} - {int(step/steps*100)}%"
+                                        GLib.idle_add(update_progress, intermediate_progress, status_text)
+                                        
+                                        # Sleep for step time
+                                        time.sleep(step_time)
+                                        
+                                        # Try to determine if download is complete
+                                        # Check if the process has ended or next line processed
+                                        if install_process.poll() is not None:
+                                            break
+                                    
+                                    # Final update to show download completed
+                                    GLib.idle_add(update_progress, next_progress, f"Download completed{': '+file_name if file_name else ''}")
+                                
+                                # Start the monitoring thread
+                                download_thread = threading.Thread(target=monitor_download_progress)
+                                download_thread.daemon = True
+                                download_thread.start()
+                                
+                                # Continue with next line without updating progress again
+                                continue
+                            else:
+                                # Gradually update progress for other heavy operations (5-8 seconds based on operation)
+                                duration = self.get_operation_duration(line)
+                                self.update_progress_gradually(update_progress, current_progress, next_progress, line, duration)
+                            
+                            # Continue with the next line without updating progress again
+                            continue
+                        else:
+                            # For normal operations, update immediately
+                            current_progress = base_progress + (current_line * line_progress_weight)
+                            
+                            # Cap progress at 90% - the final 10% is reserved for completion tasks
+                            current_progress = min(0.9, current_progress)
+                            
+                            # Update progress
+                            GLib.idle_add(update_progress, current_progress, line)
+                            
+                            # Update terminal
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
 
                     if install_process.wait() == 0 and not install_cancelled:
                         # Update installation status (95%)
@@ -2516,6 +2630,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                     # Track current line
                     current_line = 0
+                    cancel_button_disabled = False
 
                     for line in uninstall_process.stdout:
                         if uninstall_cancelled:
@@ -2526,6 +2641,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             time.sleep(1)
                             GLib.idle_add(progress_dialog.destroy)
                             return
+                            
+                        # Check if this is a heavy operation that should disable cancel button
+                        if not cancel_button_disabled and self.is_heavy_operation(line) and cancel_button:
+                            GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                            GLib.idle_add(lambda: cancel_button.set_tooltip_text("Uninstallation is processing critical operations and cannot be cancelled"))
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUninstallation is processing critical operations and cannot be cancelled\n"))
+                            cancel_button_disabled = True
                         
                         # Update current line and calculate progress
                         current_line += 1
@@ -2533,17 +2655,45 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         current_line = min(current_line, total_lines)
                         
                         # Calculate current progress
-                        # Base progress + line progress contribution
-                        current_progress = base_progress + (current_line * line_progress_weight)
-                        
-                        # Cap progress at 90% - the final 10% is reserved for completion tasks
-                        current_progress = min(0.9, current_progress)
-                        
-                        # Update progress
-                        GLib.idle_add(update_progress, current_progress, line.strip())
-                        
-                        # Update terminal
-                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+                        # For heavy operations, use a gradual progress update
+                        line_str = line.strip()
+                        if self.is_heavy_operation(line_str):
+                            # Start progress from current point
+                            current_progress = base_progress + (current_line - 1) * line_progress_weight
+                            # End progress is what it would be after this operation
+                            next_progress = base_progress + current_line * line_progress_weight
+                            # Cap at 90%
+                            next_progress = min(0.9, next_progress)
+                            
+                            # Update terminal immediately
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+                            
+                            # Gradually update progress for this heavy operation (5-8 seconds based on operation)
+                            duration = 5.0  # Base duration for heavy ops
+                            if "download_file" in line_str.lower() or "aria2c" in line_str.lower() or "wget" in line_str.lower():
+                                duration = 8.0  # Longer for downloads
+                            elif "extract" in line_str.lower() or "tar" in line_str.lower() or "unzip" in line_str.lower():
+                                duration = 6.0  # Medium for extractions
+                            elif "package_remove" in line_str.lower() or "apt-get remove" in line_str.lower():
+                                duration = 7.0  # Longer for package removals
+                                
+                            self.update_progress_gradually(update_progress, current_progress, next_progress, line_str, duration)
+                            
+                            # We don't need to display this line with the update_progress call below
+                            # Just move to the next line without additional updates
+                            continue
+                        else:
+                            # For normal operations, update immediately
+                            current_progress = base_progress + (current_line * line_progress_weight)
+                            
+                            # Cap progress at 90% - the final 10% is reserved for completion tasks
+                            current_progress = min(0.9, current_progress)
+                            
+                            # Update progress
+                            GLib.idle_add(update_progress, current_progress, line.strip())
+                            
+                            # Update terminal
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
 
                     uninstall_process.wait()
                     if uninstall_process.returncode == 0 and not uninstall_cancelled:
@@ -3602,6 +3752,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                         # Track current line
                         current_line = 0
+                        cancel_button_disabled = False
 
                         while True:
                             if update_cancelled:
@@ -3620,6 +3771,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             line = line.strip()
                             if not line:
                                 continue
+                                
+                            # Check if this is a heavy operation that should disable cancel button
+                            if not cancel_button_disabled and self.is_heavy_operation(line) and cancel_button:
+                                GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                                GLib.idle_add(lambda: cancel_button.set_tooltip_text("Update is processing critical operations and cannot be cancelled"))
+                                GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUpdate is processing critical operations and cannot be cancelled\n"))
+                                cancel_button_disabled = True
 
                             # Update current line and calculate progress
                             current_line += 1
@@ -3627,17 +3785,41 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             current_line = min(current_line, total_lines)
                             
                             # Calculate current progress
-                            # Base progress + line progress contribution
-                            current_progress = base_progress + (current_line * line_progress_weight)
-                            
-                            # Cap progress at 90% - the final 10% is reserved for completion tasks
-                            current_progress = min(0.9, current_progress)
-                            
-                            # Update progress
-                            GLib.idle_add(update_progress, current_progress, line)
-                            
-                            # Update terminal
-                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                            # For heavy operations, show gradual progress instead of jumping
+                            if self.is_heavy_operation(line):
+                                # Start progress from current point
+                                current_progress = base_progress + (current_line - 1) * line_progress_weight
+                                # End progress is what it would be after this operation
+                                next_progress = base_progress + current_line * line_progress_weight
+                                # Cap at 90%
+                                next_progress = min(0.9, next_progress)
+                                
+                                # Update terminal immediately
+                                GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                                
+                                # Gradually update progress for this heavy operation (5-8 seconds based on operation)
+                                duration = 5.0  # Base duration for heavy ops
+                                if "download_file" in line.lower() or "aria2c" in line.lower() or "wget" in line.lower():
+                                    duration = 8.0  # Longer for downloads
+                                elif "extract" in line.lower() or "tar" in line.lower() or "unzip" in line.lower():
+                                    duration = 6.0  # Medium for extractions
+                                    
+                                self.update_progress_gradually(update_progress, current_progress, next_progress, line, duration)
+                                
+                                # Continue with the next line without updating progress again
+                                continue
+                            else:
+                                # For normal operations, update immediately
+                                current_progress = base_progress + (current_line * line_progress_weight)
+                                
+                                # Cap progress at 90% - the final 10% is reserved for completion tasks
+                                current_progress = min(0.9, current_progress)
+                                
+                                # Update progress
+                                GLib.idle_add(update_progress, current_progress, line)
+                                
+                                # Update terminal
+                                GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
 
                         update_process.wait()
                         if update_process.returncode == 0 and not update_cancelled:
@@ -4080,7 +4262,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Load content on next idle
                         def load_content():
                             self.clear_app_list_box()
-                            self.show_apps()
+                            self.show_apps(selected_category)
                             return False
                             
                         GLib.idle_add(load_content)
@@ -4574,14 +4756,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Update the terminal view with new text and append to log file if logging is active"""
         if not text:
             return
-    
+        
+        # Initialize logging attributes if they don't exist
+        if not hasattr(self, 'logging_active'):
+            self.logging_active = False
+            self.log_file = None
+            self.log_file_path = None
+        
         # Create a terminal emulator for the text view if it doesn't exist yet
         if not hasattr(terminal_view, 'terminal_emulator'):
             terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
-    
+        
         # Process and append the text
         terminal_view.terminal_emulator.append_text(text)
-    
+        
         # Append to log file if continuous logging is active
         if self.logging_active and self.log_file:
             try:
@@ -4611,226 +4799,249 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.log_file = None
                 self.logging_active = False
                 self.log_file_path = None
-    
+        
         return False
 
     def create_progress_dialog(self, title="Installing...", allow_cancel=True):
         # Create dialog
-        progress_dialog = Gtk.Dialog(
+        dialog = Gtk.Dialog(
             title=title,
-            parent=self,
+            transient_for=self,
             modal=True,
             destroy_with_parent=True
         )
+        dialog.get_style_context().add_class("progress-dialog")
+        dialog.set_default_size(450, 250)
+        # Allow resizing again
+        dialog.set_resizable(True)
+        dialog.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
         
-        # Variables for continuous logging
-        self.log_file_path = None
+        # Initialize logging variables
         self.logging_active = False
         self.log_file = None
-        
-        # Create and set custom header bar
-        header_bar = Gtk.HeaderBar()
-        header_bar.set_show_close_button(False)
-        header_bar.set_title(title)
-        
-        # Add terminal toggle button to header bar
-        terminal_button = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic", Gtk.IconSize.BUTTON)
-        terminal_button.set_tooltip_text("Toggle Terminal View")
-        header_bar.pack_end(terminal_button)
-        
-        # Add save button to header bar
-        save_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
-        save_button.set_tooltip_text("Save Log to File")
-        header_bar.pack_end(save_button)
-        
-        # Set the header bar
-        progress_dialog.set_titlebar(header_bar)
-        
-        # Add close button if cancellation is allowed
+        self.log_file_path = None
+
+        # Set the right action button - Cancel
+        cancel_button = None
         if allow_cancel:
-            cancel_button = progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            cancel_button.get_style_context().add_class('destructive-action')
+            cancel_button = dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            cancel_button.get_style_context().add_class("cancel-button")
+            # Store the cancel button as a property on the dialog for later access
+            dialog.cancel_button = cancel_button
         
-        # Create stack for switching between progress and terminal views
+        # Create container box
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        content_box.set_margin_top(10)
+        content_box.set_margin_bottom(10)
+        content_box.set_margin_start(15)
+        content_box.set_margin_end(15)
+        
+        # Create stack for progress view and terminal view
         stack = Gtk.Stack()
-        stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        stack.set_transition_duration(150)
+        stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        stack.set_transition_duration(300)
         
-        # Progress view
-        progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        progress_box.set_margin_start(10)
-        progress_box.set_margin_end(10)
-        progress_box.set_margin_top(10)
-        progress_box.set_margin_bottom(10)
+        # Create progress view box
+        progress_view = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        progress_view.get_style_context().add_class("progress-view")
         
-        # Status label with better text handling
-        status_label = Gtk.Label()
+        # Create status label
+        status_label = Gtk.Label(label="Initializing...")
         status_label.set_line_wrap(True)
-        status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        status_label.set_justify(Gtk.Justification.LEFT)
-        status_label.set_halign(Gtk.Align.START)
-        status_label.set_text("Starting...")
+        status_label.set_line_wrap_mode(Gtk.WrapMode.WORD_CHAR)  # Better word wrapping
+        status_label.set_xalign(0)
+        status_label.set_max_width_chars(40)  # Limit width to force wrapping
+        status_label.set_ellipsize(Pango.EllipsizeMode.END)  # Add ellipsis for very long lines
+        status_label.get_style_context().add_class("status-label")
         
-        # Create a scrolled window for status label that expands
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_size_request(-1, 60)  # Reduced from 80
-        scroll.add(status_label)
-        progress_box.pack_start(scroll, True, True, 0)
-        
-        # Progress bar that expands horizontally
+        # Create progress bar
         progress_bar = Gtk.ProgressBar()
         progress_bar.set_show_text(True)
-        progress_bar.set_size_request(-1, 20)
-        progress_box.pack_start(progress_bar, False, True, 0)
+        progress_bar.set_text("0%")
+        progress_bar.set_fraction(0.0)
         
-        # Terminal view
-        terminal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        terminal_box.set_margin_start(10)
-        terminal_box.set_margin_end(10)
-        terminal_box.set_margin_top(10)
-        terminal_box.set_margin_bottom(10)
+        # Create terminal view
+        scrolled_window = Gtk.ScrolledWindow()
+        scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled_window.set_propagate_natural_height(True)  # Allow content to expand naturally
+        scrolled_window.set_min_content_height(100)
+        # Remove max height restriction to allow resizing
+        #scrolled_window.set_max_content_height(150)
+                
+        # Create TextView for terminal output
+        text_view = Gtk.TextView()
+        text_view.get_style_context().add_class("terminal-view")
+        text_view.set_editable(False)
+        text_view.set_cursor_visible(False)
+        text_view.set_monospace(True)
+        text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)  # Enable text wrapping in terminal
+        # Set font size
+        font_desc = Pango.FontDescription()
+        font_desc.set_size(10 * Pango.SCALE)
+        text_view.override_font(font_desc)
         
-        terminal_scroll = Gtk.ScrolledWindow()
-        terminal_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        terminal_scroll.set_size_request(400, 150)  # Reduced from 200
-        terminal_scroll.set_vexpand(True)
-        terminal_scroll.set_hexpand(True)
+        # Set terminal colors
+        self.text_view = text_view
+        self.text_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
+        self.text_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
         
-        # Create terminal view with monospace font
-        terminal_view = Gtk.TextView()
-        terminal_view.set_editable(False)
-        terminal_view.set_cursor_visible(False)
-        terminal_view.set_monospace(True)
-        terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        scrolled_window.add(text_view)
         
-        # Set terminal colors using CSS classes
-        terminal_view.get_style_context().add_class('terminal-view')
+        # Add a box for terminal controls
+        terminal_controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        terminal_controls_box.set_halign(Gtk.Align.END)
         
-        # Initialize the terminal emulator
-        terminal_emulator = TerminalEmulator(terminal_view)
+        # Add toggle terminal button and save log button
+        toggle_terminal_button = Gtk.Button()
+        toggle_terminal_button.set_label("View Terminal ▾")
+        toggle_terminal_button.get_style_context().add_class("terminal-toggle-button")
         
-        # Add terminal view to scroll window
-        terminal_scroll.add(terminal_view)
-        terminal_box.pack_start(terminal_scroll, True, True, 0)
+        # Add save log button
+        save_log_button = Gtk.Button()
+        save_log_button.set_label("Save Log")
+        save_log_button.get_style_context().add_class("terminal-toggle-button")
+        
+        terminal_controls_box.pack_end(toggle_terminal_button, False, False, 0)
+        terminal_controls_box.pack_end(save_log_button, False, False, 0)
+        
+        # Add widgets to progress view
+        progress_view.pack_start(status_label, False, False, 0)
+        progress_view.pack_start(progress_bar, False, False, 0)
+        progress_view.pack_start(terminal_controls_box, False, False, 0)
+        
+        # Create terminal view box
+        terminal_view_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        
+        # Create back to progress button
+        back_to_progress_button = Gtk.Button()
+        back_to_progress_button.set_label("View Progress ▴")
+        back_to_progress_button.get_style_context().add_class("terminal-toggle-button")
+        back_to_progress_button.set_halign(Gtk.Align.END)
+        
+        # Add widgets to terminal view
+        terminal_view_box.pack_start(scrolled_window, True, True, 0)
+        terminal_view_box.pack_end(back_to_progress_button, False, False, 0)
         
         # Add views to stack
-        stack.add_named(progress_box, "progress")
-        stack.add_named(terminal_box, "terminal")
+        stack.add_named(progress_view, "progress")
+        stack.add_named(terminal_view_box, "terminal")
+        stack.set_visible_child_name("progress")
         
-        # Set the initial view based on user preference
-        use_terminal = self.get_setting("use_terminal_for_progress", False)
-        initial_view = "terminal" if use_terminal else "progress"
-        stack.set_visible_child_name(initial_view)
+        # Add stack to content box
+        content_box.pack_start(stack, True, True, 0)
         
-        # Update tooltip based on initial view
-        terminal_button.set_tooltip_text("Show Progress" if use_terminal else "Show Terminal")
-        
-        # Add stack to dialog's content area with margins
-        content_area = progress_dialog.get_content_area()
-        content_area.add(stack)
-        
-        # Make the dialog resizable and set compact default size
-        progress_dialog.set_resizable(True)
-        progress_dialog.set_default_size(400, 200)  # Reduced from 500x300
-        
-        def toggle_terminal(button):
-            current = stack.get_visible_child_name()
-            stack.set_visible_child_name("terminal" if current == "progress" else "progress")
-            button.set_tooltip_text("Show Progress" if current == "progress" else "Show Terminal")
-        
-        terminal_button.connect("clicked", toggle_terminal)
+        # Add content box to dialog
+        dialog_content_area = dialog.get_content_area()
+        dialog_content_area.add(content_box)
         
         # Show all widgets
-        progress_dialog.show_all()
+        dialog.show_all()
         
+        # Set up the toggle terminal button
+        def toggle_terminal(button):
+            current_child = stack.get_visible_child_name()
+            if current_child == "progress":
+                stack.set_visible_child_name("terminal")
+                button.set_label("View Progress ▴")
+            else:
+                stack.set_visible_child_name("progress")
+                button.set_label("View Terminal ▾")
+        
+        toggle_terminal_button.connect("clicked", toggle_terminal)
+        back_to_progress_button.connect("clicked", toggle_terminal)
+        
+        # Handle dialog response (close/cancel)
         def on_dialog_response(dialog, response_id):
             # Close log file if logging is active
-            if self.logging_active and self.log_file:
+            if hasattr(self, 'logging_active') and self.logging_active and self.log_file:
                 try:
-                    self.log_file.write("\n--- Installation completed or cancelled ---\n")
+                    self.log_file.write("\n--- Log closed by user ---\n")
                     self.log_file.close()
-                except Exception:
+                except:
                     pass
                 self.log_file = None
                 self.logging_active = False
                 self.log_file_path = None
-            
-            # Only handle the dialog destruction if not already being handled by on_cancel_clicked
-            if response_id == Gtk.ResponseType.CANCEL:
-                if not hasattr(self, 'cancellation_in_progress') or not self.cancellation_in_progress:
-                    dialog.destroy()
-                    self.cleanup_installation_state()
-                else:
-                    # Dialog destruction is already being handled elsewhere
-                    pass
         
-        # Don't connect the response signal here, let the callers do it to avoid duplication
-        # progress_dialog.connect("response", on_dialog_response)
+        dialog.connect("response", on_dialog_response)
         
-        # Function to save log content to file
+        # Handle log saving
         def on_save_log_clicked(button):
             # If logging is already active, stop it
-            if self.logging_active:
-                if self.log_file:
+            if hasattr(self, 'logging_active') and self.logging_active and self.log_file:
+                try:
+                    self.log_file.write("\n--- Log saved by user ---\n")
                     self.log_file.close()
-                    self.log_file = None
-                self.logging_active = False
-                self.log_file_path = None
-                save_button.set_icon_name("document-save-symbolic")
-                save_button.set_tooltip_text("Save Log to File")
-                self.update_terminal(terminal_view, "\nContinuous logging stopped.\n")
-                return
+                except:
+                    pass
             
-            # Get current log content
-            buf = terminal_view.get_buffer()
-            start, end = buf.get_bounds()
-            text = buf.get_text(start, end, False)
+            # Get text from buffer
+            buffer = text_view.get_buffer()
+            start_iter = buffer.get_start_iter()
+            end_iter = buffer.get_end_iter()
+            log_text = buffer.get_text(start_iter, end_iter, False)
+            
+            if not log_text.strip():
+                return  # No text to save
             
             # Create file chooser dialog
-            file_dialog = Gtk.FileChooserDialog(
-                title="Save and Continue Logging",
-                parent=progress_dialog,
+            file_chooser = Gtk.FileChooserDialog(
+                title="Save Log",
+                parent=dialog,
                 action=Gtk.FileChooserAction.SAVE
             )
-            file_dialog.add_buttons(
-                Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                Gtk.STOCK_SAVE, Gtk.ResponseType.OK
-            )
+            file_chooser.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            file_chooser.add_button("Save", Gtk.ResponseType.OK)
+            file_chooser.set_do_overwrite_confirmation(True)
             
-            # Set default filename and location
-            home_dir = os.path.expanduser("~")
-            file_dialog.set_current_folder(home_dir)
-            file_dialog.set_current_name(f"installation_log_{int(time.time())}.log")
+            # Set default filename
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            file_chooser.set_current_name(f"appstore-log-{timestamp}.txt")
             
-            # Show the dialog
-            response = file_dialog.run()
+            # Set default folder to HOME
+            file_chooser.set_current_folder(os.path.expanduser("~"))
+            
+            # Run dialog
+            response = file_chooser.run()
+            
             if response == Gtk.ResponseType.OK:
-                filename = file_dialog.get_filename()
+                filename = file_chooser.get_filename()
                 try:
-                    # Save current content
                     with open(filename, 'w') as f:
-                        f.write(text)
+                        f.write(log_text)
                     
-                    # Start continuous logging
-                    self.log_file_path = filename
-                    self.log_file = open(filename, 'a')
-                    self.logging_active = True
+                    # Show confirmation
+                    print(f"Log saved to {filename}")
                     
-                    # Update button appearance
-                    save_button.set_icon_name("media-record-symbolic")
-                    save_button.set_tooltip_text("Stop Continuous Logging")
+                    # Display a simple notification
+                    notification = Gtk.MessageDialog(
+                        transient_for=file_chooser,
+                        message_type=Gtk.MessageType.INFO,
+                        buttons=Gtk.ButtonsType.OK,
+                        text=f"Log saved to {filename}"
+                    )
+                    notification.run()
+                    notification.destroy()
                     
-                    self.update_terminal(terminal_view, f"\nContinuous logging started - saving to {filename}\n")
                 except Exception as e:
-                    self.update_terminal(terminal_view, f"\nError setting up logging: {e}\n")
+                    # Show error
+                    error_dialog = Gtk.MessageDialog(
+                        transient_for=file_chooser,
+                        message_type=Gtk.MessageType.ERROR,
+                        buttons=Gtk.ButtonsType.OK,
+                        text=f"Error saving log: {e}"
+                    )
+                    error_dialog.run()
+                    error_dialog.destroy()
             
-            file_dialog.destroy()
+            file_chooser.destroy()
         
-        # Connect save button click
-        save_button.connect("clicked", on_save_log_clicked)
+        save_log_button.connect("clicked", on_save_log_clicked)
         
-        return progress_dialog, status_label, progress_bar, terminal_view
+        # Initialize the terminal emulator for syntax highlighting
+        terminal_emulator = TerminalEmulator(text_view)
+        
+        return dialog, status_label, progress_bar, text_view
 
     def ensure_correct_update_button_visibility(self):
         """Ensure update button is only visible on updates tab"""
@@ -5182,6 +5393,176 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print(f"Error checking distro app installation by path: {e}")
             return False
 
+    def is_heavy_operation(self, line):
+        """Check if a line contains a heavy operation that should have more weight"""
+        # Normalize the line for better pattern matching
+        line = line.strip().lower()
+        
+        # Track the last detected operation to avoid excessive logging
+        if not hasattr(self, '_last_heavy_op'):
+            self._last_heavy_op = None
+            self._heavy_op_count = {}
+        
+        # List of heavy operations patterns
+        heavy_patterns = [
+            # Package management operations
+            r'(apt|apt-get)\s+(install|upgrade|update|remove|autoremove)',
+            r'pacman\s+(-S|-R|-Syu|-Sy)',
+            r'dnf\s+(install|upgrade|update|remove)',
+            r'yum\s+(install|upgrade|update|remove)',
+            r'package_install',
+            r'package_remove',
+            # Download operations
+            r'download_file',
+            r'aria2c',
+            r'wget',
+            r'curl\s+(-O|-o)', 
+            # Extraction operations
+            r'extract',
+            r'tar\s+x',
+            r'unzip',
+            r'7z\s+x',
+            r'unrar\s+x',
+            # AppImage installation
+            r'install_appimage',
+            # System update
+            r'update_sys',
+            # Direct file operations from the Brave install script
+            r'cd\s+/opt/brave-browser',
+            r'check_and_delete',
+            r'check_and_create_directory',
+            r'brave-browser.*\.zip',
+            # Specific downloads in the Brave script
+            r'.*releases/download.*brave-browser.*\.zip',
+            r'githubusercontent\.com'
+        ]
+        
+        # Extract the main operation type for logging purposes
+        operation_type = None
+        if "download_file" in line:
+            operation_type = "download"
+        elif "extract" in line:
+            operation_type = "extract"
+        elif "apt" in line or "pacman" in line or "dnf" in line or "yum" in line:
+            operation_type = "package_management"
+        elif "check_and" in line:
+            operation_type = "file_operation"
+        
+        # Check if line matches any heavy pattern
+        for pattern in heavy_patterns:
+            if re.search(pattern, line):
+                # Only log the first occurrence of each operation type to reduce spam
+                if operation_type:
+                    # Only print if different from the last operation or first time seeing
+                    if self._last_heavy_op != operation_type:
+                        print(f"\n*** HEAVY OPERATION DETECTED: {operation_type} ***\n")
+                        self._last_heavy_op = operation_type
+                    elif operation_type not in self._heavy_op_count:
+                        print(f"\n*** HEAVY OPERATION DETECTED: {operation_type} ***\n")
+                        self._heavy_op_count[operation_type] = 1
+                    # Count occurrences but limit logging
+                    elif self._heavy_op_count[operation_type] < 5:
+                        self._heavy_op_count[operation_type] += 1
+                        print(f"\n*** HEAVY OPERATION DETECTED: {operation_type} ({self._heavy_op_count[operation_type]}) ***\n")
+                    elif self._heavy_op_count[operation_type] == 5:
+                        self._heavy_op_count[operation_type] += 1
+                        print(f"\n*** HEAVY OPERATION DETECTED: {operation_type} (additional occurrences will not be logged) ***\n")
+                return True
+                
+        return False
+
+    def estimate_line_weight(self, line):
+        """Estimate the weight of a script line based on the operation it performs"""
+        if self.is_heavy_operation(line):
+            # Heavy operations get 3-5x normal weight
+            return 4.0
+        else:
+            # Normal operations get normal weight
+            return 1.0
+
+    def update_progress_gradually(self, update_func, start_progress, end_progress, operation_text, duration=3.0):
+        """Update progress gradually over time for heavy operations
+        
+        Args:
+            update_func: Function to call to update progress
+            start_progress: Starting progress value (0-1)
+            end_progress: Ending progress value (0-1)
+            operation_text: Text to display in progress bar
+            duration: Duration in seconds to spread the progress update
+        """
+        # Adjust duration based on operation type
+        operation_duration = self.get_operation_duration(operation_text)
+        duration = max(duration, operation_duration)
+        
+        # Number of steps to use for the gradual update - more steps for smoother progress
+        steps = 50
+        step_size = (end_progress - start_progress) / steps
+        step_time = duration / steps
+        
+        # Keep track of the last update time to prevent UI freezing
+        last_update_time = [0]
+        
+        def do_update_step(current_step):
+            if current_step >= steps:
+                # Final update to ensure we reach the exact end_progress
+                GLib.idle_add(update_func, end_progress, operation_text)
+                return False
+                
+            # Calculate current progress
+            current_progress = start_progress + (step_size * current_step)
+            
+            # Update the progress only if enough time has passed (prevents UI freezing)
+            current_time = time.time()
+            if current_time - last_update_time[0] >= 0.05:  # Update at most 20 times per second
+                GLib.idle_add(update_func, current_progress, operation_text)
+                last_update_time[0] = current_time
+            
+            # Schedule next update
+            GLib.timeout_add(int(step_time * 1000), do_update_step, current_step + 1)
+            return False
+            
+        # Start the update process immediately with the first step
+        GLib.idle_add(update_func, start_progress, operation_text)
+        last_update_time[0] = time.time()
+        
+        # Schedule the second step after a small delay
+        GLib.timeout_add(int(step_time * 1000), do_update_step, 1)
+
+    def get_operation_duration(self, operation_text):
+        """Determine the appropriate duration for an operation based on its text"""
+        operation_lower = operation_text.lower()
+        
+        # Package management operations (longest)
+        if "apt install" in operation_lower or "apt-get install" in operation_lower or "package_install" in operation_lower:
+            return 7.0
+        elif "pacman -s" in operation_lower or "dnf install" in operation_lower:
+            return 7.0
+        elif "apt remove" in operation_lower or "apt-get remove" in operation_lower or "package_remove" in operation_lower:
+            return 7.0
+        elif "pacman -r" in operation_lower or "dnf remove" in operation_lower:
+            return 7.0
+            
+        # Download operations
+        elif "download_file" in operation_lower or "aria2c" in operation_lower or "wget" in operation_lower or "curl" in operation_lower:
+            return 8.0
+            
+        # Extraction operations
+        elif "extract" in operation_lower or "tar x" in operation_lower or "unzip" in operation_lower:
+            return 6.0
+        elif "7z x" in operation_lower or "unrar x" in operation_lower:
+            return 6.0
+            
+        # AppImage installation
+        elif "install_appimage" in operation_lower:
+            return 7.0
+            
+        # System update
+        elif "update_sys" in operation_lower:
+            return 9.0
+            
+        # Base duration for other heavy operations
+        return 5.0
+
 class AnsiColorParser:
     """Class to parse ANSI escape sequences and apply formatting to a GTK TextView"""
     
@@ -5462,3 +5843,4 @@ if __name__ == "__main__":
         sys.exit(main())
     except KeyboardInterrupt:
         sys.exit(0)
+

@@ -1420,6 +1420,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 if self.check_distro_package_installed(package_name, selected_distro):
                                     print(f"Found installed distro package: {package_name}")
                                     installed_apps.add(app['folder_name'])
+                                # Also check by executable path if package check failed
+                                elif app.get('run_cmd'):
+                                    run_cmd = app.get(f"{selected_distro}_run_cmd") or app.get('run_cmd')
+                                    if self.check_distro_app_installed_by_path(run_cmd, selected_distro):
+                                        print(f"Found installed distro app by path: {run_cmd}")
+                                        installed_apps.add(app['folder_name'])
 
                                 # Update version if needed
                                 if app.get('version') == 'distro_local_version':
@@ -5112,6 +5118,69 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             import traceback
             traceback.print_exc()
         return False
+
+    def check_distro_app_installed_by_path(self, run_cmd, selected_distro):
+        """Check if a distro app is installed by checking if its executable exists"""
+        if not run_cmd or not selected_distro:
+            return False
+            
+        try:
+            print(f"Checking distro app by path: {run_cmd} for distro: {selected_distro}")
+            
+            # Extract the executable path from run_cmd
+            parts = run_cmd.split()
+            if not parts:
+                return False
+                
+            executable = parts[0]
+            
+            # Handle special commands like pdrun
+            if executable in ['pdrun', 'AppRun'] and len(parts) > 1:
+                executable = parts[1]  # Use the actual executable after pdrun/AppRun
+                print(f"Adjusted executable path to: {executable}")
+            
+            # Check if it's a full path (starts with /)
+            if executable.startswith('/'):
+                # Check if the file exists in the distro
+                check_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c '[ -f \"{executable}\" ] && [ -x \"{executable}\" ] && echo \"exists\"'"
+                print(f"Checking with full path: {check_cmd}")
+            else:
+                # It's just a command name, check in common bin directories
+                check_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'which {executable} > /dev/null 2>&1 && echo \"exists\"'"
+                print(f"Checking with which command: {check_cmd}")
+            
+            result = subprocess.run(['bash', '-c', check_cmd], capture_output=True, text=True)
+            exists = result.stdout.strip() == "exists"
+            print(f"Check result for {executable}: {'Found' if exists else 'Not found'}")
+            
+            # If not found, try checking common installation directories based on the executable name
+            if not exists and '/' not in executable:
+                app_name = executable.lower()
+                common_paths = [
+                    f"/opt/{app_name}",
+                    f"/opt/{app_name.capitalize()}",
+                    f"/usr/share/{app_name}",
+                    f"/usr/lib/{app_name}",
+                    f"/usr/local/bin/{app_name}"
+                ]
+                
+                dir_check_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c '"
+                for path in common_paths:
+                    dir_check_cmd += f"[ -d \"{path}\" ] && echo \"exists\" && exit 0; "
+                dir_check_cmd += "exit 1'"
+                
+                print(f"Checking common installation directories: {dir_check_cmd}")
+                dir_result = subprocess.run(['bash', '-c', dir_check_cmd], capture_output=True, text=True)
+                dir_exists = dir_result.stdout.strip() == "exists"
+                if dir_exists:
+                    print(f"Found installation directory for {app_name}")
+                    exists = True
+            
+            return exists
+            
+        except Exception as e:
+            print(f"Error checking distro app installation by path: {e}")
+            return False
 
 class AnsiColorParser:
     """Class to parse ANSI escape sequences and apply formatting to a GTK TextView"""

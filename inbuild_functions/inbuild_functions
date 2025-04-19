@@ -96,18 +96,29 @@ function download_file() {
     local max_retries=5
     local attempt=1
 
+    echo "PROGRESS:0:Checking dependencies for download"
     if ! command -v aria2c &> /dev/null; then
+        echo "PROGRESS:5:Installing aria2 for download capability"
         package_install_and_check "aria2"
     fi
+    echo "PROGRESS:10:Preparing for download"
     check_and_delete "$file_name"
 
     while (( attempt <= max_retries )); do
-        if aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" "$url" && [[ -f "$file_name" && -s "$file_name" ]]; then
+        echo "PROGRESS:$(( 10 + (attempt - 1) * 10 )):Downloading $file_name (Attempt $attempt/$max_retries)"
+        
+        # Use aria2c with console log level info for basic progress info
+        if aria2c --summary-interval=10 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" \
+           "$url" && [[ -f "$file_name" && -s "$file_name" ]]; then
+            
+            echo "PROGRESS:95:Verifying download: $file_name"
             print_success "Download completed: $file_name"
+            echo "PROGRESS:100:Download successful: $file_name"
             return 0
         fi
 
         print_warn "Download failed, attempt $attempt of $max_retries."
+        echo "PROGRESS:$(( 10 + attempt * 10 )):Retrying download after failure (Attempt $attempt)"
         sleep 2
         ((attempt++))
     done
@@ -121,6 +132,8 @@ function extract() {
     local max_retries=5
     local attempt=1
 
+    echo "PROGRESS:0:Preparing to extract $archive"
+    
     while (( attempt <= max_retries )); do
         if [[ ! -f "$archive" ]]; then
             print_failed "Error: '$archive' does not exist!"
@@ -128,56 +141,120 @@ function extract() {
 
         local dir_arg=""
         if [[ -n "$output_dir" ]]; then
+            echo "PROGRESS:5:Creating output directory: $output_dir"
             check_and_create_directory "$output_dir"
             dir_arg="-C $output_dir"
         fi
 
+        echo "PROGRESS:10:Extracting $(basename "$archive") (Attempt $attempt/$max_retries)"
+        
         case "$archive" in
             *.tar.gz|*.tgz)
-                if tar xvzf "$archive" $dir_arg --no-same-owner -h; then break; fi
+                echo "PROGRESS:30:Extracting tar.gz archive"
+                if tar xvzf "$archive" $dir_arg --no-same-owner -h; then 
+                    echo "PROGRESS:90:Finalizing extraction"
+                    break 
+                fi
                 ;;
             *.tar.xz)
-                if tar xvJf "$archive" $dir_arg --no-same-owner -h; then break; fi
+                echo "PROGRESS:30:Extracting tar.xz archive"
+                if tar xvJf "$archive" $dir_arg --no-same-owner -h; then 
+                    echo "PROGRESS:90:Finalizing extraction"
+                    break 
+                fi
                 ;;
             *.tar.bz2|*.tbz2)
-                if tar xvjf "$archive" $dir_arg --no-same-owner -h; then break; fi
+                echo "PROGRESS:30:Extracting tar.bz2 archive"
+                if tar xvjf "$archive" $dir_arg --no-same-owner -h; then 
+                    echo "PROGRESS:90:Finalizing extraction"
+                    break 
+                fi
                 ;;
             *.tar)
-                if tar xvf "$archive" $dir_arg --no-same-owner -h; then break; fi
+                echo "PROGRESS:30:Extracting tar archive"
+                if tar xvf "$archive" $dir_arg --no-same-owner -h; then 
+                    echo "PROGRESS:90:Finalizing extraction"
+                    break 
+                fi
                 ;;
             *.bz2)
+                echo "PROGRESS:30:Extracting bz2 file"
                 if [[ -n "$output_dir" ]]; then
-                    if bunzip2 -c "$archive" > "$output_dir/$(basename "${archive%.bz2}")"; then break; fi
+                    echo "PROGRESS:60:Decompressing to target directory"
+                    if bunzip2 -c "$archive" > "$output_dir/$(basename "${archive%.bz2}")"; then 
+                        echo "PROGRESS:90:Finalizing bz2 extraction"
+                        break 
+                    fi
                 else
-                    if bunzip2 "$archive"; then break; fi
+                    echo "PROGRESS:60:Decompressing in current directory"
+                    if bunzip2 "$archive"; then 
+                        echo "PROGRESS:90:Finalizing bz2 extraction"
+                        break 
+                    fi
                 fi
                 ;;
             *.gz)
+                echo "PROGRESS:30:Extracting gz file"
                 if [[ -n "$output_dir" ]]; then
-                    if gunzip -c "$archive" > "$output_dir/$(basename "${archive%.gz}")"; then break; fi
+                    echo "PROGRESS:60:Decompressing to target directory"
+                    if gunzip -c "$archive" > "$output_dir/$(basename "${archive%.gz}")"; then 
+                        echo "PROGRESS:90:Finalizing gz extraction"
+                        break 
+                    fi
                 else
-                    if gunzip -c "$archive" > "${archive%.gz}"; then break; fi
+                    echo "PROGRESS:60:Decompressing in current directory"
+                    if gunzip -c "$archive" > "${archive%.gz}"; then 
+                        echo "PROGRESS:90:Finalizing gz extraction"
+                        break 
+                    fi
                 fi
                 ;;
             *.7z)
+                echo "PROGRESS:30:Extracting 7z file"
                 if [[ -n "$output_dir" ]]; then
-                    if 7z x "$archive" -o"$output_dir" -y; then break; fi
+                    echo "PROGRESS:50:Decompressing to target directory"
+                    if 7z x "$archive" -o"$output_dir" -y; then 
+                        echo "PROGRESS:90:Finalizing 7z extraction"
+                        break 
+                    fi
                 else
-                    if 7z x "$archive" -y; then break; fi
+                    echo "PROGRESS:50:Decompressing in current directory"
+                    if 7z x "$archive" -y; then 
+                        echo "PROGRESS:90:Finalizing 7z extraction"
+                        break 
+                    fi
                 fi
                 ;;
             *.rar)
+                echo "PROGRESS:30:Extracting RAR file"
                 if [[ -n "$output_dir" ]]; then
-                    if unrar x -o+ "$archive" "$output_dir"; then break; fi
+                    echo "PROGRESS:50:Decompressing to target directory"
+                    if unrar x -o+ "$archive" "$output_dir"; then 
+                        echo "PROGRESS:90:Finalizing RAR extraction"
+                        break 
+                    fi
                 else
-                    if unrar x -o+ "$archive"; then break; fi
+                    echo "PROGRESS:50:Decompressing in current directory"
+                    if unrar x -o+ "$archive"; then 
+                        echo "PROGRESS:90:Finalizing RAR extraction"
+                        break 
+                    fi
                 fi
                 ;;
             *.zip)
+                echo "PROGRESS:30:Extracting ZIP file"
                 if [[ -n "$output_dir" ]]; then
-                    if unzip -o "$archive" -d "$output_dir"; then break; fi
+                    echo "PROGRESS:50:Decompressing to target directory"
+                    if unzip -o "$archive" -d "$output_dir"; then 
+                        echo "PROGRESS:90:Finalizing ZIP extraction"
+                        break 
+                    fi
                 else
-                    if unzip -o "$archive"; then break; fi
+                    echo "PROGRESS:50:Decompressing in current directory"
+                    if unzip -o "$archive"; then 
+                        echo "PROGRESS:90:Finalizing ZIP extraction"
+                        break 
+                    fi
                 fi
                 ;;
             *)
@@ -186,6 +263,7 @@ function extract() {
         esac
 
         print_warn "Extraction failed, attempt $attempt of $max_retries."
+        echo "PROGRESS:$(( 10 + attempt * 5 )):Retrying extraction after failure (Attempt $attempt)"
         sleep 2
         ((attempt++))
     done
@@ -194,6 +272,7 @@ function extract() {
         print_failed "Extraction failed after $max_retries attempts: $archive"
     fi
 
+    echo "PROGRESS:100:Extraction completed: $(basename "$archive")"
     print_success "Extraction completed: $archive"
 }
 
@@ -242,9 +321,16 @@ function package_install_and_check() {
     local max_retries=3
     local attempt=1
     local packs_list=($@)
+    local total_packages=${#packs_list[@]}
+    local current_package=0
+    
+    # Show total packages count
+    echo "PROGRESS:0:Starting installation of $total_packages packages"
     
     for package_name in "${packs_list[@]}"; do
-        echo "Processing package: $package_name"
+        ((current_package++))
+        local percent=$(( (current_package - 1) * 100 / total_packages ))
+        echo "PROGRESS:$percent:Processing package: $package_name ($current_package of $total_packages)"
         attempt=1
 
         # For APT systems, run dpkg --configure -a before attempting the install
@@ -257,21 +343,36 @@ function package_install_and_check() {
             if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
                 # Check if package is already installed
                 if pacman -Qi "$package_name" >/dev/null 2>&1; then
+                    echo "PROGRESS:$percent:Package $package_name already installed"
                     break
                 fi
 
                 if [[ $package_name == *"*"* ]]; then
                     echo "Processing wildcard pattern: $package_name"
                     packages=$(pacman -Ssq "${package_name%*}" 2>/dev/null)
+                    local matched_count=$(echo "$packages" | wc -w)
+                    local current_matched=0
+                    
                     for pkgs in $packages; do
-                        echo "Installing matched package: $pkgs"
+                        ((current_matched++))
+                        local sub_percent=$(( percent + (current_matched * 100 / matched_count / total_packages) ))
+                        echo "PROGRESS:$sub_percent:Installing matched package: $pkgs ($current_matched of $matched_count)"
                         if pacman -Sy --noconfirm --overwrite '*' "$pkgs"; then
                             print_success "$pkgs installed successfully"
                         fi
                     done
                     break
                 else
-                    if pacman -Sy --noconfirm --overwrite '*' "$package_name"; then
+                    echo "PROGRESS:$percent:Installing $package_name with pacman..."
+                    
+                    # Break pacman installation into stages
+                    echo "PROGRESS:$(( percent + 20 )):Syncing repositories..."
+                    pacman -Sy --noconfirm
+                    
+                    echo "PROGRESS:$(( percent + 40 )):Installing $package_name..."
+                    if pacman -S --noconfirm --overwrite '*' "$package_name"; then
+                        local final_percent=$(( (current_package * 100) / total_packages ))
+                        echo "PROGRESS:$final_percent:$package_name installed successfully"
                         print_success "$package_name installed successfully"
                         break
                     fi
@@ -279,16 +380,49 @@ function package_install_and_check() {
             else
                 # For APT-based systems, first check if the package is installed
                 if dpkg -s "$package_name" >/dev/null 2>&1; then
-                    echo "Package already installed. Attempting reconfiguration and reinstallation..."
+                    echo "PROGRESS:$percent:Package already installed. Attempting reconfiguration and reinstallation..."
                     dpkg --configure -a
+                    
+                    # Break apt installation into stages
+                    echo "PROGRESS:$(( percent + 20 )):Updating package lists..."
+                    apt-get update -y
+                    
+                    echo "PROGRESS:$(( percent + 40 )):Reinstalling $package_name..."
                     apt-get reinstall "$package_name" -y
+                    
+                    echo "PROGRESS:$(( percent + 70 )):Finalizing installation..."
                 else
-                    echo "Installing package after fixing potential issues..."
+                    echo "PROGRESS:$percent:Installing package after fixing potential issues..."
                     dpkg --configure -a
-                    apt-get install "$package_name" -y
+                    
+                    # Break apt installation into stages with periodic progress updates
+                    echo "PROGRESS:$(( percent + 10 )):Updating package lists..."
+                    apt-get update -y
+                    
+                    echo "PROGRESS:$(( percent + 20 )):Resolving dependencies..."
+                    # Use a status update approach based on key progress stages in apt output
+                    apt-get install "$package_name" -y | while IFS= read -r line; do
+                        # Echo all output to ensure it's captured for logging
+                        echo "$line"
+                        
+                        # Detect various stages of installation and update progress accordingly
+                        if [[ "$line" == *"Get:"* ]]; then
+                            echo "PROGRESS:$(( percent + 30 )):Downloading packages..."
+                        elif [[ "$line" == *"Unpacking"* ]]; then
+                            echo "PROGRESS:$(( percent + 50 )):Unpacking files..."
+                        elif [[ "$line" == *"Setting up"* ]]; then
+                            echo "PROGRESS:$(( percent + 70 )):Setting up packages..."
+                        elif [[ "$line" == *"Processing triggers"* ]]; then
+                            echo "PROGRESS:$(( percent + 85 )):Processing triggers..."
+                        fi
+                    done
+                    
+                    echo "PROGRESS:$(( percent + 90 )):Verifying installation..."
                 fi
 
                 if dpkg -s "$package_name" >/dev/null 2>&1; then
+                    local final_percent=$(( (current_package * 100) / total_packages ))
+                    echo "PROGRESS:$final_percent:$package_name installed successfully"
                     print_success "$package_name installed successfully"
                     break
                 fi
@@ -303,6 +437,9 @@ function package_install_and_check() {
             print_failed "Failed to install $package_name after $max_retries attempts"
         fi
     done
+    
+    # Signal completion
+    echo "PROGRESS:100:Package installation complete"
 }
 
 # will check the package is installed or not then remove it
@@ -503,6 +640,10 @@ proot-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh
 function pd_package_install_and_check() {
     distro_run "
         packs_list=(\"$@\")
+        total_packages=\${#packs_list[@]}
+        current_package=0
+        
+        echo \"PROGRESS:0:Starting installation of \$total_packages packages in PRoot distro\"
         
         # Get distro ID
         if [ -f /etc/os-release ]; then
@@ -511,22 +652,39 @@ function pd_package_install_and_check() {
 
         # Install packages
         for package_name in \"\${packs_list[@]}\"; do
-            echo \"Installing package: \$package_name\"
+            ((current_package++))
+            percent=\$(( (current_package - 1) * 100 / total_packages ))
+            echo \"PROGRESS:\$percent:Installing package: \$package_name (\$current_package of \$total_packages)\"
+            
             if [[ \"\$ID\" == \"debian\" ]] || [[ \"\$ID\" == \"ubuntu\" ]]; then
-                apt install \"\$package_name\" -y
+                apt-get update -y > /dev/null
+                # Use simpler progress approach
+                echo \"PROGRESS:\$(( percent + 25 )):Updating package lists...\"
+                apt-get install \"\$package_name\" -y
+                echo \"PROGRESS:\$(( percent + 75 )):Installing dependencies...\"
             elif [[ \"\$ID\" == arch* ]]; then
-                pacman -Sy --noconfirm \"\$package_name\"
+                # Pacman doesn't show progress percentage, so break into steps
+                echo \"PROGRESS:\$percent:Syncing repositories for \$package_name\"
+                pacman -Sy --noconfirm 
+                echo \"PROGRESS:\$(( percent + 50 )):Installing \$package_name\"
+                pacman -S --noconfirm \"\$package_name\"
             elif [[ \"\$ID\" == \"fedora\" ]]; then
+                echo \"PROGRESS:\$percent:Installing \$package_name with dnf\"
                 dnf install \"\$package_name\" -y
+                echo \"PROGRESS:\$(( percent + 50 )):Finalizing installation...\"
             fi
 
             # Check if installed
             if command -v \"\$package_name\" >/dev/null 2>&1; then
+                final_percent=\$(( (current_package * 100) / total_packages ))
+                echo \"PROGRESS:\$final_percent:\$package_name installed successfully\"
                 echo \"\$package_name installed successfully\"
             else
                 echo \"Error installing \$package_name\"
             fi
         done
+        
+        echo \"PROGRESS:100:Package installation in PRoot distro complete\"
     " "$@"
 }
 

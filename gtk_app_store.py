@@ -2101,6 +2101,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # Count the number of significant lines in the script to track progress
                     total_lines = 0
                     significant_lines = []
+                    heavyweight_functions = [
+                        "download_file", 
+                        "extract", 
+                        "package_install_and_check", 
+                        "package_remove_and_check", 
+                        "install_appimage",
+                        "distro_run"
+                    ]
+                    # Track heavyweight operations for weighting
+                    heavyweight_ops_count = 0
+                    total_ops_count = 0
+                    
                     try:
                         with open(script_file, 'r') as f:
                             for line in f:
@@ -2109,18 +2121,42 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 if line and not line.startswith('#'):
                                     total_lines += 1
                                     significant_lines.append(line)
+                                    total_ops_count += 1
+                                    
+                                    # Check if the line contains any heavyweight function
+                                    for func in heavyweight_functions:
+                                        if func in line:
+                                            heavyweight_ops_count += 1
+                                            break
+                    
                         # Ensure we have at least one line
                         total_lines = max(1, total_lines)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, 
+                              f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
                     except Exception as e:
                         print(f"Error counting script lines: {e}")
                         # Default to a reasonable number if counting fails
                         total_lines = 100
+                        heavyweight_ops_count = 0
+                        total_ops_count = total_lines
                     
                     # Calculate base progress (downloading and preparation = 30%)
                     base_progress = 0.3
-                    # Calculate line progress (each line contributes to 60% of progress)
-                    line_progress_weight = 0.6 / total_lines
+                    
+                    # Distribute progress weights: 
+                    # - 40% for heavyweight operations 
+                    # - 20% for other operations
+                    heavyweight_weight = 0.4 if heavyweight_ops_count > 0 else 0
+                    normal_ops_weight = 0.6 - heavyweight_weight if total_ops_count - heavyweight_ops_count > 0 else 0.6
+                    
+                    # Calculate progress weights for each type of line
+                    heavyweight_progress_per_op = heavyweight_weight / max(1, heavyweight_ops_count)
+                    normal_progress_per_op = normal_ops_weight / max(1, total_ops_count - heavyweight_ops_count)
+                    
+                    # Process state tracking
+                    current_line = 0
+                    processed_heavyweight_ops = 0
+                    processed_normal_ops = 0
                     
                     # Execute script with better progress tracking
                     GLib.idle_add(update_progress, base_progress, "Starting installation...")
@@ -2132,9 +2168,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         bufsize=1,
                         preexec_fn=os.setsid  # Create new process group
                     )
-                    
-                    # Track current line
-                    current_line = 0
                     
                     while True:
                         if install_cancelled:
@@ -2154,14 +2187,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if not line:
                             continue
 
-                        # Update current line and calculate progress
+                        # Update current line 
                         current_line += 1
-                        # Ensure we don't exceed our total for any reason
-                        current_line = min(current_line, total_lines)
+                        
+                        # Determine if this output line indicates a heavyweight operation
+                        is_heavyweight = False
+                        for func in heavyweight_functions:
+                            if func in line:
+                                is_heavyweight = True
+                                processed_heavyweight_ops += 1
+                                break
+                        
+                        # Update appropriate counter based on operation type
+                        if not is_heavyweight:
+                            processed_normal_ops += 1
                         
                         # Calculate current progress
-                        # Base progress + line progress contribution
-                        current_progress = base_progress + (current_line * line_progress_weight)
+                        # Base progress + heavyweight progress + normal progress
+                        heavyweight_progress = processed_heavyweight_ops * heavyweight_progress_per_op
+                        normal_progress = processed_normal_ops * normal_progress_per_op
+                        current_progress = base_progress + heavyweight_progress + normal_progress
                         
                         # Cap progress at 90% - the final 10% is reserved for completion tasks
                         current_progress = min(0.9, current_progress)
@@ -2479,6 +2524,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # Count the number of significant lines in the script to track progress
                     total_lines = 0
                     significant_lines = []
+                    heavyweight_functions = [
+                        "download_file", 
+                        "extract", 
+                        "package_install_and_check", 
+                        "package_remove_and_check", 
+                        "install_appimage",
+                        "distro_run"
+                    ]
+                    # Track heavyweight operations for weighting
+                    heavyweight_ops_count = 0
+                    total_ops_count = 0
+                    
                     try:
                         with open(script_file, 'r') as f:
                             for line in f:
@@ -2487,9 +2544,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 if line and not line.startswith('#'):
                                     total_lines += 1
                                     significant_lines.append(line)
+                                    total_ops_count += 1
+                                    
+                                    # Check if the line contains any heavyweight function
+                                    for func in heavyweight_functions:
+                                        if func in line:
+                                            heavyweight_ops_count += 1
+                                            break
+                    
                         # Ensure we have at least one line
                         total_lines = max(1, total_lines)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
                     except Exception as e:
                         print(f"Error counting script lines: {e}")
                         # Default to a reasonable number if counting fails
@@ -2497,8 +2562,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     
                     # Calculate base progress (downloading and preparation = 20%)
                     base_progress = 0.2
-                    # Calculate line progress (each line contributes to 70% of progress)
-                    line_progress_weight = 0.7 / total_lines
+                    
+                    # Distribute progress weights: 
+                    # - 40% for heavyweight operations 
+                    # - 30% for other operations
+                    heavyweight_weight = 0.4 if heavyweight_ops_count > 0 else 0
+                    normal_ops_weight = 0.7 - heavyweight_weight if total_ops_count - heavyweight_ops_count > 0 else 0.7
+                    
+                    # Calculate progress weights for each type of line
+                    heavyweight_progress_per_op = heavyweight_weight / max(1, heavyweight_ops_count)
+                    normal_progress_per_op = normal_ops_weight / max(1, total_ops_count - heavyweight_ops_count)
+                    
+                    # Process state tracking
+                    current_line = 0
+                    processed_heavyweight_ops = 0
+                    processed_normal_ops = 0
                     
                     # Execute script with better progress tracking
                     status_msg = "Starting uninstallation..."
@@ -2514,9 +2592,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         preexec_fn=os.setsid
                     )
 
-                    # Track current line
-                    current_line = 0
-
                     for line in uninstall_process.stdout:
                         if uninstall_cancelled:
                             os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
@@ -2527,14 +2602,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             GLib.idle_add(progress_dialog.destroy)
                             return
                         
-                        # Update current line and calculate progress
+                        # Update current line
                         current_line += 1
-                        # Ensure we don't exceed our total for any reason
-                        current_line = min(current_line, total_lines)
+                        
+                        # Determine if this output line indicates a heavyweight operation
+                        is_heavyweight = False
+                        for func in heavyweight_functions:
+                            if func in line:
+                                is_heavyweight = True
+                                processed_heavyweight_ops += 1
+                                break
+                        
+                        # Update appropriate counter based on operation type
+                        if not is_heavyweight:
+                            processed_normal_ops += 1
                         
                         # Calculate current progress
-                        # Base progress + line progress contribution
-                        current_progress = base_progress + (current_line * line_progress_weight)
+                        # Base progress + heavyweight progress + normal progress
+                        heavyweight_progress = processed_heavyweight_ops * heavyweight_progress_per_op
+                        normal_progress = processed_normal_ops * normal_progress_per_op
+                        current_progress = base_progress + heavyweight_progress + normal_progress
                         
                         # Cap progress at 90% - the final 10% is reserved for completion tasks
                         current_progress = min(0.9, current_progress)
@@ -3330,6 +3417,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         save_button.set_tooltip_text("Save Log to File")
         header_bar.pack_end(save_button)
         
+        # Add log control button to header bar
+        log_control_button = Gtk.Button.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON)
+        log_control_button.set_tooltip_text("Start Continuous Logging")
+        header_bar.pack_end(log_control_button)
+        
         # Set the header bar
         update_dialog.set_titlebar(header_bar)
         
@@ -3420,6 +3512,55 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             button.set_tooltip_text("Show Progress" if current == "progress" else "Show Terminal")
         
         terminal_button.connect("clicked", toggle_terminal)
+        
+        # Function to toggle continuous logging on/off
+        def on_log_control_clicked(button):
+            if self.logging_active:
+                # Stop logging
+                if self.log_file:
+                    try:
+                        self.log_file.write("\n--- Logging stopped manually by user ---\n")
+                        self.log_file.close()
+                    except Exception:
+                        pass
+                    self.log_file = None
+                self.logging_active = False
+                self.log_file_path = None
+                # Update button
+                log_control_button.set_image(Gtk.Image.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON))
+                log_control_button.set_tooltip_text("Start Continuous Logging")
+                self.update_terminal(terminal_view, "\nContinuous logging stopped.\n")
+            else:
+                # Start logging to a new file
+                try:
+                    log_dir = os.path.join(APPSTORE_DIR, "logs")
+                    os.makedirs(log_dir, exist_ok=True)
+                    
+                    timestamp = time.strftime("%Y%m%d-%H%M%S")
+                    self.log_file_path = os.path.join(log_dir, f"continuous_log_{timestamp}.log")
+                    
+                    # Get current terminal content
+                    buf = terminal_view.get_buffer()
+                    start, end = buf.get_bounds()
+                    text = buf.get_text(start, end, False)
+                    
+                    # Start logging with existing content
+                    self.log_file = open(self.log_file_path, 'w')
+                    self.log_file.write(text)
+                    self.log_file.flush()
+                    self.logging_active = True
+                    
+                    # Update button
+                    log_control_button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic", Gtk.IconSize.BUTTON))
+                    log_control_button.set_tooltip_text("Stop Continuous Logging")
+                    self.update_terminal(terminal_view, f"\nContinuous logging started - saving to {self.log_file_path}\n")
+                except Exception as e:
+                    self.update_terminal(terminal_view, f"\nError setting up logging: {e}\n")
+        
+        # Connect buttons
+        terminal_button.connect("clicked", toggle_terminal)
+        save_button.connect("clicked", on_save_log_clicked)
+        log_control_button.connect("clicked", on_log_control_clicked)
         
         # Show all widgets
         update_dialog.show_all()
@@ -3568,6 +3709,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Count the number of significant lines in the script to track progress
                         total_lines = 0
                         significant_lines = []
+                        heavyweight_functions = [
+                            "download_file", 
+                            "extract", 
+                            "package_install_and_check", 
+                            "package_remove_and_check", 
+                            "install_appimage",
+                            "distro_run"
+                        ]
+                        # Track heavyweight operations for weighting
+                        heavyweight_ops_count = 0
+                        total_ops_count = 0
+                        
                         try:
                             with open(script_file, 'r') as f:
                                 for line in f:
@@ -3576,19 +3729,43 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     if line and not line.startswith('#'):
                                         total_lines += 1
                                         significant_lines.append(line)
+                                        total_ops_count += 1
+                                        
+                                        # Check if the line contains any heavyweight function
+                                        for func in heavyweight_functions:
+                                            if func in line:
+                                                heavyweight_ops_count += 1
+                                                break
+                            
                             # Ensure we have at least one line
                             total_lines = max(1, total_lines)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps\n"))
+                            GLib.idle_add(lambda: self.update_terminal(terminal_view, 
+                                  f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
                         except Exception as e:
                             print(f"Error counting script lines: {e}")
                             # Default to a reasonable number if counting fails
                             total_lines = 100
+                            heavyweight_ops_count = 0
+                            total_ops_count = total_lines
                         
                         # Calculate base progress (downloading and preparation = 30%)
                         base_progress = 0.3
-                        # Calculate line progress (each line contributes to 60% of progress)
-                        line_progress_weight = 0.6 / total_lines
-
+                        
+                        # Distribute progress weights: 
+                        # - 40% for heavyweight operations 
+                        # - 20% for other operations
+                        heavyweight_weight = 0.4 if heavyweight_ops_count > 0 else 0
+                        normal_ops_weight = 0.6 - heavyweight_weight if total_ops_count - heavyweight_ops_count > 0 else 0.6
+                        
+                        # Calculate progress weights for each type of line
+                        heavyweight_progress_per_op = heavyweight_weight / max(1, heavyweight_ops_count)
+                        normal_progress_per_op = normal_ops_weight / max(1, total_ops_count - heavyweight_ops_count)
+                        
+                        # Process state tracking
+                        current_line = 0
+                        processed_heavyweight_ops = 0
+                        processed_normal_ops = 0
+                        
                         # Execute script with better progress tracking
                         GLib.idle_add(update_progress, base_progress, "Starting update...")
                         update_process = subprocess.Popen(
@@ -3599,10 +3776,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             bufsize=1,
                             preexec_fn=os.setsid
                         )
-
-                        # Track current line
-                        current_line = 0
-
+                        
                         while True:
                             if update_cancelled:
                                 try:
@@ -3621,14 +3795,61 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if not line:
                                 continue
 
-                            # Update current line and calculate progress
+                            # Update current line 
                             current_line += 1
-                            # Ensure we don't exceed our total for any reason
-                            current_line = min(current_line, total_lines)
+                            
+                            # Check for PROGRESS marker output from inbuild_functions
+                            if line.startswith("PROGRESS:"):
+                                try:
+                                    # Parse progress data in format PROGRESS:percent:message
+                                    _, percent_str, progress_message = line.split(":", 2)
+                                    percent = float(percent_str) / 100  # Convert to 0-1 range
+                                    
+                                    # Use a much more conservative mapping approach
+                                    # Map the progress more gradually with stronger emphasis on early stages
+                                    # This makes early operations show more visible progress
+                                    
+                                    if percent <= 0.3:
+                                        # First 30% maps to 30-50% of the bar (emphasize early progress)
+                                        mapped_progress = 0.3 + (percent * 0.67)
+                                    elif percent <= 0.7:
+                                        # 30-70% maps to 50-70% of the bar
+                                        mapped_progress = 0.5 + ((percent - 0.3) * 0.5)
+                                    else:
+                                        # 70-100% maps to 70-90% of the bar
+                                        mapped_progress = 0.7 + ((percent - 0.7) * 0.67)
+                                    
+                                    # Cap at 0.9 (90%) to reserve the final 10% for completion
+                                    current_progress = min(0.9, mapped_progress)
+                                    
+                                    # Update progress with the extracted message
+                                    GLib.idle_add(update_progress, current_progress, progress_message)
+                                    
+                                    # Also update terminal
+                                    GLib.idle_add(lambda m=progress_message: self.update_terminal(terminal_view, m + "\n"))
+                                    
+                                    # Don't skip processing this line for logging
+                                except Exception as e:
+                                    # If any parsing error occurs, fall back to regular handling
+                                    print(f"Error parsing progress marker: {e}")
+                            
+                            # Determine if this output line indicates a heavyweight operation
+                            is_heavyweight = False
+                            for func in heavyweight_functions:
+                                if func in line:
+                                    is_heavyweight = True
+                                    processed_heavyweight_ops += 1
+                                    break
+                        
+                            # Update appropriate counter based on operation type
+                            if not is_heavyweight:
+                                processed_normal_ops += 1
                             
                             # Calculate current progress
-                            # Base progress + line progress contribution
-                            current_progress = base_progress + (current_line * line_progress_weight)
+                            # Base progress + heavyweight progress + normal progress
+                            heavyweight_progress = processed_heavyweight_ops * heavyweight_progress_per_op
+                            normal_progress = processed_normal_ops * normal_progress_per_op
+                            current_progress = base_progress + heavyweight_progress + normal_progress
                             
                             # Cap progress at 90% - the final 10% is reserved for completion tasks
                             current_progress = min(0.9, current_progress)
@@ -4080,7 +4301,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Load content on next idle
                         def load_content():
                             self.clear_app_list_box()
-                            self.show_apps()
+                            self.show_apps(selected_category)
                             return False
                             
                         GLib.idle_add(load_content)
@@ -4770,18 +4991,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         # Function to save log content to file
         def on_save_log_clicked(button):
-            # If logging is already active, stop it
-            if self.logging_active:
-                if self.log_file:
-                    self.log_file.close()
-                    self.log_file = None
-                self.logging_active = False
-                self.log_file_path = None
-                save_button.set_icon_name("document-save-symbolic")
-                save_button.set_tooltip_text("Save Log to File")
-                self.update_terminal(terminal_view, "\nContinuous logging stopped.\n")
-                return
-            
             # Get current log content
             buf = terminal_view.get_buffer()
             start, end = buf.get_bounds()
@@ -4789,7 +4998,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # Create file chooser dialog
             file_dialog = Gtk.FileChooserDialog(
-                title="Save and Continue Logging",
+                title="Save Log to File",
                 parent=progress_dialog,
                 action=Gtk.FileChooserAction.SAVE
             )
@@ -4799,9 +5008,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             )
             
             # Set default filename and location
-            home_dir = os.path.expanduser("~")
-            file_dialog.set_current_folder(home_dir)
-            file_dialog.set_current_name(f"installation_log_{int(time.time())}.log")
+            log_dir = os.path.join(APPSTORE_DIR, "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            
+            file_dialog.set_current_folder(log_dir)
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            file_dialog.set_current_name(f"installation_log_{timestamp}.log")
             
             # Show the dialog
             response = file_dialog.run()
@@ -4812,18 +5024,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     with open(filename, 'w') as f:
                         f.write(text)
                     
-                    # Start continuous logging
-                    self.log_file_path = filename
-                    self.log_file = open(filename, 'a')
-                    self.logging_active = True
+                    # Show confirmation message
+                    self.update_terminal(terminal_view, f"\nLog saved to: {filename}\n")
                     
-                    # Update button appearance
-                    save_button.set_icon_name("media-record-symbolic")
-                    save_button.set_tooltip_text("Stop Continuous Logging")
-                    
-                    self.update_terminal(terminal_view, f"\nContinuous logging started - saving to {filename}\n")
+                    # If continuous logging is active, mention that
+                    if self.logging_active and self.log_file_path:
+                        self.update_terminal(terminal_view, 
+                            f"Note: Continuous logging remains active - saving to {self.log_file_path}\n")
+                        
+                        # Ensure current content is in the log file
+                        if self.log_file:
+                            self.log_file.flush()
                 except Exception as e:
-                    self.update_terminal(terminal_view, f"\nError setting up logging: {e}\n")
+                    self.update_terminal(terminal_view, f"\nError saving log: {e}\n")
             
             file_dialog.destroy()
         

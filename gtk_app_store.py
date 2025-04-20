@@ -3149,11 +3149,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.show_error_dialog(f"Error opening app: {e}")
             
     def show_command_output_window(self, app_name, run_cmd):
-        """Show a window with the command output"""
+        """Show a window with the command output using the advanced terminal UI"""
         # Create dialog
         dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
         dialog.set_title(f"Running {app_name}")
-        dialog.set_default_size(600, 400)
+        dialog.set_default_size(700, 500)
         dialog.set_border_width(10)
         dialog.set_position(Gtk.WindowPosition.CENTER)
         dialog.set_destroy_with_parent(True)
@@ -3175,11 +3175,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         scrolled_window.set_hexpand(True)
         scrolled_window.set_vexpand(True)
         
-        # Create TextView for terminal output
+        # Create TextView for terminal output with enhanced styling
         terminal_view = Gtk.TextView()
         terminal_view.set_editable(False)
         terminal_view.set_cursor_visible(False)
         terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        terminal_view.set_monospace(True)
+        terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
+        terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0.9, 0.9, 0.9, 1))
         terminal_view.get_style_context().add_class("terminal-view")
         
         # Initialize terminal emulator
@@ -3188,26 +3191,40 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         scrolled_window.add(terminal_view)
         main_box.pack_start(scrolled_window, True, True, 0)
         
-        # Create button box
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        # Create button box with enhanced styling
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         button_box.set_halign(Gtk.Align.END)
         button_box.set_margin_top(12)
         main_box.pack_start(button_box, False, False, 0)
         
-        # Create save button
-        save_button = Gtk.Button(label="Save Output")
-        save_button.set_tooltip_text("Save command output to a file")
+        # Create clear button
+        clear_button = Gtk.Button()
+        clear_button.set_tooltip_text("Clear terminal output")
+        clear_icon = Gtk.Image.new_from_icon_name("edit-clear-symbolic", Gtk.IconSize.BUTTON)
+        clear_button.set_image(clear_icon)
+        clear_button.get_style_context().add_class("command-output-clear-button")
+        button_box.pack_start(clear_button, False, False, 0)
+        
+        # Create save button with icon
+        save_button = Gtk.Button()
+        save_button.set_tooltip_text("Save terminal output to a file")
+        save_icon = Gtk.Image.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
+        save_button.set_image(save_icon)
         save_button.get_style_context().add_class("command-output-save-button")
         button_box.pack_start(save_button, False, False, 0)
         
-        # Create close button
-        close_button = Gtk.Button(label="Close")
+        # Create close button with icon
+        close_button = Gtk.Button()
         close_button.set_tooltip_text("Close this window")
+        close_icon = Gtk.Image.new_from_icon_name("window-close-symbolic", Gtk.IconSize.BUTTON)
+        close_button.set_image(close_icon)
         close_button.get_style_context().add_class("command-output-close-button")
         button_box.pack_start(close_button, False, False, 0)
         
         # Initial text
         terminal_emulator.append_text(f"Starting {app_name}...\n")
+        terminal_emulator.append_text(f"Command: {run_cmd}\n")
+        terminal_emulator.append_text("=" * 50 + "\n")
         
         # Show all widgets
         dialog.show_all()
@@ -3222,7 +3239,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # Create file chooser dialog
             file_dialog = Gtk.FileChooserDialog(
-                title="Save Output",
+                title="Save Terminal Output",
                 parent=dialog,
                 action=Gtk.FileChooserAction.SAVE
             )
@@ -3235,6 +3252,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             home_dir = os.path.expanduser("~")
             file_dialog.set_current_folder(home_dir)
             file_dialog.set_current_name(f"{app_name.lower().replace(' ', '_')}_output.log")
+            
+            # Add file filters
+            text_filter = Gtk.FileFilter()
+            text_filter.set_name("Text files")
+            text_filter.add_mime_type("text/plain")
+            text_filter.add_pattern("*.txt")
+            text_filter.add_pattern("*.log")
+            file_dialog.add_filter(text_filter)
+            
+            all_filter = Gtk.FileFilter()
+            all_filter.set_name("All files")
+            all_filter.add_pattern("*")
+            file_dialog.add_filter(all_filter)
             
             # Show the dialog
             response = file_dialog.run()
@@ -3251,8 +3281,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             file_dialog.destroy()
         
+        # Function to clear terminal
+        def on_clear_clicked(button):
+            terminal_emulator.clear()
+            terminal_emulator.append_text(f"Terminal cleared. Command: {run_cmd}\n")
+        
         # Connect save button click
         save_button.connect("clicked", on_save_clicked)
+        
+        # Connect clear button
+        clear_button.connect("clicked", on_clear_clicked)
         
         # Connect close button
         close_button.connect("clicked", lambda b: dialog.destroy())
@@ -3274,7 +3312,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(update_terminal_output, line)
                 process.stdout.close()
                 # Add completed message
-                GLib.idle_add(update_terminal_output, f"\nCommand completed with return code: {process.wait()}\n")
+                return_code = process.wait()
+                completion_message = f"\n{'=' * 30}\nCommand completed with return code: {return_code}\n"
+                if return_code == 0:
+                    completion_message += "✓ Success\n"
+                else:
+                    completion_message += "✗ Error\n"
+                GLib.idle_add(update_terminal_output, completion_message)
                 return False
             
             # Start thread to read output
@@ -4798,10 +4842,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     
         # Create a terminal emulator for the text view if it doesn't exist yet
         if not hasattr(terminal_view, 'terminal_emulator'):
+            # Set terminal styling if not already applied
+            terminal_view.set_monospace(True)
+            terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
+            terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0.9, 0.9, 0.9, 1))
+            terminal_view.get_style_context().add_class('terminal-view')
+            
+            # Initialize the terminal emulator
             terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
     
         # Process and append the text
         terminal_view.terminal_emulator.append_text(text)
+        
+        # Ensure terminal is scrolled to show the latest content
+        mark = terminal_view.get_buffer().create_mark(None, terminal_view.get_buffer().get_end_iter(), False)
+        GLib.idle_add(lambda: terminal_view.scroll_mark_onscreen(mark) and terminal_view.get_buffer().delete_mark(mark))
     
         # Append to log file if continuous logging is active
         if self.logging_active and self.log_file:
@@ -4823,9 +4878,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         
                 self.log_file.write(clean_text)
                 self.log_file.flush()  # Ensure it's written immediately
-            except Exception:
+            except Exception as e:
                 # If there's an error writing to the log file, disable logging
                 try:
+                    error_msg = f"\nError writing to log file: {str(e)}\nLogging disabled.\n"
+                    terminal_view.terminal_emulator.append_text(error_msg)
                     self.log_file.close()
                 except Exception:
                     pass
@@ -4836,6 +4893,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         return False
 
     def create_progress_dialog(self, title="Installing...", allow_cancel=True):
+        """Create an enhanced progress dialog with advanced terminal integration"""
         # Create dialog
         progress_dialog = Gtk.Dialog(
             title=title,
@@ -4854,15 +4912,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         header_bar.set_show_close_button(False)
         header_bar.set_title(title)
         
-        # Add terminal toggle button to header bar
+        # Add terminal toggle button to header bar with enhanced styling
         terminal_button = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic", Gtk.IconSize.BUTTON)
         terminal_button.set_tooltip_text("Toggle Terminal View")
+        terminal_button.get_style_context().add_class("suggested-action")
         header_bar.pack_end(terminal_button)
         
         # Add save button to header bar
         save_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
         save_button.set_tooltip_text("Save Log to File")
         header_bar.pack_end(save_button)
+        
+        # Add log control button to header bar (start/stop logging)
+        log_control_button = Gtk.Button.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON)
+        log_control_button.set_tooltip_text("Start Continuous Logging")
+        log_control_button.get_style_context().add_class("destructive-action")
+        header_bar.pack_end(log_control_button)
         
         # Set the header bar
         progress_dialog.set_titlebar(header_bar)
@@ -4895,17 +4960,31 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Create a scrolled window for status label that expands
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_size_request(-1, 60)  # Reduced from 80
+        scroll.set_size_request(-1, 60)
         scroll.add(status_label)
         progress_box.pack_start(scroll, True, True, 0)
         
-        # Progress bar that expands horizontally
+        # Progress bar that expands horizontally with enhanced styling
         progress_bar = Gtk.ProgressBar()
         progress_bar.set_show_text(True)
         progress_bar.set_size_request(-1, 20)
+        # Apply custom CSS styles for more modern look
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(b"""
+            progressbar { 
+                padding: 2px;
+                border-radius: 4px;
+            }
+            progressbar progress {
+                background-color: #3584e4;
+                border-radius: 3px;
+            }
+        """)
+        progress_ctx = progress_bar.get_style_context()
+        progress_ctx.add_provider(css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         progress_box.pack_start(progress_bar, False, True, 0)
         
-        # Terminal view
+        # Terminal view with enhanced styling
         terminal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         terminal_box.set_margin_start(10)
         terminal_box.set_margin_end(10)
@@ -4914,18 +4993,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         
         terminal_scroll = Gtk.ScrolledWindow()
         terminal_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        terminal_scroll.set_size_request(400, 150)  # Reduced from 200
+        terminal_scroll.set_size_request(450, 200)
         terminal_scroll.set_vexpand(True)
         terminal_scroll.set_hexpand(True)
         
-        # Create terminal view with monospace font
+        # Create terminal view with monospace font and better styling
         terminal_view = Gtk.TextView()
         terminal_view.set_editable(False)
         terminal_view.set_cursor_visible(False)
         terminal_view.set_monospace(True)
         terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         
-        # Set terminal colors using CSS classes
+        # Set terminal colors directly
+        terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
+        terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0.9, 0.9, 0.9, 1))
         terminal_view.get_style_context().add_class('terminal-view')
         
         # Initialize the terminal emulator
@@ -4934,6 +5015,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Add terminal view to scroll window
         terminal_scroll.add(terminal_view)
         terminal_box.pack_start(terminal_scroll, True, True, 0)
+        
+        # Add enhanced terminal control buttons
+        terminal_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        terminal_button_box.set_halign(Gtk.Align.END)
+        terminal_button_box.set_margin_top(5)
+        
+        # Clear terminal button
+        clear_button = Gtk.Button()
+        clear_icon = Gtk.Image.new_from_icon_name("edit-clear-symbolic", Gtk.IconSize.SMALL_TOOLBAR)
+        clear_button.set_image(clear_icon)
+        clear_button.set_tooltip_text("Clear Terminal")
+        terminal_button_box.pack_end(clear_button, False, False, 0)
+        
+        # Connect clear button
+        clear_button.connect("clicked", lambda b: terminal_emulator.clear())
+        
+        terminal_box.pack_start(terminal_button_box, False, False, 0)
         
         # Add views to stack
         stack.add_named(progress_box, "progress")
@@ -4944,6 +5042,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         initial_view = "terminal" if use_terminal else "progress"
         stack.set_visible_child_name(initial_view)
         
+        # Update button styling based on initial view
+        if use_terminal:
+            terminal_button.get_style_context().remove_class("suggested-action")
+        
         # Update tooltip based on initial view
         terminal_button.set_tooltip_text("Show Progress" if use_terminal else "Show Terminal")
         
@@ -4951,14 +5053,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         content_area = progress_dialog.get_content_area()
         content_area.add(stack)
         
-        # Make the dialog resizable and set compact default size
+        # Make the dialog resizable and set appropriate default size
         progress_dialog.set_resizable(True)
-        progress_dialog.set_default_size(400, 200)  # Reduced from 500x300
+        progress_dialog.set_default_size(500, 300)
         
         def toggle_terminal(button):
+            """Toggle between progress and terminal views"""
             current = stack.get_visible_child_name()
-            stack.set_visible_child_name("terminal" if current == "progress" else "progress")
-            button.set_tooltip_text("Show Progress" if current == "progress" else "Show Terminal")
+            new_view = "terminal" if current == "progress" else "progress"
+            stack.set_visible_child_name(new_view)
+            
+            # Update button appearance based on active view
+            if new_view == "terminal":
+                button.set_tooltip_text("Show Progress")
+                button.get_style_context().remove_class("suggested-action")
+            else:
+                button.set_tooltip_text("Show Terminal")
+                button.get_style_context().add_class("suggested-action")
         
         terminal_button.connect("clicked", toggle_terminal)
         
@@ -4969,7 +5080,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Close log file if logging is active
             if self.logging_active and self.log_file:
                 try:
-                    self.log_file.write("\n--- Installation completed or cancelled ---\n")
+                    self.log_file.write("\n--- Operation completed or cancelled ---\n")
                     self.log_file.close()
                 except Exception:
                     pass
@@ -4986,19 +5097,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # Dialog destruction is already being handled elsewhere
                     pass
         
-        # Don't connect the response signal here, let the callers do it to avoid duplication
-        # progress_dialog.connect("response", on_dialog_response)
-        
         # Function to save log content to file
         def on_save_log_clicked(button):
             # Get current log content
             buf = terminal_view.get_buffer()
             start, end = buf.get_bounds()
             text = buf.get_text(start, end, False)
-            
+            if not text.strip():
+                # Show error if terminal is empty
+                self.show_error_dialog("Terminal is empty. Nothing to save.")
+                return
+                
             # Create file chooser dialog
             file_dialog = Gtk.FileChooserDialog(
-                title="Save Log to File",
+                title="Save Log",
                 parent=progress_dialog,
                 action=Gtk.FileChooserAction.SAVE
             )
@@ -5007,42 +5119,149 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 Gtk.STOCK_SAVE, Gtk.ResponseType.OK
             )
             
-            # Set default filename and location
-            log_dir = os.path.join(APPSTORE_DIR, "logs")
-            os.makedirs(log_dir, exist_ok=True)
+            # Set default filename with timestamp
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            default_filename = f"{title.lower().replace(' ', '_')}_{timestamp}.log"
+            file_dialog.set_current_name(default_filename)
             
-            file_dialog.set_current_folder(log_dir)
-            timestamp = time.strftime("%Y%m%d-%H%M%S")
-            file_dialog.set_current_name(f"installation_log_{timestamp}.log")
+            # Add file filters
+            log_filter = Gtk.FileFilter()
+            log_filter.set_name("Log files")
+            log_filter.add_pattern("*.log")
+            file_dialog.add_filter(log_filter)
+            
+            text_filter = Gtk.FileFilter()
+            text_filter.set_name("Text files")
+            text_filter.add_pattern("*.txt")
+            file_dialog.add_filter(text_filter)
+            
+            all_filter = Gtk.FileFilter()
+            all_filter.set_name("All files")
+            all_filter.add_pattern("*")
+            file_dialog.add_filter(all_filter)
             
             # Show the dialog
             response = file_dialog.run()
+            
             if response == Gtk.ResponseType.OK:
                 filename = file_dialog.get_filename()
                 try:
-                    # Save current content
                     with open(filename, 'w') as f:
-                        f.write(text)
+                        clean_text = AnsiColorParser().strip_ansi(text)
+                        f.write(clean_text)
                     
-                    # Show confirmation message
-                    self.update_terminal(terminal_view, f"\nLog saved to: {filename}\n")
+                    # Show a confirmation in the terminal
+                    terminal_emulator.append_text(f"\nLog saved to: {filename}\n")
                     
-                    # If continuous logging is active, mention that
-                    if self.logging_active and self.log_file_path:
-                        self.update_terminal(terminal_view, 
-                            f"Note: Continuous logging remains active - saving to {self.log_file_path}\n")
-                        
-                        # Ensure current content is in the log file
-                        if self.log_file:
-                            self.log_file.flush()
+                    # Also add progress label confirmation
+                    current_text = status_label.get_text()
+                    status_label.set_text(f"{current_text}\nLog saved to: {filename}")
                 except Exception as e:
-                    self.update_terminal(terminal_view, f"\nError saving log: {e}\n")
+                    error_msg = f"Error saving log: {str(e)}"
+                    terminal_emulator.append_text(f"\n{error_msg}\n")
+                    self.show_error_dialog(error_msg)
             
             file_dialog.destroy()
-        
-        # Connect save button click
+            
+        # Connect the save button
         save_button.connect("clicked", on_save_log_clicked)
         
+        # Function to handle log control (start/stop logging)
+        def on_log_control_clicked(button):
+            if self.logging_active and self.log_file:
+                # Stop logging
+                try:
+                    self.log_file.write("\n--- Logging stopped ---\n")
+                    self.log_file.close()
+                except Exception:
+                    pass
+                self.log_file = None
+                self.logging_active = False
+                
+                # Update button appearance
+                button.set_tooltip_text("Start Continuous Logging")
+                button.set_image(Gtk.Image.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON))
+                button.get_style_context().add_class("destructive-action")
+                button.get_style_context().remove_class("suggested-action")
+                
+                # Notify in terminal
+                terminal_emulator.append_text("\n--- Continuous logging stopped ---\n")
+            else:
+                # Start logging - create file chooser dialog
+                file_dialog = Gtk.FileChooserDialog(
+                    title="Save Continuous Log",
+                    parent=progress_dialog,
+                    action=Gtk.FileChooserAction.SAVE
+                )
+                file_dialog.add_buttons(
+                    Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                    Gtk.STOCK_SAVE, Gtk.ResponseType.OK
+                )
+                
+                # Set default filename with timestamp
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                default_filename = f"{title.lower().replace(' ', '_')}_{timestamp}_continuous.log"
+                file_dialog.set_current_name(default_filename)
+                
+                # Add file filters
+                log_filter = Gtk.FileFilter()
+                log_filter.set_name("Log files")
+                log_filter.add_pattern("*.log")
+                file_dialog.add_filter(log_filter)
+                
+                # Show the dialog
+                response = file_dialog.run()
+                
+                if response == Gtk.ResponseType.OK:
+                    filename = file_dialog.get_filename()
+                    try:
+                        # Open log file for writing
+                        self.log_file = open(filename, 'w')
+                        self.log_file_path = filename
+                        self.logging_active = True
+                        
+                        # Write header
+                        current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+                        self.log_file.write(f"--- Continuous logging started: {current_time} ---\n")
+                        
+                        # Get current terminal content and write to log
+                        terminal_text = terminal_emulator.get_text()
+                        if terminal_text:
+                            clean_text = AnsiColorParser().strip_ansi(terminal_text)
+                            self.log_file.write("--- Existing terminal content ---\n")
+                            self.log_file.write(clean_text)
+                            self.log_file.write("\n--- New log entries follow ---\n")
+                            self.log_file.flush()
+                        
+                        # Update button appearance
+                        button.set_tooltip_text("Stop Continuous Logging")
+                        button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic", Gtk.IconSize.BUTTON))
+                        button.get_style_context().remove_class("destructive-action")
+                        button.get_style_context().add_class("suggested-action")
+                        
+                        # Notify in terminal
+                        terminal_emulator.append_text(f"\n--- Continuous logging started to: {filename} ---\n")
+                    except Exception as e:
+                        error_msg = f"Error starting continuous logging: {str(e)}"
+                        terminal_emulator.append_text(f"\n{error_msg}\n")
+                        self.show_error_dialog(error_msg)
+                        
+                        # Reset logging state
+                        if self.log_file:
+                            try:
+                                self.log_file.close()
+                            except Exception:
+                                pass
+                        self.log_file = None
+                        self.logging_active = False
+                        self.log_file_path = None
+                
+                file_dialog.destroy()
+        
+        # Connect the log control button
+        log_control_button.connect("clicked", on_log_control_clicked)
+        
+        # Return dialog, status label, progress bar, and terminal view
         return progress_dialog, status_label, progress_bar, terminal_view
 
     def ensure_correct_update_button_visibility(self):

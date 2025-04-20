@@ -137,7 +137,7 @@ window {
 
 /* Buttons */
 .install-button, .uninstall-button, .open-button {
-    color: white;
+    color: @theme_selected_fg_color;
     border: none;
     border-radius: 4px;
     padding: 4px 8px;  /* Reduced padding */
@@ -146,33 +146,33 @@ window {
 }
 
 .install-button {
-    background: #2ecc71;
+    background-color: @theme_selected_bg_color;
 }
 
 .install-button:hover {
-    background: #27ae60;
+    background-color: alpha(@theme_selected_bg_color, 0.8);
 }
 
 .uninstall-button {
-    background: #e74c3c;
+    background-color: @error_color;
 }
 
 .uninstall-button:hover {
-    background: #c0392b;
+    background-color: alpha(@error_color, 0.8);
 }
 
 .open-button {
-    background: #2ecc71;
+    background-color: @theme_selected_bg_color;
 }
 
 .open-button:hover {
-    background: #27ae60;
+    background-color: alpha(@theme_selected_bg_color, 0.8);
 }
 
 /* Refresh button */
 .refresh-button {
-    background-color: #3498db;
-    color: white;
+    background-color: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
     border: none;
     border-radius: 4px;
     padding: 6px 12px;
@@ -180,13 +180,13 @@ window {
 }
 
 .refresh-button:hover {
-    background-color: #2980b9;
+    background-color: alpha(@theme_selected_bg_color, 0.8);
 }
 
 /* Sidebar */
 .sidebar {
-    background-color: #1e1e1e;
-    border-right: 1px solid #3d3d3d;
+    background-color: alpha(@theme_bg_color, 0.9);
+    border-right: 1px solid alpha(@theme_fg_color, 0.1);
 }
 
 /* Progress overlay */
@@ -218,15 +218,15 @@ window {
 }
 
 .progress-overlay button {
-    background-color: #e74c3c;
-    color: white;
+    background-color: @error_color;
+    color: @theme_selected_fg_color;
     border: none;
     padding: 5px 15px;
     border-radius: 5px;
 }
 
 .progress-overlay button:hover {
-    background-color: #c0392b;
+    background-color: alpha(@error_color, 0.8);
 }
 
 /* App card styling */
@@ -244,26 +244,26 @@ window {
 
 /* App type labels */
 .app-type-distro, .app-type-native, .app-type-both, .app-type-unknown {
-    color: white;
+    color: @theme_selected_fg_color;
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 12px;
 }
 
 .app-type-distro {
-    background-color: #2ecc71;
+    background-color: @theme_selected_bg_color;
 }
 
 .app-type-native {
-    background-color: #3498db;
+    background-color: alpha(@theme_selected_bg_color, 0.8);
 }
 
 .app-type-both {
-    background-color: #9b59b6;
+    background-color: mix(@theme_selected_bg_color, #9b59b6, 0.5);
 }
 
 .app-type-unknown {
-    background-color: #95a5a6;
+    background-color: alpha(@theme_fg_color, 0.5);
 }
 
 /* Metadata labels (for both version and source type) */
@@ -283,8 +283,8 @@ window {
 }
 
 .update-button {
-    background: #f39c12;  /* Orange color for updates */
-    color: white;
+    background-color: @warning_color;
+    color: @theme_selected_fg_color;
     border: none;
     border-radius: 4px;
     padding: 4px 8px;
@@ -293,7 +293,7 @@ window {
 }
 
 .update-button:hover {
-    background: #d35400;
+    background-color: alpha(@warning_color, 0.8);
 }
 
 /* System Update Button */
@@ -323,43 +323,43 @@ window {
 
 /* Progress levels */
 .progress-10 {
-    background: linear-gradient(to right, #2ecc71 10%, #3498db 10%);
+    background: linear-gradient(to right, @theme_selected_bg_color 10%, alpha(@theme_selected_bg_color, 0.6) 10%);
 }
 
 .progress-20 {
-    background: linear-gradient(to right, #2ecc71 20%, #3498db 20%);
+    background: linear-gradient(to right, @theme_selected_bg_color 20%, alpha(@theme_selected_bg_color, 0.6) 20%);
 }
 
 .progress-30 {
-    background: linear-gradient(to right, #2ecc71 30%, #3498db 30%);
+    background: linear-gradient(to right, @theme_selected_bg_color 30%, alpha(@theme_selected_bg_color, 0.6) 30%);
 }
 
 .progress-40 {
-    background: linear-gradient(to right, #2ecc71 40%, #3498db 40%);
+    background: linear-gradient(to right, @theme_selected_bg_color 40%, alpha(@theme_selected_bg_color, 0.6) 40%);
 }
 
 .progress-50 {
-    background: linear-gradient(to right, #2ecc71 50%, #3498db 50%);
+    background: linear-gradient(to right, @theme_selected_bg_color 50%, alpha(@theme_selected_bg_color, 0.6) 50%);
 }
 
 .progress-60 {
-    background: linear-gradient(to right, #2ecc71 60%, #3498db 60%);
+    background: linear-gradient(to right, @theme_selected_bg_color 60%, alpha(@theme_selected_bg_color, 0.6) 60%);
 }
 
 .progress-70 {
-    background: linear-gradient(to right, #2ecc71 70%, #3498db 70%);
+    background: linear-gradient(to right, @theme_selected_bg_color 70%, alpha(@theme_selected_bg_color, 0.6) 70%);
 }
 
 .progress-80 {
-    background: linear-gradient(to right, #2ecc71 80%, #3498db 80%);
+    background: linear-gradient(to right, @theme_selected_bg_color 80%, alpha(@theme_selected_bg_color, 0.6) 80%);
 }
 
 .progress-90 {
-    background: linear-gradient(to right, #2ecc71 90%, #3498db 90%);
+    background: linear-gradient(to right, @theme_selected_bg_color 90%, alpha(@theme_selected_bg_color, 0.6) 90%);
 }
 
 .progress-100 {
-    background: #2ecc71;
+    background-color: @theme_selected_bg_color;
 }
 
 /* App description */
@@ -408,27 +408,27 @@ button.terminal-toggle-button:hover {
 }
 
 .command-output-save-button {
-    background-color: #3498db;
-    color: white;
+    background-color: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
     border: none;
     border-radius: 4px;
     padding: 6px 12px;
 }
 
 .command-output-save-button:hover {
-    background-color: #2980b9;
+    background-color: alpha(@theme_selected_bg_color, 0.8);
 }
 
 .command-output-close-button {
-    background-color: #e74c3c;
-    color: white;
+    background-color: @error_color;
+    color: @theme_selected_fg_color;
     border: none;
     border-radius: 4px;
     padding: 6px 12px;
 }
 
 .command-output-close-button:hover {
-    background-color: #c0392b;
+    background-color: alpha(@error_color, 0.8);
 }
 
 /* Progress Dialog */

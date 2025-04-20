@@ -2,7 +2,7 @@
 
 supported_arch="aarch64,arm"
 package_name="webcord"
-version="v4.10.4"
+version="v4.10.5"
 run_cmd="/opt/AppImageLauncher/webcord/usr/bin/webcord --no-sandbox"
 app_type="distro"
 supported_distro="all"

@@ -99,11 +99,11 @@ window {
 }
 
 .category-button.selected {
-    background: #3498db;  /* Bright blue color that's visible on dark themes */
-    color: white;
+    background-color: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
     font-weight: bold;
-    border: 1px solid #2980b9;  /* Darker blue border */
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);  /* Subtle shadow for depth */
+    border: 1px solid alpha(@theme_selected_bg_color, 0.8);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .category-button label {
@@ -298,8 +298,8 @@ window {
 
 /* System Update Button */
 .system-update-button {
-    background: #3498db;
-    color: white;
+    background-color: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
     border: none;
     border-radius: 4px;
     padding: 8px 16px;
@@ -308,7 +308,7 @@ window {
 }
 
 .system-update-button:hover {
-    background: #2980b9;
+    background-color: alpha(@theme_selected_bg_color, 0.8);
 }
 
 .system-update-button:disabled {
@@ -317,8 +317,8 @@ window {
 
 /* Progress update animation */
 .updating {
-    background-color: #3498db;
-    color: white;
+    background-color: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
 }
 
 /* Progress levels */
@@ -517,11 +517,11 @@ headerbar {
 }
 
 .header-tab-button.active {
-    background: #3498db;  /* Bright blue color that's visible on dark themes */
-    border: 1px solid #2980b9;  /* Darker blue border */
-    color: white;
+    background-color: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
     font-weight: bold;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);  /* Subtle shadow for depth */
+    border: 1px solid alpha(@theme_selected_bg_color, 0.8);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .header-tab-button label {

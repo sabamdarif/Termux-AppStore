@@ -463,14 +463,17 @@ box.progress-view {
 progressbar {
     min-height: 6px;  /* Reduced from 10px */
     margin: 6px 0;    /* Reduced from 8px */
+    padding: 2px;
+    border-radius: 4px;
+}
+
+progressbar progress {
+    background-color: #3584e4;
+    border-radius: 3px;
 }
 
 progressbar trough {
     background-color: alpha(@theme_fg_color, 0.1);
-}
-
-progressbar progress {
-    background-color: @theme_selected_bg_color;
 }
 
 label.status-label {
@@ -553,4 +556,19 @@ headerbar {
 
 .menu-button:hover {
     background: alpha(@theme_fg_color, 0.1);
+}
+
+/* Custom progress bar styling */
+.custom-progress {
+    min-height: 20px;
+}
+
+.custom-progress progressbar {
+    padding: 2px;
+    border-radius: 4px;
+}
+
+.custom-progress progressbar progress {
+    background-color: #3584e4;
+    border-radius: 3px;
 }

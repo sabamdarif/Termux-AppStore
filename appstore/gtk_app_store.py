@@ -31,7 +31,7 @@ import socket
 
 # Import terminal emulator components
 try:
-    from terminal_emulator import CommandOutputWindow, show_command_output, CommandRunner, create_terminal_widget, apply_terminal_css, AnsiColorParser as TerminalAnsiColorParser
+    from terminal_emulator import CommandOutputWindow, show_command_output, CommandRunner, create_terminal_widget, apply_terminal_css, AnsiColorParser as TerminalAnsiColorParser, TerminalEmulator
 except ImportError:
     print("WARNING: Could not import terminal_emulator.py! Fallback to local terminal implementation.")
     CommandOutputWindow = None
@@ -40,6 +40,7 @@ except ImportError:
     create_terminal_widget = None
     apply_terminal_css = None
     TerminalAnsiColorParser = None
+    TerminalEmulator = None
 
 # Fuzzy search libraries
 try:
@@ -1775,7 +1776,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             warning_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             warning_icon = Gtk.Image.new_from_icon_name("dialog-warning", Gtk.IconSize.MENU)
             warning_box.pack_start(warning_icon, False, False, 0)
-            
             warning_label = Gtk.Label()
             warning_label.set_markup(f"System architecture <b>{self.system_arch}</b> might get some compatibility issues")
             warning_box.pack_start(warning_label, False, False, 0)
@@ -1956,61 +1956,66 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # Get cancel button using the dialog's action area
             cancel_button = None
-            for button in progress_dialog.get_action_area().get_children():
-                if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                    cancel_button = button
-                    break
+            # Modern approach to find buttons in a dialog
+            for widget in progress_dialog.get_content_area().get_children():
+                if isinstance(widget, Gtk.ButtonBox):
+                    for button in widget.get_children():
+                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                            cancel_button = button
+                            break
+                    if cancel_button:
+                        break
+            
+            # Fallback to old method if not found
+            if not cancel_button:
+                try:
+                    for button in progress_dialog.get_action_area().get_children():
+                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                            cancel_button = button
+                            break
+                except (AttributeError, TypeError):
+                    # get_action_area is deprecated, so it might not be available
+                    pass
 
             def on_cancel_clicked(*args):
-                nonlocal install_process, install_cancelled, progress_dialog, script_file
-                install_cancelled = True
+                """Handle cancel button click"""
+                print("Cancellation requested")
                 
-                # Properly terminate the process if it exists
-                if install_process and install_process.poll() is None:
-                    try:
-                        # First try SIGTERM
-                        os.killpg(os.getpgid(install_process.pid), signal.SIGTERM)
-                        
-                        # Wait a second for process to terminate
-                        start_time = time.time()
-                        while time.time() - start_time < 1 and install_process.poll() is None:
-                            time.sleep(0.1)
-                        
-                        # If process still running, use SIGKILL
-                        if install_process.poll() is None:
-                            os.killpg(os.getpgid(install_process.pid), signal.SIGKILL)
-                            
-                        terminal_update = "Installation cancelled by user. Terminating process..."
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, terminal_update))
-                    except Exception as e:
-                        print(f"Error terminating process: {e}")
+                # Set cancellation flag immediately
+                self.installation_cancelled = True
+                self.cancellation_in_progress = True
                 
-                # Clean up the script file
-                if script_file and os.path.exists(script_file):
-                    try:
-                        os.remove(script_file)
-                        print(f"Cleaned up script: {script_file}")
-                    except Exception as e:
-                        print(f"Error removing script file: {e}")
-                
-                # Make sure the dialog is destroyed only once
-                if progress_dialog and progress_dialog.get_visible():
-                    # Set a flag to avoid multiple calls to show_apps
-                    self.cancellation_in_progress = True
+                try:
+                    # Stop the command runner if it exists
+                    if hasattr(terminal_view, 'terminal_emulator') and hasattr(terminal_view.terminal_emulator, 'command_runner'):
+                        terminal_view.terminal_emulator.command_runner.cancel()
                     
-                    # Try to disconnect the response signal using the saved handler ID
-                    try:
-                        nonlocal dialog_response_handler_id
-                        progress_dialog.handler_disconnect(dialog_response_handler_id)
-                    except Exception as e:
-                        # Ignore errors if the handler can't be disconnected
-                        print(f"Note: Could not disconnect dialog handler: {e}")
+                    # Add clear message to the terminal
+                    if hasattr(terminal_view, 'terminal_emulator'):
+                        GLib.idle_add(lambda: terminal_view.terminal_emulator.append_text("\n\nCANCELLED: Installation was cancelled by user\n"))
+                        
+                    # Close any open log files
+                    if self.logging_active and self.log_file:
+                        try:
+                            self.log_file.write("\n\n--- Installation cancelled by user ---\n")
+                            self.log_file.close()
+                        except Exception:
+                            pass
+                        self.log_file = None
+                        self.logging_active = False
+                        self.log_file_path = None
+                        
+                    # Reset state before closing dialog
+                    self.current_installation = None
+                    self.installation_cancelled = True
                     
-                    # Add a small delay before destroying the dialog
-                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog and progress_dialog.get_visible() else None)
-                    # Clear the flag after dialog is destroyed
-                    GLib.timeout_add(600, lambda: setattr(self, 'cancellation_in_progress', False))
-                
+                    # Close dialog with delay to allow final messages to be displayed
+                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog else None)
+                except Exception as e:
+                    print(f"Error during cancellation: {e}")
+                    if progress_dialog:
+                        progress_dialog.destroy()
+                        
                 return True
 
             # Connect the response signal
@@ -2423,53 +2428,65 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             
             # Get cancel button using the dialog's action area
             cancel_button = None
-            for button in progress_dialog.get_action_area().get_children():
-                if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                    cancel_button = button
-                    break
+            # Modern approach to find buttons in a dialog
+            for widget in progress_dialog.get_content_area().get_children():
+                if isinstance(widget, Gtk.ButtonBox):
+                    for button in widget.get_children():
+                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                            cancel_button = button
+                            break
+                    if cancel_button:
+                        break
+            
+            # Fallback to old method if not found
+            if not cancel_button:
+                try:
+                    for button in progress_dialog.get_action_area().get_children():
+                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                            cancel_button = button
+                            break
+                except (AttributeError, TypeError):
+                    # get_action_area is deprecated, so it might not be available
+                    pass
 
             def on_cancel_clicked(*args):
-                nonlocal uninstall_process, uninstall_cancelled, progress_dialog, script_file
-                uninstall_cancelled = True
+                """Handle cancel button click"""
+                print("Uninstall cancellation requested")
                 
-                # Properly terminate the process if it exists
-                if uninstall_process and uninstall_process.poll() is None:
-                    try:
-                        # First try SIGTERM
-                        os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
-                        
-                        # Wait a second for process to terminate
-                        start_time = time.time()
-                        while time.time() - start_time < 1 and uninstall_process.poll() is None:
-                            time.sleep(0.1)
-                        
-                        # If process still running, use SIGKILL
-                        if uninstall_process.poll() is None:
-                            os.killpg(os.getpgid(uninstall_process.pid), signal.SIGKILL)
-                            
-                        terminal_update = "Uninstallation cancelled by user. Terminating process..."
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, terminal_update))
-                    except Exception as e:
-                        print(f"Error terminating process: {e}")
-                    
-                # Clean up the script file
-                if script_file and os.path.exists(script_file):
-                    try:
-                        os.remove(script_file)
-                        print(f"Cleaned up script: {script_file}")
-                    except Exception as e:
-                        print(f"Error removing script file: {e}")
-                    
-                # Make sure the dialog is destroyed only once
-                if progress_dialog and progress_dialog.get_visible():
-                    # Set a flag to avoid multiple calls to show_apps
-                    self.cancellation_in_progress = True
-                    
-                    # Add a small delay before destroying the dialog
-                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog and progress_dialog.get_visible() else None)
-                    # Clear the flag after dialog is destroyed
-                    GLib.timeout_add(600, lambda: setattr(self, 'cancellation_in_progress', False))
+                # Set cancellation flag immediately
+                self.uninstallation_cancelled = True
+                self.cancellation_in_progress = True
                 
+                try:
+                    # Stop the command runner if it exists
+                    if hasattr(terminal_view, 'terminal_emulator') and hasattr(terminal_view.terminal_emulator, 'command_runner'):
+                        terminal_view.terminal_emulator.command_runner.cancel()
+                    
+                    # Add clear message to the terminal
+                    if hasattr(terminal_view, 'terminal_emulator'):
+                        GLib.idle_add(lambda: terminal_view.terminal_emulator.append_text("\n\nCANCELLED: Uninstallation was cancelled by user\n"))
+                        
+                    # Close any open log files
+                    if self.logging_active and self.log_file:
+                        try:
+                            self.log_file.write("\n\n--- Uninstallation cancelled by user ---\n")
+                            self.log_file.close()
+                        except Exception:
+                            pass
+                        self.log_file = None
+                        self.logging_active = False
+                        self.log_file_path = None
+                        
+                    # Reset state before closing dialog
+                    self.current_installation = None
+                    
+                    # Close dialog with delay to allow final messages to be displayed
+                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog else None)
+                except Exception as e:
+                    print(f"Error during uninstall cancellation: {e}")
+                    if progress_dialog:
+                        progress_dialog.destroy()
+                        
                 return True
 
             def update_progress(fraction, status_text):
@@ -3510,10 +3527,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 
                 # Get cancel button using the dialog's action area
                 cancel_button = None
-                for button in update_dialog.get_action_area().get_children():
-                    if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                        cancel_button = button
-                        break
+                # Modern approach to find buttons in a dialog
+                for widget in update_dialog.get_content_area().get_children():
+                    if isinstance(widget, Gtk.ButtonBox):
+                        for button in widget.get_children():
+                            if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                                cancel_button = button
+                                break
+                        if cancel_button:
+                            break
+                
+                # Fallback to old method if not found
+                if not cancel_button:
+                    try:
+                        for button in update_dialog.get_action_area().get_children():
+                            if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                                cancel_button = button
+                                break
+                    except (AttributeError, TypeError):
+                        # get_action_area is deprecated, so it might not be available
+                        pass
 
                 def on_cancel_clicked(*args):
                     nonlocal update_process, update_cancelled, update_dialog, script_file

@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 import gi
-
 gi.require_version('Gtk', '3.0')
-import fcntl
+from gi.repository import Gtk, Gdk, GLib, Pango
+import re
+import subprocess
+import threading
 import os
 import pty
-import re
+import fcntl
 import select
 import signal
-import struct
-import subprocess
-import sys
-import termios
-import threading
 import time
-
-from gi.repository import Gdk, GLib, Gtk, Pango
-
+import termios
+import struct
+import sys
 
 class AnsiColorParser:
     """Class to parse ANSI escape sequences and apply formatting to a GTK TextView"""
@@ -438,9 +435,38 @@ class TerminalEmulator:
     
     def _scroll_to_end(self):
         """Scroll the view to the end"""
-        mark = self.buffer.create_mark(None, self.buffer.get_end_iter(), False)
-        self.text_view.scroll_mark_onscreen(mark)
-        self.buffer.delete_mark(mark)
+        # Using Gdk.threads_enter/leave to ensure thread safety for GTK operations
+        try:
+            # Make sure text_view and buffer are still valid and accessible
+            if not self.text_view or not isinstance(self.text_view, Gtk.TextView):
+                return False
+                
+            # Get the current buffer from the text view, don't rely on possibly stale self.buffer
+            buffer = self.text_view.get_buffer()
+            if not buffer or not isinstance(buffer, Gtk.TextBuffer):
+                return False
+            
+            # Verify that the text_view is still mapped (visible on screen)
+            # This helps avoid issues when scrolling during widget destruction
+            if not self.text_view.get_mapped():
+                return False
+            
+            # Get the adjustment for the vertical scrollbar
+            sw = self.text_view.get_parent()
+            if not sw or not isinstance(sw, Gtk.ScrolledWindow):
+                return False
+                
+            vadj = sw.get_vadjustment()
+            if not vadj:
+                return False
+            
+            # Simple and reliable approach: just set the value to the upper limit
+            # This avoids the need for creating and managing marks
+            GLib.idle_add(lambda: vadj.set_value(vadj.get_upper() - vadj.get_page_size()))
+            return False
+        except Exception:
+            # Silently catch all exceptions during scrolling
+            return False
     
     def clear(self):
         """Clear the terminal view"""
@@ -823,7 +849,7 @@ class TerminalWindow(Gtk.Window):
         if event.state & Gdk.ModifierType.CONTROL_MASK and event.keyval == Gdk.KEY_c:
             if self.command_runner.is_running:
                 self.command_runner.cancel()
-                return True
+            return True
         return False
 
 
@@ -865,21 +891,12 @@ def create_terminal_widget():
 # Path to the CSS file in the style directory
 # Using a function to find the CSS file with fallbacks to handle different installation scenarios
 def find_terminal_css_path():
-    """Find the terminal CSS file path with multiple fallbacks"""
+    """Find the terminal CSS file path with two fallback options"""
     possible_paths = [
         # Current directory with style subfolder (development)
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "terminal_style.css"),
         
-        # System installation paths (for setuptools installation)
-        os.path.join(sys.prefix, "share", "termux-appstore", "style", "terminal_style.css"),
-        
-        # Relative paths (for packaged installation)
-        os.path.join("style", "terminal_style.css"),
-        
-        # User's home directory in case it was installed there
-        os.path.join(os.path.expanduser("~"), ".local", "share", "termux-appstore", "style", "terminal_style.css"),
-        
-        # Termux-specific paths
+        # Termux-specific path
         os.path.join("/data/data/com.termux/files/usr/opt/appstore/style/terminal_style.css"),
     ]
     

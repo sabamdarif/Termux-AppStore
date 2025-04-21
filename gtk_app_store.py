@@ -4251,6 +4251,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Load content on next idle
                         def load_content():
                             self.clear_app_list_box()
+                            # Get the currently selected category
+                            selected_category = self._get_selected_category()
                             self.show_apps(selected_category)
                             return False
                             

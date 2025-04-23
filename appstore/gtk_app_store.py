@@ -671,6 +671,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Make sure we have connectivity (but don't show the dialog)
         if not self.check_internet_connection():
             print("No internet connection detected during initial check, skipping auto-refresh")
+            # Still need to load existing data
+            self.load_app_metadata_and_setup_ui()
             return
 
         try:
@@ -681,6 +683,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             auto_refresh = self.get_setting("enable_auto_refresh", True)
             if not auto_refresh:
                 print("Auto-refresh is disabled, skipping")
+                # Add this line to load existing data when auto-refresh is disabled
+                self.load_app_metadata_and_setup_ui()
+                # Make sure search box stays hidden
+                GLib.timeout_add(500, self._ensure_search_box_hidden)
                 return
                 
             # Check when the last refresh was performed
@@ -899,6 +905,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.load_app_metadata()
         GLib.idle_add(self.setup_app_list_ui)
         GLib.idle_add(self.hide_loading_indicators)  # Add this line to hide both spinner and label
+        
+        # Add this code to ensure the initial section is displayed
+        GLib.timeout_add(300, self._show_initial_section)
 
     def hide_loading_indicators(self):
         """Hide all loading indicators"""
@@ -906,6 +915,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Switch back to content view
         if hasattr(self, 'main_stack'):
             self.main_stack.set_visible_child_name("content")
+        
+        # Make sure header tabs are visible
+        if hasattr(self, 'header_tabs_box'):
+            self.header_tabs_box.show()
+        
         # Process events to ensure UI updates
         while Gtk.events_pending():
             Gtk.main_iteration()

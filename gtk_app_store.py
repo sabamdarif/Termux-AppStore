@@ -28,6 +28,10 @@ import zipfile
 import random
 import fcntl
 import socket
+import yaml
+import pathlib
+import hashlib
+import urllib.parse
 
 # Import terminal emulator components
 try:
@@ -3143,6 +3147,43 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_delete_event(self, widget, event):
         """Handle window close event"""
         try:
+            # Check if an update is in progress
+            if hasattr(self, 'update_in_progress') and self.update_in_progress:
+                # Create a warning dialog
+                dialog = Gtk.MessageDialog(
+                    transient_for=self,
+                    flags=0,
+                    message_type=Gtk.MessageType.WARNING,
+                    buttons=Gtk.ButtonsType.NONE,
+                    text="Update In Progress"
+                )
+                dialog.format_secondary_text("An update is currently in progress. It's recommended to wait until the update completes to avoid potential issues.")
+                
+                # Add "Wait" and "Force Quit" buttons
+                dialog.add_button("Wait", Gtk.ResponseType.CANCEL)
+                dialog.add_button("Force Quit", Gtk.ResponseType.OK)
+                
+                dialog.set_default_response(Gtk.ResponseType.CANCEL)
+                response = dialog.run()
+                dialog.destroy()
+                
+                if response == Gtk.ResponseType.CANCEL:
+                    # User chose to wait, prevent window from closing
+                    return True
+                else:
+                    # User chose to force quit, forcefully terminate the process
+                    print("Force quitting application during update...")
+                    # Run the exit in a separate thread to ensure it can complete
+                    # even if the main thread is blocked
+                    def force_exit():
+                        # Give the dialog time to be destroyed
+                        time.sleep(0.1)
+                        # Kill the process directly using SIGKILL
+                        os.kill(os.getpid(), signal.SIGKILL)
+                    
+                    threading.Thread(target=force_exit, daemon=True).start()
+                    return False
+            
             # Stop background tasks
             self.stop_background_tasks = True
             
@@ -3721,7 +3762,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                             if func in line:
                                                 heavyweight_ops_count += 1
                                                 break
-                            
+                        
                             # Ensure we have at least one line
                             total_lines = max(1, total_lines)
                             GLib.idle_add(lambda: self.update_terminal(terminal_view, 

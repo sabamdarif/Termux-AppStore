@@ -5,6 +5,7 @@
 # Pillow>=9.0.0
 requests>=2.28.0
 urllib3>=1.26.0
+PyYAML>=6.0
 
 # Fuzzy search (only one is needed)
 fuzzywuzzy>=0.18.0

@@ -4056,9 +4056,83 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         print(line.strip())
                     process.wait()
                 
-                # Step 2: Download new app data (40-70%)
+                # Check and update distro repositories if available
+                print("\n=== Checking Distro Repositories ===")
+                update_progress_safe(20, "Checking distro repositories...")
+                
+                termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+                distro_enabled = False
+                selected_distro = None
+                
+                if os.path.exists(termux_desktop_config):
+                    try:
+                        with open(termux_desktop_config, 'r') as f:
+                            for line in f:
+                                line = line.strip()
+                                if line.startswith('distro_add_answer='):
+                                    value = line.split('=')[1].strip().strip('"').strip("'").lower()
+                                    distro_enabled = value in ['y', 'yes']
+                                elif line.startswith('selected_distro='):
+                                    selected_distro = line.split('=')[1].strip().strip('"').strip("'").lower()
+                        
+                        print(f"Distro enabled: {distro_enabled}, Selected distro: {selected_distro}")
+                        
+                        if distro_enabled and selected_distro:
+                            # Test if proot-distro is working
+                            test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
+                            try:
+                                test_result = subprocess.run(['bash', '-c', test_cmd],
+                                                          capture_output=True,
+                                                          text=True,
+                                                          timeout=10)
+                                if test_result.returncode == 0:
+                                    print(f"proot-distro test successful for {selected_distro}")
+                                    update_progress_safe(25, f"Updating {selected_distro} repositories...")
+                                    
+                                    # Create distro update command based on distro type
+                                    distro_update_cmd = ""
+                                    if selected_distro in ['ubuntu', 'debian']:
+                                        distro_update_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'apt update -y'"
+                                    elif selected_distro == 'fedora':
+                                        distro_update_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'dnf check-update -y || true'"
+                                    elif selected_distro == 'archlinux':
+                                        distro_update_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'pacman -Sy --noconfirm'"
+                                    
+                                    if distro_update_cmd:
+                                        print(f"Running {selected_distro} update command: {distro_update_cmd}")
+                                        try:
+                                            update_process = subprocess.Popen(['bash', '-c', distro_update_cmd], 
+                                                                stdout=subprocess.PIPE, 
+                                                                stderr=subprocess.STDOUT,
+                                                                universal_newlines=True)
+                                            
+                                            # Read and display the output from the distro update command
+                                            for line in update_process.stdout:
+                                                print(line.strip())
+                                                # Log update output if logging is active
+                                                if self.logging_active and self.log_file:
+                                                    try:
+                                                        self.log_file.write(f"[{selected_distro} update] {line}")
+                                                        self.log_file.flush()
+                                                    except Exception:
+                                                        pass
+                                            
+                                            update_process.wait()
+                                            print(f"{selected_distro} repository update completed with return code: {update_process.returncode}")
+                                        except Exception as e:
+                                            print(f"Error updating {selected_distro} repositories: {e}")
+                                else:
+                                    print(f"proot-distro test failed for {selected_distro}: {test_result.stderr}")
+                            except Exception as e:
+                                print(f"Error during proot-distro test: {e}")
+                    except Exception as e:
+                        print(f"Error reading termux desktop config: {e}")
+                else:
+                    print("Termux desktop config not found. Skipping distro repository update.")
+                
+                # Step 2: Download new app data (35-70%)
                 print("\n=== Downloading App Updates ===")
-                update_progress_safe(40, "Downloading updates...")
+                update_progress_safe(35, "Downloading updates...")
                 
                 # Load old apps.json data before backing up
                 old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')

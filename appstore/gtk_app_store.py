@@ -139,6 +139,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.search_timeout_id = None
         self.search_delay = 100  # milliseconds
         
+        # Initialize logging variables
+        self.logging_active = False
+        self.log_file = None
+        self.log_file_path = None
+        
         # Set up keyboard accelerators
         accel_group = Gtk.AccelGroup()
         self.add_accel_group(accel_group)
@@ -206,6 +211,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.installed_apps_file = Path(INSTALLED_APPS_FILE)
         self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
         self.load_installed_apps()
+        
+        # Load pending updates from disk
+        self.pending_updates = self.load_pending_updates()
 
         # Initialize categories and apps data
         self.categories = []
@@ -1296,6 +1304,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Ensure spinner is visible
             self.ensure_spinner_visible()
             
+            # Load existing pending updates to preserve them
+            existing_updates = self.pending_updates.copy()
+            print(f"Preserving existing updates: {existing_updates}")
+            
             # 1. First ensure old_json directory exists
             os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
             old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
@@ -1518,6 +1530,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 json.dump(list(installed_apps), f, indent=2)
             
             self.installed_apps = list(installed_apps)
+            
+            # Restore existing pending updates that were preserved at the beginning
+            if 'existing_updates' in locals():
+                for app_id, version in existing_updates.items():
+                    # Only restore if the app is still in the installed apps list
+                    if app_id in self.installed_apps:
+                        self.pending_updates[app_id] = version
+                print(f"Restored pending updates: {self.pending_updates}")
+                self.save_pending_updates()
 
             print("Refresh completed successfully!")
             

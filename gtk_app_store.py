@@ -2260,8 +2260,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         normal_progress = processed_normal_ops * normal_progress_per_op
                         current_progress = base_progress + heavyweight_progress + normal_progress
                         
-                        # Cap progress at 90% - the final 10% is reserved for completion tasks
-                        current_progress = min(0.9, current_progress)
+                        # Cap progress at 80% - the final 20% is reserved for completion tasks
+                        current_progress = min(0.8, current_progress)
                         
                         # Update progress
                         GLib.idle_add(update_progress, current_progress, line)
@@ -2687,8 +2687,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         normal_progress = processed_normal_ops * normal_progress_per_op
                         current_progress = base_progress + heavyweight_progress + normal_progress
                         
-                        # Cap progress at 90% - the final 10% is reserved for completion tasks
-                        current_progress = min(0.9, current_progress)
+                        # Cap progress at 80% - the final 20% is reserved for completion tasks
+                        current_progress = min(0.8, current_progress)
                         
                         # Update progress
                         GLib.idle_add(update_progress, current_progress, line.strip())
@@ -3662,8 +3662,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if stack and self.get_setting("use_terminal_for_progress", False):
                         GLib.idle_add(lambda s=stack: s.set_visible_child_name("terminal"))
                     
-                    # Disable cancel button if installation is near completion (90% or more)
-                    if fraction >= 0.9 and cancel_button:
+                    # Disable cancel button if installation is near completion (80% or more)
+                    if fraction >= 0.8 and cancel_button:
                         GLib.idle_add(lambda: cancel_button.set_sensitive(False))
                         if not hasattr(cancel_button, 'tooltip_set'):
                             cancel_button.set_tooltip_text("Update is almost complete and cannot be cancelled")
@@ -3804,8 +3804,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                         # 70-100% maps to 70-90% of the bar
                                         mapped_progress = 0.7 + ((percent - 0.7) * 0.67)
                                     
-                                    # Cap at 0.9 (90%) to reserve the final 10% for completion
-                                    current_progress = min(0.9, mapped_progress)
+                                    # Cap at 0.8 (80%) to reserve the final 20% for completion
+                                    current_progress = min(0.8, mapped_progress)
                                     
                                     # Update progress with the extracted message
                                     GLib.idle_add(update_progress, current_progress, progress_message)
@@ -3836,8 +3836,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             normal_progress = processed_normal_ops * normal_progress_per_op
                             current_progress = base_progress + heavyweight_progress + normal_progress
                             
-                            # Cap progress at 90% - the final 10% is reserved for completion tasks
-                            current_progress = min(0.9, current_progress)
+                            # Cap progress at 80% - the final 20% is reserved for completion tasks
+                            current_progress = min(0.8, current_progress)
                             
                             # Update progress
                             GLib.idle_add(update_progress, current_progress, line)

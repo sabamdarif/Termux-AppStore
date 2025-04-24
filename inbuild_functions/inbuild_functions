@@ -29,7 +29,7 @@ function print_header() {
 }
 
 function print_section() {
-    echo 
+    echo
     echo -e "\033[1;34m=== $1 ===\033[0m"
 }
 
@@ -41,8 +41,8 @@ function wait_for_keypress() {
 function check_and_create_directory() {
     local max_retries=3
     local attempt=1
-    
-    while (( attempt <= max_retries )); do
+
+    while ((attempt <= max_retries)); do
         if [[ ! -d "$1" ]]; then
             mkdir -p "$1" && break
         fi
@@ -54,9 +54,9 @@ function check_and_create_directory() {
 function check_and_delete() {
     local max_retries=3
     local attempt=1
-    
+
     for item in "$@"; do
-        while (( attempt <= max_retries )); do
+        while ((attempt <= max_retries)); do
             if [[ -e "$item" ]]; then
                 rm -rf "$item" >/dev/null 2>&1 && break
             fi
@@ -70,14 +70,14 @@ function check_and_delete() {
 function check_and_backup() {
     local max_retries=3
     local attempt=1
-    
+
     for files_folders in "$@"; do
         for file in $files_folders; do
             if [[ -e "$file" ]]; then
                 local date_str=$(date +"%d-%m-%Y")
                 local backup="${file}-${date_str}.bak"
-                
-                while (( attempt <= max_retries )); do
+
+                while ((attempt <= max_retries)); do
                     if mv "$file" "$backup"; then
                         echo "backed up file $file"
                         break
@@ -97,20 +97,20 @@ function download_file() {
     local attempt=1
 
     echo "PROGRESS:0:Checking dependencies for download"
-    if ! command -v aria2c &> /dev/null; then
+    if ! command -v aria2c &>/dev/null; then
         echo "PROGRESS:5:Installing aria2 for download capability"
         package_install_and_check "aria2"
     fi
     echo "PROGRESS:10:Preparing for download"
     check_and_delete "$file_name"
 
-    while (( attempt <= max_retries )); do
-        echo "PROGRESS:$(( 10 + (attempt - 1) * 10 )):Downloading $file_name (Attempt $attempt/$max_retries)"
-        
+    while ((attempt <= max_retries)); do
+        echo "PROGRESS:$((10 + (attempt - 1) * 10)):Downloading $file_name (Attempt $attempt/$max_retries)"
+
         # Use aria2c with console log level info for basic progress info
         if aria2c --summary-interval=10 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" \
-           "$url" && [[ -f "$file_name" && -s "$file_name" ]]; then
-            
+            "$url" && [[ -f "$file_name" && -s "$file_name" ]]; then
+
             echo "PROGRESS:95:Verifying download: $file_name"
             print_success "Download completed: $file_name"
             echo "PROGRESS:100:Download successful: $file_name"
@@ -118,7 +118,7 @@ function download_file() {
         fi
 
         print_warn "Download failed, attempt $attempt of $max_retries."
-        echo "PROGRESS:$(( 10 + attempt * 10 )):Retrying download after failure (Attempt $attempt)"
+        echo "PROGRESS:$((10 + attempt * 10)):Retrying download after failure (Attempt $attempt)"
         sleep 2
         ((attempt++))
     done
@@ -133,8 +133,8 @@ function extract() {
     local attempt=1
 
     echo "PROGRESS:0:Preparing to extract $archive"
-    
-    while (( attempt <= max_retries )); do
+
+    while ((attempt <= max_retries)); do
         if [[ ! -f "$archive" ]]; then
             print_failed "Error: '$archive' does not exist!"
         fi
@@ -147,128 +147,128 @@ function extract() {
         fi
 
         echo "PROGRESS:10:Extracting $(basename "$archive") (Attempt $attempt/$max_retries)"
-        
+
         case "$archive" in
-            *.tar.gz|*.tgz)
-                echo "PROGRESS:30:Extracting tar.gz archive"
-                if tar xvzf "$archive" $dir_arg --no-same-owner -h; then 
-                    echo "PROGRESS:90:Finalizing extraction"
-                    break 
+        *.tar.gz | *.tgz)
+            echo "PROGRESS:30:Extracting tar.gz archive"
+            if tar xvzf "$archive" $dir_arg --no-same-owner -h; then
+                echo "PROGRESS:90:Finalizing extraction"
+                break
+            fi
+            ;;
+        *.tar.xz)
+            echo "PROGRESS:30:Extracting tar.xz archive"
+            if tar xvJf "$archive" $dir_arg --no-same-owner -h; then
+                echo "PROGRESS:90:Finalizing extraction"
+                break
+            fi
+            ;;
+        *.tar.bz2 | *.tbz2)
+            echo "PROGRESS:30:Extracting tar.bz2 archive"
+            if tar xvjf "$archive" $dir_arg --no-same-owner -h; then
+                echo "PROGRESS:90:Finalizing extraction"
+                break
+            fi
+            ;;
+        *.tar)
+            echo "PROGRESS:30:Extracting tar archive"
+            if tar xvf "$archive" $dir_arg --no-same-owner -h; then
+                echo "PROGRESS:90:Finalizing extraction"
+                break
+            fi
+            ;;
+        *.bz2)
+            echo "PROGRESS:30:Extracting bz2 file"
+            if [[ -n "$output_dir" ]]; then
+                echo "PROGRESS:60:Decompressing to target directory"
+                if bunzip2 -c "$archive" >"$output_dir/$(basename "${archive%.bz2}")"; then
+                    echo "PROGRESS:90:Finalizing bz2 extraction"
+                    break
                 fi
-                ;;
-            *.tar.xz)
-                echo "PROGRESS:30:Extracting tar.xz archive"
-                if tar xvJf "$archive" $dir_arg --no-same-owner -h; then 
-                    echo "PROGRESS:90:Finalizing extraction"
-                    break 
+            else
+                echo "PROGRESS:60:Decompressing in current directory"
+                if bunzip2 "$archive"; then
+                    echo "PROGRESS:90:Finalizing bz2 extraction"
+                    break
                 fi
-                ;;
-            *.tar.bz2|*.tbz2)
-                echo "PROGRESS:30:Extracting tar.bz2 archive"
-                if tar xvjf "$archive" $dir_arg --no-same-owner -h; then 
-                    echo "PROGRESS:90:Finalizing extraction"
-                    break 
+            fi
+            ;;
+        *.gz)
+            echo "PROGRESS:30:Extracting gz file"
+            if [[ -n "$output_dir" ]]; then
+                echo "PROGRESS:60:Decompressing to target directory"
+                if gunzip -c "$archive" >"$output_dir/$(basename "${archive%.gz}")"; then
+                    echo "PROGRESS:90:Finalizing gz extraction"
+                    break
                 fi
-                ;;
-            *.tar)
-                echo "PROGRESS:30:Extracting tar archive"
-                if tar xvf "$archive" $dir_arg --no-same-owner -h; then 
-                    echo "PROGRESS:90:Finalizing extraction"
-                    break 
+            else
+                echo "PROGRESS:60:Decompressing in current directory"
+                if gunzip -c "$archive" >"${archive%.gz}"; then
+                    echo "PROGRESS:90:Finalizing gz extraction"
+                    break
                 fi
-                ;;
-            *.bz2)
-                echo "PROGRESS:30:Extracting bz2 file"
-                if [[ -n "$output_dir" ]]; then
-                    echo "PROGRESS:60:Decompressing to target directory"
-                    if bunzip2 -c "$archive" > "$output_dir/$(basename "${archive%.bz2}")"; then 
-                        echo "PROGRESS:90:Finalizing bz2 extraction"
-                        break 
-                    fi
-                else
-                    echo "PROGRESS:60:Decompressing in current directory"
-                    if bunzip2 "$archive"; then 
-                        echo "PROGRESS:90:Finalizing bz2 extraction"
-                        break 
-                    fi
+            fi
+            ;;
+        *.7z)
+            echo "PROGRESS:30:Extracting 7z file"
+            if [[ -n "$output_dir" ]]; then
+                echo "PROGRESS:50:Decompressing to target directory"
+                if 7z x "$archive" -o"$output_dir" -y; then
+                    echo "PROGRESS:90:Finalizing 7z extraction"
+                    break
                 fi
-                ;;
-            *.gz)
-                echo "PROGRESS:30:Extracting gz file"
-                if [[ -n "$output_dir" ]]; then
-                    echo "PROGRESS:60:Decompressing to target directory"
-                    if gunzip -c "$archive" > "$output_dir/$(basename "${archive%.gz}")"; then 
-                        echo "PROGRESS:90:Finalizing gz extraction"
-                        break 
-                    fi
-                else
-                    echo "PROGRESS:60:Decompressing in current directory"
-                    if gunzip -c "$archive" > "${archive%.gz}"; then 
-                        echo "PROGRESS:90:Finalizing gz extraction"
-                        break 
-                    fi
+            else
+                echo "PROGRESS:50:Decompressing in current directory"
+                if 7z x "$archive" -y; then
+                    echo "PROGRESS:90:Finalizing 7z extraction"
+                    break
                 fi
-                ;;
-            *.7z)
-                echo "PROGRESS:30:Extracting 7z file"
-                if [[ -n "$output_dir" ]]; then
-                    echo "PROGRESS:50:Decompressing to target directory"
-                    if 7z x "$archive" -o"$output_dir" -y; then 
-                        echo "PROGRESS:90:Finalizing 7z extraction"
-                        break 
-                    fi
-                else
-                    echo "PROGRESS:50:Decompressing in current directory"
-                    if 7z x "$archive" -y; then 
-                        echo "PROGRESS:90:Finalizing 7z extraction"
-                        break 
-                    fi
+            fi
+            ;;
+        *.rar)
+            echo "PROGRESS:30:Extracting RAR file"
+            if [[ -n "$output_dir" ]]; then
+                echo "PROGRESS:50:Decompressing to target directory"
+                if unrar x -o+ "$archive" "$output_dir"; then
+                    echo "PROGRESS:90:Finalizing RAR extraction"
+                    break
                 fi
-                ;;
-            *.rar)
-                echo "PROGRESS:30:Extracting RAR file"
-                if [[ -n "$output_dir" ]]; then
-                    echo "PROGRESS:50:Decompressing to target directory"
-                    if unrar x -o+ "$archive" "$output_dir"; then 
-                        echo "PROGRESS:90:Finalizing RAR extraction"
-                        break 
-                    fi
-                else
-                    echo "PROGRESS:50:Decompressing in current directory"
-                    if unrar x -o+ "$archive"; then 
-                        echo "PROGRESS:90:Finalizing RAR extraction"
-                        break 
-                    fi
+            else
+                echo "PROGRESS:50:Decompressing in current directory"
+                if unrar x -o+ "$archive"; then
+                    echo "PROGRESS:90:Finalizing RAR extraction"
+                    break
                 fi
-                ;;
-            *.zip)
-                echo "PROGRESS:30:Extracting ZIP file"
-                if [[ -n "$output_dir" ]]; then
-                    echo "PROGRESS:50:Decompressing to target directory"
-                    if unzip -o "$archive" -d "$output_dir"; then 
-                        echo "PROGRESS:90:Finalizing ZIP extraction"
-                        break 
-                    fi
-                else
-                    echo "PROGRESS:50:Decompressing in current directory"
-                    if unzip -o "$archive"; then 
-                        echo "PROGRESS:90:Finalizing ZIP extraction"
-                        break 
-                    fi
+            fi
+            ;;
+        *.zip)
+            echo "PROGRESS:30:Extracting ZIP file"
+            if [[ -n "$output_dir" ]]; then
+                echo "PROGRESS:50:Decompressing to target directory"
+                if unzip -o "$archive" -d "$output_dir"; then
+                    echo "PROGRESS:90:Finalizing ZIP extraction"
+                    break
                 fi
-                ;;
-            *)
-                print_failed "Unsupported archive format: $archive"
-                ;;
+            else
+                echo "PROGRESS:50:Decompressing in current directory"
+                if unzip -o "$archive"; then
+                    echo "PROGRESS:90:Finalizing ZIP extraction"
+                    break
+                fi
+            fi
+            ;;
+        *)
+            print_failed "Unsupported archive format: $archive"
+            ;;
         esac
 
         print_warn "Extraction failed, attempt $attempt of $max_retries."
-        echo "PROGRESS:$(( 10 + attempt * 5 )):Retrying extraction after failure (Attempt $attempt)"
+        echo "PROGRESS:$((10 + attempt * 5)):Retrying extraction after failure (Attempt $attempt)"
         sleep 2
         ((attempt++))
     done
 
-    if (( attempt > max_retries )); then
+    if ((attempt > max_retries)); then
         print_failed "Extraction failed after $max_retries attempts: $archive"
     fi
 
@@ -281,7 +281,7 @@ function check_and_restore() {
     local target_path="$1"
     local max_retries=3
     local attempt=1
-    
+
     local dir=$(dirname "$target_path")
     local base_name=$(basename "$target_path")
     local latest_backup=$(find "$dir" -maxdepth 1 -type f -name "$base_name-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9].bak" 2>/dev/null | sort | tail -n 1)
@@ -294,7 +294,7 @@ function check_and_restore() {
         print_failed "Original file or directory ${target_path} already exists."
     fi
 
-    while (( attempt <= max_retries )); do
+    while ((attempt <= max_retries)); do
         if mv "$latest_backup" "$target_path"; then
             print_success "Restored ${latest_backup} to ${target_path}"
             break
@@ -323,13 +323,13 @@ function package_install_and_check() {
     local packs_list=($@)
     local total_packages=${#packs_list[@]}
     local current_package=0
-    
+
     # Show total packages count
     echo "PROGRESS:0:Starting installation of $total_packages packages"
-    
+
     for package_name in "${packs_list[@]}"; do
         ((current_package++))
-        local percent=$(( (current_package - 1) * 100 / total_packages ))
+        local percent=$(((current_package - 1) * 100 / total_packages))
         echo "PROGRESS:$percent:Processing package: $package_name ($current_package of $total_packages)"
         attempt=1
 
@@ -339,7 +339,7 @@ function package_install_and_check() {
             dpkg --configure -a
         fi
 
-        while (( attempt <= max_retries )); do
+        while ((attempt <= max_retries)); do
             if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
                 # Check if package is already installed
                 if pacman -Qi "$package_name" >/dev/null 2>&1; then
@@ -352,10 +352,10 @@ function package_install_and_check() {
                     packages=$(pacman -Ssq "${package_name%*}" 2>/dev/null)
                     local matched_count=$(echo "$packages" | wc -w)
                     local current_matched=0
-                    
+
                     for pkgs in $packages; do
                         ((current_matched++))
-                        local sub_percent=$(( percent + (current_matched * 100 / matched_count / total_packages) ))
+                        local sub_percent=$((percent + (current_matched * 100 / matched_count / total_packages)))
                         echo "PROGRESS:$sub_percent:Installing matched package: $pkgs ($current_matched of $matched_count)"
                         if pacman -Sy --noconfirm --overwrite '*' "$pkgs"; then
                             print_success "$pkgs installed successfully"
@@ -364,14 +364,14 @@ function package_install_and_check() {
                     break
                 else
                     echo "PROGRESS:$percent:Installing $package_name with pacman..."
-                    
+
                     # Break pacman installation into stages
-                    echo "PROGRESS:$(( percent + 20 )):Syncing repositories..."
+                    echo "PROGRESS:$((percent + 20)):Syncing repositories..."
                     pacman -Sy --noconfirm
-                    
-                    echo "PROGRESS:$(( percent + 40 )):Installing $package_name..."
+
+                    echo "PROGRESS:$((percent + 40)):Installing $package_name..."
                     if pacman -S --noconfirm --overwrite '*' "$package_name"; then
-                        local final_percent=$(( (current_package * 100) / total_packages ))
+                        local final_percent=$(((current_package * 100) / total_packages))
                         echo "PROGRESS:$final_percent:$package_name installed successfully"
                         print_success "$package_name installed successfully"
                         break
@@ -382,46 +382,46 @@ function package_install_and_check() {
                 if dpkg -s "$package_name" >/dev/null 2>&1; then
                     echo "PROGRESS:$percent:Package already installed. Attempting reconfiguration and reinstallation..."
                     dpkg --configure -a
-                    
+
                     # Break apt installation into stages
-                    echo "PROGRESS:$(( percent + 20 )):Updating package lists..."
+                    echo "PROGRESS:$((percent + 20)):Updating package lists..."
                     apt-get update -y
-                    
-                    echo "PROGRESS:$(( percent + 40 )):Reinstalling $package_name..."
+
+                    echo "PROGRESS:$((percent + 40)):Reinstalling $package_name..."
                     apt-get reinstall "$package_name" -y
-                    
-                    echo "PROGRESS:$(( percent + 70 )):Finalizing installation..."
+
+                    echo "PROGRESS:$((percent + 70)):Finalizing installation..."
                 else
                     echo "PROGRESS:$percent:Installing package after fixing potential issues..."
                     dpkg --configure -a
-                    
+
                     # Break apt installation into stages with periodic progress updates
-                    echo "PROGRESS:$(( percent + 10 )):Updating package lists..."
+                    echo "PROGRESS:$((percent + 10)):Updating package lists..."
                     apt-get update -y
-                    
-                    echo "PROGRESS:$(( percent + 20 )):Resolving dependencies..."
+
+                    echo "PROGRESS:$((percent + 20)):Resolving dependencies..."
                     # Use a status update approach based on key progress stages in apt output
                     apt-get install "$package_name" -y | while IFS= read -r line; do
                         # Echo all output to ensure it's captured for logging
                         echo "$line"
-                        
+
                         # Detect various stages of installation and update progress accordingly
                         if [[ "$line" == *"Get:"* ]]; then
-                            echo "PROGRESS:$(( percent + 30 )):Downloading packages..."
+                            echo "PROGRESS:$((percent + 30)):Downloading packages..."
                         elif [[ "$line" == *"Unpacking"* ]]; then
-                            echo "PROGRESS:$(( percent + 50 )):Unpacking files..."
+                            echo "PROGRESS:$((percent + 50)):Unpacking files..."
                         elif [[ "$line" == *"Setting up"* ]]; then
-                            echo "PROGRESS:$(( percent + 70 )):Setting up packages..."
+                            echo "PROGRESS:$((percent + 70)):Setting up packages..."
                         elif [[ "$line" == *"Processing triggers"* ]]; then
-                            echo "PROGRESS:$(( percent + 85 )):Processing triggers..."
+                            echo "PROGRESS:$((percent + 85)):Processing triggers..."
                         fi
                     done
-                    
-                    echo "PROGRESS:$(( percent + 90 )):Verifying installation..."
+
+                    echo "PROGRESS:$((percent + 90)):Verifying installation..."
                 fi
 
                 if dpkg -s "$package_name" >/dev/null 2>&1; then
-                    local final_percent=$(( (current_package * 100) / total_packages ))
+                    local final_percent=$(((current_package * 100) / total_packages))
                     echo "PROGRESS:$final_percent:$package_name installed successfully"
                     print_success "$package_name installed successfully"
                     break
@@ -433,11 +433,11 @@ function package_install_and_check() {
             ((attempt++))
         done
 
-        if (( attempt > max_retries )); then
+        if ((attempt > max_retries)); then
             print_failed "Failed to install $package_name after $max_retries attempts"
         fi
     done
-    
+
     # Signal completion
     echo "PROGRESS:100:Package installation complete"
 }
@@ -447,7 +447,7 @@ function package_remove_and_check() {
     local max_retries=3
     local attempt=1
     local packs_list=($@)
-    
+
     for package_name in "${packs_list[@]}"; do
         echo "Processing package: $package_name"
         attempt=1
@@ -458,7 +458,7 @@ function package_remove_and_check() {
             dpkg --configure -a
         fi
 
-        while (( attempt <= max_retries )); do
+        while ((attempt <= max_retries)); do
             if [[ $package_name == *"*"* ]]; then
                 echo "Processing wildcard pattern: $package_name"
                 if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
@@ -509,7 +509,7 @@ function package_remove_and_check() {
             ((attempt++))
         done
 
-        if (( attempt > max_retries )); then
+        if ((attempt > max_retries)); then
             print_failed "Failed to remove $package_name after $max_retries attempts"
         fi
     done
@@ -524,18 +524,18 @@ function get_file_name_number() {
 # get the latest version from a github releases
 # ex. latest_tag=$(get_latest_release "$repo_owner" "$repo_name")
 function get_latest_release() {
-	local repo_owner="$1"
-	local repo_name="$2"
-	curl -s "https://api.github.com/repos/$repo_owner/$repo_name/releases/latest" |
-	grep '"tag_name":' |
-	sed -E 's/.*"v?([^"]+)".*/\1/'
+    local repo_owner="$1"
+    local repo_name="$2"
+    curl -s "https://api.github.com/repos/$repo_owner/$repo_name/releases/latest" |
+        grep '"tag_name":' |
+        sed -E 's/.*"v?([^"]+)".*/\1/'
 }
 
 function preprocess_conf() {
     # Preprocess configuration file:
     # 1. Remove lines where keys contain dashes (-).
     # 2. Remove quotes from keys and values.
-	echo " Prepering config file..."
+    echo " Prepering config file..."
     sed -i -E '/^[[:space:]]*[^#=]+-.*=/d; s/^([[:space:]]*[^#=]+)="([^"]*)"/\1=\2/g' "$config_file"
 }
 
@@ -567,14 +567,14 @@ function fix_exec() {
 }
 
 function install_appimage() {
-local appimage_file_name="$1"
-local appimage_directory_name="$2"
-distro_run '
+    local appimage_file_name="$1"
+    local appimage_directory_name="$2"
+    distro_run '
 check_and_create_directory '/opt/AppImageLauncher/'
 check_and_delete '/opt/AppImageLauncher/$appimage_directory_name'
 '
-mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
-distro_run "
+    mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
+    distro_run "
 cd /opt/AppImageLauncher
 ldconfig
 chmod +x '${appimage_file_name}'
@@ -607,7 +607,7 @@ function create_shell_script() {
     # Create directory if it doesn't exist
     mkdir -p "$(dirname "$script_path")"
 
-cat << 'EOF' > "$script_path"
+    cat <<'EOF' >"$script_path"
 #!/bin/bash
 
 termux_desktop_path="/data/data/com.termux/files/usr/etc/termux-desktop"
@@ -615,12 +615,12 @@ config_file="$termux_desktop_path/configuration.conf"
 log_file="/data/data/com.termux/files/home/termux-desktop.log"
 
 EOF
-    typeset -f print_success print_failed check_and_delete check_and_create_directory extract check_and_restore >> "$script_path"
-    echo "$shell_setup_content" >> "$script_path"
-    
+    typeset -f print_success print_failed check_and_delete check_and_create_directory extract check_and_restore >>"$script_path"
+    echo "$shell_setup_content" >>"$script_path"
+
     # Make script executable
     chmod +x "$script_path"
-    
+
     # Verify script was created
     if [[ ! -f "$script_path" ]]; then
         print_failed "Failed to create script at $script_path"
@@ -630,11 +630,11 @@ EOF
 
 function distro_run() {
     local command="$1"
-        # Multi-line command - create temporary script
-pd_setup_content="${command}"
+    # Multi-line command - create temporary script
+    pd_setup_content="${command}"
 
-eval "create_shell_script '$distro_path/root/pd_setup.sh' '$pd_setup_content'"
-proot-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh
+    eval "create_shell_script '$distro_path/root/pd_setup.sh' '$pd_setup_content'"
+    proot-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh
 }
 
 function pd_package_install_and_check() {

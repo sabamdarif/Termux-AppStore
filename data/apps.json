@@ -137,9 +137,9 @@
       "Development"
     ],
     "app_type": "distro",
-    "run_cmd": "/opt/cursor/cursor --no-sandbox",
-    "supported_arch": "aarch64,arm",
-    "version": "v0.44.0",
+    "run_cmd": "/opt/AppImageLauncher/cursor/AppRun --no-sandbox",
+    "supported_arch": "aarch64",
+    "version": "0.49.4",
     "supported_distro": "all",
     "package_name": "cursor",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Cursor/install.sh",
@@ -271,7 +271,7 @@
     "package_name": "feathernotes",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/uninstall.sh",
-    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/logo.svg"
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Feathernotes/logo.png"
   },
   {
     "app_name": "Firefox",
@@ -873,7 +873,7 @@
     "package_name": "uget",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/uninstall.sh",
-    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/logo.svg"
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Uget/logo.png"
   },
   {
     "app_name": "VLC",

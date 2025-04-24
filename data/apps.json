@@ -306,6 +306,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Flameshot/logo.png"
   },
   {
+    "app_name": "Fontforge gtk",
+    "folder_name": "Fontforge-gtk",
+    "description": "A free (libre) font editor",
+    "categories": [
+      "Graphics"
+    ],
+    "app_type": "native",
+    "run_cmd": "fontforge",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "fontforge-gtk",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fontforge-gtk/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fontforge-gtk/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Fontforge-gtk/logo.png"
+  },
+  {
     "app_name": "Freetube",
     "folder_name": "Freetube",
     "description": "An Open Source YouTube app for privacy",
@@ -402,6 +418,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Github-Desktop/icon-64.png"
+  },
+  {
+    "app_name": "Gnome calculator",
+    "folder_name": "Gnome-calculator",
+    "description": "Gnome Calculator",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "gnome-calculator",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "gnome-calculator",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gnome-calculator/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gnome-calculator/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gnome-calculator/logo.png"
   },
   {
     "app_name": "Gnome font viewer",

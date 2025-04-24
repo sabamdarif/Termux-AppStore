@@ -336,6 +336,8 @@ function package_install_and_check() {
         # For APT systems, run dpkg --configure -a before attempting the install
         if [[ "$PACKAGE_MANAGER" != "pacman" ]]; then
             echo "Checking and fixing any corrupted installations..."
+            check_and_delete "$PREFIX/var/lib/dpkg/lock-frontend"
+            check_and_delete "$PREFIX/var/lib/dpkg/lock"
             dpkg --configure -a
         fi
 

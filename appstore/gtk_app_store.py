@@ -1,41 +1,46 @@
 #!/data/data/com.termux/files/usr/bin/python3
 
 import gi
+
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Pango, Gio
-import os
-import json
-import subprocess
-from pathlib import Path
-import stat
-import time
-from datetime import datetime, timedelta
-import threading
-import sys
-import queue
-import shutil
-from PIL import Image
-import platform
-from concurrent.futures import ThreadPoolExecutor
-import signal
-import re
-import tempfile
-import logging
-import traceback
-import urllib.request
-import tarfile
-import zipfile
-import random
 import fcntl
-import socket
-import yaml
-import pathlib
 import hashlib
+import json
+import logging
+import os
+import pathlib
+import platform
+import queue
+import random
+import re
+import shutil
+import signal
+import socket
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import threading
+import time
+import traceback
 import urllib.parse
+import urllib.request
+import zipfile
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import yaml
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
+from PIL import Image
 
 # Import terminal emulator components
 try:
-    from terminal_emulator import CommandOutputWindow, show_command_output, CommandRunner, create_terminal_widget, apply_terminal_css, AnsiColorParser as TerminalAnsiColorParser, TerminalEmulator
+    from terminal_emulator import AnsiColorParser as TerminalAnsiColorParser
+    from terminal_emulator import (CommandOutputWindow, CommandRunner,
+                                   TerminalEmulator, apply_terminal_css,
+                                   create_terminal_widget, show_command_output)
 except ImportError:
     print("WARNING: Could not import terminal_emulator.py! Fallback to local terminal implementation.")
     CommandOutputWindow = None

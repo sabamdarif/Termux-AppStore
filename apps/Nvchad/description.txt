@@ -1,0 +1,1 @@
+Blazing fast Neovim config providing solid defaults and a beautiful UI

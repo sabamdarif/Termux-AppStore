@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 import gi
-
 gi.require_version('Gtk', '3.0')
-import fcntl
+from gi.repository import Gtk, Gdk, GLib, Pango
+import re
+import subprocess
+import threading
 import os
 import pty
-import re
+import fcntl
 import select
 import signal
-import struct
-import subprocess
-import sys
-import termios
-import threading
 import time
-
-from gi.repository import Gdk, GLib, Gtk, Pango
-
+import termios
+import struct
+import sys
 
 class AnsiColorParser:
     """Class to parse ANSI escape sequences and apply formatting to a GTK TextView"""

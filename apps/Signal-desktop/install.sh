@@ -14,7 +14,6 @@ aarch64) archtype="arm64" ;;
 *) print_failed "Unsupported architectures" ;;
 esac
 
-
 if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]]; then
     cd $working_dir
     filename="signal-desktop-unofficial_${version#v}_${archtype}.deb"
@@ -36,11 +35,11 @@ mv ${filename} signal/
 cd signal
 sudo dnf install -y ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3
 ar x ${filename}
-extract "data.tar.xz"
+extract 'data.tar.xz'
 cd opt
 mv 'Signal Unofficial'  /opt/Signal-Unofficial
 cd /root
-check_and_delete "signal"
+check_and_delete 'signal'
 "
 else
     print_failed "Unsupported distro"

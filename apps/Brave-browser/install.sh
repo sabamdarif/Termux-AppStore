@@ -24,9 +24,9 @@ echo "$(pwd)"
 download_file "${page_url}/releases/download/${version}/brave-browser-${version#v}-linux-arm64.zip"
 distro_run "
 cd /opt/brave-browser
-echo "$(pwd)"
-extract "brave-browser-${version#v}-linux-arm64.zip"
-check_and_delete "brave-browser-${version#v}-linux-arm64.zip"
+echo $(pwd)
+extract brave-browser-${version#v}-linux-arm64.zip
+check_and_delete brave-browser-${version#v}-linux-arm64.zip
 "
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/brave-browser.desktop >/dev/null
@@ -41,4 +41,3 @@ Comment=Brave is a free and open-source web browser
 MimeType=x-scheme-handler/brave-browser;
 Categories=Internet;
 DESKTOP_EOF
-

@@ -549,6 +549,21 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kvantum/logo.png"
   },
   {
+    "app_name": "Lazygit",
+    "folder_name": "Lazygit",
+    "description": "simple terminal UI for git commands",
+    "categories": [
+      "Development"
+    ],
+    "app_type": "native",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "lazygit",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Lazygit/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Lazygit/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Lazygit/logo.png"
+  },
+  {
     "app_name": "Leafpad",
     "folder_name": "Leafpad",
     "description": "GTK+ based simple text editor",
@@ -710,6 +725,21 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/OrcaSlicer/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/OrcaSlicer/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/OrcaSlicer/logo.png"
+  },
+  {
+    "app_name": "Pwasforfirefox",
+    "folder_name": "Pwasforfirefox",
+    "description": "PWAs for Firefox",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "firefoxpwa",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Pwasforfirefox/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Pwasforfirefox/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Pwasforfirefox/logo.png"
   },
   {
     "app_name": "Qbittorrent",

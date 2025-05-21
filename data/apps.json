@@ -1035,6 +1035,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Visual-Studio-Code-Insiders/logo.png"
   },
   {
+    "app_name": "Void",
+    "folder_name": "Void",
+    "description": "Void is an open source Cursor alternative. Write code with the best AI tools, use any model, and retain full control over your data.",
+    "categories": [
+      "Development"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/opt/void/void --no-sandbox",
+    "supported_arch": "aarch64,arm",
+    "version": "1.99.30034",
+    "supported_distro": "all",
+    "package_name": "void",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Void/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Void/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Void/logo.png"
+  },
+  {
     "app_name": "Webcord",
     "folder_name": "Webcord",
     "description": "Fast Discord client for ARM that mimics the official Discord client.",

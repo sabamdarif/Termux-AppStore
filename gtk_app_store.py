@@ -18,20 +18,8 @@ from PIL import Image
 import platform
 from concurrent.futures import ThreadPoolExecutor
 import signal
-import re
-import tempfile
-import logging
-import traceback
 import urllib.request
-import tarfile
-import zipfile
-import random
-import fcntl
 import socket
-import yaml
-import pathlib
-import hashlib
-import urllib.parse
 
 
 # Fuzzy search libraries
@@ -433,27 +421,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         title_label.set_margin_bottom(10)
         settings_box.pack_start(title_label, False, False, 0)
         
-        # Terminal progress setting
-        terminal_frame = Gtk.Frame()
-        terminal_frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
-        terminal_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        terminal_box.set_margin_start(12)
-        terminal_box.set_margin_end(12)
-        terminal_box.set_margin_top(12)
-        terminal_box.set_margin_bottom(12)
-        
-        terminal_label = Gtk.Label(label="Use terminal for progress")
-        terminal_label.set_halign(Gtk.Align.START)
-        terminal_switch = Gtk.Switch()
-        terminal_switch.set_halign(Gtk.Align.END)
-        terminal_switch.set_active(self.get_setting("use_terminal_for_progress", False))
-        terminal_switch.connect("state-set", self.on_terminal_progress_toggled)
-        
-        terminal_box.pack_start(terminal_label, True, True, 0)
-        terminal_box.pack_start(terminal_switch, False, False, 0)
-        terminal_frame.add(terminal_box)
-        settings_box.pack_start(terminal_frame, False, False, 0)
-        
         # Auto-refresh setting
         refresh_frame = Gtk.Frame()
         refresh_frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
@@ -474,27 +441,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         refresh_box.pack_start(refresh_switch, False, False, 0)
         refresh_frame.add(refresh_box)
         settings_box.pack_start(refresh_frame, False, False, 0)
-        
-        # Show command output setting
-        output_frame = Gtk.Frame()
-        output_frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
-        output_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        output_box.set_margin_start(12)
-        output_box.set_margin_end(12)
-        output_box.set_margin_top(12)
-        output_box.set_margin_bottom(12)
-        
-        output_label = Gtk.Label(label="Show command output in terminal")
-        output_label.set_halign(Gtk.Align.START)
-        output_switch = Gtk.Switch()
-        output_switch.set_halign(Gtk.Align.END)
-        output_switch.set_active(self.get_setting("show_command_output", False))
-        output_switch.connect("state-set", self.on_command_output_toggled)
-        
-        output_box.pack_start(output_label, True, True, 0)
-        output_box.pack_start(output_switch, False, False, 0)
-        output_frame.add(output_box)
-        settings_box.pack_start(output_frame, False, False, 0)
         
         # Fuzzy search setting
         fuzzy_frame = Gtk.Frame()
@@ -528,20 +474,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         settings_dialog.run()
         settings_dialog.destroy()
 
-    def on_terminal_progress_toggled(self, switch, state):
-        """Handle toggle of terminal progress option"""
-        self.set_setting("use_terminal_for_progress", state)
-        print(f"Terminal progress setting changed to: {state}")
-    
     def on_auto_refresh_toggled(self, switch, state):
         """Handle toggle of auto-refresh option"""
         self.set_setting("enable_auto_refresh", state)
         print(f"Auto-refresh setting changed to: {state}")
-    
-    def on_command_output_toggled(self, switch, state):
-        """Handle toggle of command output option"""
-        self.set_setting("show_command_output", state)
-        print(f"Command output setting changed to: {state}")
     
     def on_fuzzy_search_toggled(self, switch, state):
         """Handle toggle of fuzzy search option"""
@@ -619,7 +555,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if not os.path.exists(SETTINGS_FILE):
                 with open(SETTINGS_FILE, 'w') as f:
                     json.dump({
-                        "use_terminal_for_progress": False,
                         "last_category": "All Apps"
                     }, f, indent=2)
                     
@@ -1973,8 +1908,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         dialog.destroy()
 
         if response == Gtk.ResponseType.YES:
-            # Create progress dialog with terminal toggle
-            progress_dialog, status_label, progress_bar, terminal_view = self.create_progress_dialog("Installing...")
+            # Create progress dialog
+            progress_dialog, status_label, progress_bar = self.create_progress_dialog("Installing...")
             
             # Track current process and script path
             install_process = None
@@ -2013,13 +1948,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.cancellation_in_progress = True
                 
                 try:
-                    # Stop the command runner if it exists
-                    if hasattr(terminal_view, 'terminal_emulator') and hasattr(terminal_view.terminal_emulator, 'command_runner'):
-                        terminal_view.terminal_emulator.command_runner.cancel()
+
                     
-                    # Add clear message to the terminal
-                    if hasattr(terminal_view, 'terminal_emulator'):
-                        GLib.idle_add(lambda: terminal_view.terminal_emulator.append_text("\n\nCANCELLED: Installation was cancelled by user\n"))
+
                         
                     # Close any open log files
                     if self.logging_active and self.log_file:
@@ -2114,11 +2045,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     return False
                 
                 # Always update terminal view
-                GLib.idle_add(lambda: self.update_terminal(terminal_view, status_text))
-                
-                # Make sure terminal view is shown if setting is enabled
-                if stack and self.get_setting("use_terminal_for_progress", False):
-                    GLib.idle_add(lambda s=stack: s.set_visible_child_name("terminal"))
+                #  # Terminal view removed
                 
                 progress_bar.set_fraction(fraction)
                 progress_bar.set_text(f"{int(fraction * 100)}%")
@@ -2175,8 +2102,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     
                         # Ensure we have at least one line
                         total_lines = max(1, total_lines)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, 
-                              f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
+                        
                     except Exception as e:
                         print(f"Error counting script lines: {e}")
                         # Default to a reasonable number if counting fails
@@ -2259,7 +2185,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.idle_add(update_progress, current_progress, line)
                         
                         # Update terminal
-                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                        
 
                     if install_process.wait() == 0 and not install_cancelled:
                         # Update installation status (95%)
@@ -2442,8 +2368,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         dialog.destroy()
 
         if response == Gtk.ResponseType.YES:
-            # Create progress dialog with terminal functionality
-            progress_dialog, status_label, progress_bar, terminal_view = self.create_progress_dialog(
+            # Create progress dialog
+            progress_dialog, status_label, progress_bar = self.create_progress_dialog(
                 title="Uninstalling...",
                 allow_cancel=True
             )
@@ -2485,13 +2411,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.cancellation_in_progress = True
                 
                 try:
-                    # Stop the command runner if it exists
-                    if hasattr(terminal_view, 'terminal_emulator') and hasattr(terminal_view.terminal_emulator, 'command_runner'):
-                        terminal_view.terminal_emulator.command_runner.cancel()
+
                     
-                    # Add clear message to the terminal
-                    if hasattr(terminal_view, 'terminal_emulator'):
-                        GLib.idle_add(lambda: terminal_view.terminal_emulator.append_text("\n\nCANCELLED: Uninstallation was cancelled by user\n"))
+
                         
                     # Close any open log files
                     if self.logging_active and self.log_file:
@@ -2523,7 +2445,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 
                 if status_text and not status_text.strip('-'):
                     status_label.set_text(status_text)
-                    self.update_terminal(terminal_view, status_text + "\n")
+                    
                 
                 # Get the stack widget from the progress dialog
                 stack = None
@@ -2537,10 +2459,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     print(f"Error accessing dialog content: {e}")
                     return False
                 
-                # Make sure terminal view is shown if setting is enabled
-                if stack and self.get_setting("use_terminal_for_progress", False):
-                    GLib.idle_add(lambda s=stack: s.set_visible_child_name("terminal"))
-                
                 progress_bar.set_fraction(fraction)
                 progress_bar.set_text(f"{int(fraction * 100)}%")
                 return False
@@ -2553,20 +2471,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if not uninstall_url:
                         error_msg = "No uninstall script available for this app!"
                         GLib.idle_add(update_progress, 1.0, error_msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                        
                         time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
                         return
 
                     # Download uninstall script
                     GLib.idle_add(update_progress, 0.1, "Downloading uninstall script...")
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, "Downloading uninstall script...\n"))
+                    
                     script_file = self.download_script(uninstall_url)
                     
                     if not script_file:
                         error_msg = "Failed to download uninstall script!"
                         GLib.idle_add(update_progress, 1.0, error_msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                        
                         time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
                         return
@@ -2575,7 +2493,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     os.chmod(script_file, 0o755)
                     status_msg = "Preparing uninstallation..."
                     GLib.idle_add(update_progress, 0.2, status_msg)
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
+                    
 
                     # Count the number of significant lines in the script to track progress
                     total_lines = 0
@@ -2610,7 +2528,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     
                         # Ensure we have at least one line
                         total_lines = max(1, total_lines)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
+                        
                     except Exception as e:
                         print(f"Error counting script lines: {e}")
                         # Default to a reasonable number if counting fails
@@ -2637,7 +2555,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # Execute script with better progress tracking
                     status_msg = "Starting uninstallation..."
                     GLib.idle_add(update_progress, base_progress, status_msg)
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
+                    
 
                     uninstall_process = subprocess.Popen(
                         [script_file],
@@ -2653,7 +2571,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
                             msg = "Uninstallation cancelled!"
                             GLib.idle_add(update_progress, 1.0, msg)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                            
                             time.sleep(1)
                             GLib.idle_add(progress_dialog.destroy)
                             return
@@ -2686,19 +2604,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.idle_add(update_progress, current_progress, line.strip())
                         
                         # Update terminal
-                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+                        
 
                     uninstall_process.wait()
                     if uninstall_process.returncode == 0 and not uninstall_cancelled:
                         msg = "Finalizing uninstallation..."
                         GLib.idle_add(update_progress, 0.95, msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        
                         
                         # Disable cancel button as uninstallation is almost complete
                         if cancel_button:
                             GLib.idle_add(lambda: cancel_button.set_sensitive(False))
                             GLib.idle_add(lambda: cancel_button.set_tooltip_text("Uninstallation is almost complete and cannot be cancelled"))
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUninstallation is almost complete and cannot be cancelled\n"))
+                            
                         
                         self.installed_apps.remove(app['folder_name'])
                         self.save_installed_apps()
@@ -2707,7 +2625,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
                         msg = "Uninstallation complete!"
                         GLib.idle_add(update_progress, 1.0, msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        
                         
                         # Close log file if logging is active
                         if self.logging_active and self.log_file:
@@ -2724,7 +2642,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     else:
                         msg = "Uninstallation failed!"
                         GLib.idle_add(update_progress, 1.0, msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        
                         
                         # Close log file if logging is active
                         if self.logging_active and self.log_file:
@@ -2744,7 +2662,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     error_msg = f"Uninstallation error: {str(e)}"
                     print(error_msg)
                     GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                    
                     
                     # Close log file if logging is active
                     if self.logging_active and self.log_file:
@@ -3232,197 +3150,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if app.get('app_type') == 'distro':
                 run_cmd = f"pdrun {run_cmd}"
 
-            # Check if we should show command output
-            if self.get_setting("show_command_output", False):
-                self.show_command_output_window(app.get('name', 'Application'), run_cmd)
-            else:
-                # Just run the command
-                subprocess.Popen(['bash', '-c', run_cmd])
+            # Just run the command
+            subprocess.Popen(['bash', '-c', run_cmd])
         except Exception as e:
             self.show_error_dialog(f"Error opening app: {e}")
             
-    def show_command_output_window(self, app_name, run_cmd):
-        """Show a window with the command output using the advanced terminal UI"""
-        # Create dialog
-        dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-        dialog.set_title(f"Running {app_name}")
-        dialog.set_default_size(700, 500)
-        dialog.set_border_width(10)
-        dialog.set_position(Gtk.WindowPosition.CENTER)
-        dialog.set_destroy_with_parent(True)
-        dialog.get_style_context().add_class("command-output-dialog")
-        
-        # Set window icon
-        icon_name = "utilities-terminal"
-        icon_theme = Gtk.IconTheme.get_default()
-        if icon_theme.has_icon(icon_name):
-            dialog.set_icon_name(icon_name)
-            
-        # Create main box
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        dialog.add(main_box)
-        
-        # Create scrolled window for terminal
-        scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled_window.set_hexpand(True)
-        scrolled_window.set_vexpand(True)
-        
-        # Create TextView for terminal output with enhanced styling
-        terminal_view = Gtk.TextView()
-        terminal_view.set_editable(False)
-        terminal_view.set_cursor_visible(False)
-        terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        terminal_view.set_monospace(True)
-        terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
-        terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0.9, 0.9, 0.9, 1))
-        terminal_view.get_style_context().add_class("terminal-view")
-        
-        # Initialize terminal emulator
-        terminal_emulator = TerminalEmulator(terminal_view)
-        
-        scrolled_window.add(terminal_view)
-        main_box.pack_start(scrolled_window, True, True, 0)
-        
-        # Create button box with enhanced styling
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        button_box.set_halign(Gtk.Align.END)
-        button_box.set_margin_top(12)
-        main_box.pack_start(button_box, False, False, 0)
-        
-        # Create clear button
-        clear_button = Gtk.Button()
-        clear_button.set_tooltip_text("Clear terminal output")
-        clear_icon = Gtk.Image.new_from_icon_name("edit-clear-symbolic", Gtk.IconSize.BUTTON)
-        clear_button.set_image(clear_icon)
-        clear_button.get_style_context().add_class("command-output-clear-button")
-        button_box.pack_start(clear_button, False, False, 0)
-        
-        # Create save button with icon
-        save_button = Gtk.Button()
-        save_button.set_tooltip_text("Save terminal output to a file")
-        save_icon = Gtk.Image.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
-        save_button.set_image(save_icon)
-        save_button.get_style_context().add_class("command-output-save-button")
-        button_box.pack_start(save_button, False, False, 0)
-        
-        # Create close button with icon
-        close_button = Gtk.Button()
-        close_button.set_tooltip_text("Close this window")
-        close_icon = Gtk.Image.new_from_icon_name("window-close-symbolic", Gtk.IconSize.BUTTON)
-        close_button.set_image(close_icon)
-        close_button.get_style_context().add_class("command-output-close-button")
-        button_box.pack_start(close_button, False, False, 0)
-        
-        # Initial text
-        terminal_emulator.append_text(f"Starting {app_name}...\n")
-        terminal_emulator.append_text(f"Command: {run_cmd}\n")
-        terminal_emulator.append_text("=" * 50 + "\n")
-        
-        # Show all widgets
-        dialog.show_all()
-        
-        # Function to update the terminal
-        def update_terminal_output(text):
-            terminal_emulator.append_text(text)
-        
-        # Function to save output to file
-        def on_save_clicked(button):
-            text = terminal_emulator.get_text()
-            
-            # Create file chooser dialog
-            file_dialog = Gtk.FileChooserDialog(
-                title="Save Terminal Output",
-                parent=dialog,
-                action=Gtk.FileChooserAction.SAVE
-            )
-            file_dialog.add_buttons(
-                Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                Gtk.STOCK_SAVE, Gtk.ResponseType.OK
-            )
-            
-            # Set default filename and location
-            home_dir = os.path.expanduser("~")
-            file_dialog.set_current_folder(home_dir)
-            file_dialog.set_current_name(f"{app_name.lower().replace(' ', '_')}_output.log")
-            
-            # Add file filters
-            text_filter = Gtk.FileFilter()
-            text_filter.set_name("Text files")
-            text_filter.add_mime_type("text/plain")
-            text_filter.add_pattern("*.txt")
-            text_filter.add_pattern("*.log")
-            file_dialog.add_filter(text_filter)
-            
-            all_filter = Gtk.FileFilter()
-            all_filter.set_name("All files")
-            all_filter.add_pattern("*")
-            file_dialog.add_filter(all_filter)
-            
-            # Show the dialog
-            response = file_dialog.run()
-            if response == Gtk.ResponseType.OK:
-                filename = file_dialog.get_filename()
-                try:
-                    # Save current content
-                    with open(filename, 'w') as f:
-                        # Write the clean text without ANSI codes
-                        f.write(AnsiColorParser().strip_ansi(text))
-                    update_terminal_output(f"\nOutput saved to {filename}\n")
-                except Exception as e:
-                    update_terminal_output(f"\nError saving output: {e}\n")
-            
-            file_dialog.destroy()
-        
-        # Function to clear terminal
-        def on_clear_clicked(button):
-            terminal_emulator.clear()
-            terminal_emulator.append_text(f"Terminal cleared. Command: {run_cmd}\n")
-        
-        # Connect save button click
-        save_button.connect("clicked", on_save_clicked)
-        
-        # Connect clear button
-        clear_button.connect("clicked", on_clear_clicked)
-        
-        # Connect close button
-        close_button.connect("clicked", lambda b: dialog.destroy())
-        
-        # Start process
-        try:
-            # Run the command
-            process = subprocess.Popen(
-                ['bash', '-c', run_cmd],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                bufsize=1
-            )
-            
-            # Function to read output
-            def read_output():
-                for line in iter(process.stdout.readline, ''):
-                    GLib.idle_add(update_terminal_output, line)
-                process.stdout.close()
-                # Add completed message
-                return_code = process.wait()
-                completion_message = f"\n{'=' * 30}\nCommand completed with return code: {return_code}\n"
-                if return_code == 0:
-                    completion_message += "✓ Success\n"
-                else:
-                    completion_message += "✗ Error\n"
-                GLib.idle_add(update_terminal_output, completion_message)
-                return False
-            
-            # Start thread to read output
-            output_thread = threading.Thread(target=read_output)
-            output_thread.daemon = True
-            output_thread.start()
-            
-        except Exception as e:
-            update_terminal_output(f"Error running command: {e}\n")
-        
-        return dialog
 
     def start_task_processor(self):
         """Start the background task processor thread"""
@@ -3528,7 +3260,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         return updates
 
     def create_update_dialog(self, title="Updating...", allow_cancel=True):
-        """Create a dialog for update progress with terminal view"""
+        """Create a simplified dialog for update progress"""
         # Create dialog
         update_dialog = Gtk.Dialog(
             title=title,
@@ -3536,49 +3268,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             modal=True,
             destroy_with_parent=True
         )
-        
-        # Variables for continuous logging are already set at the class level
-        
+
         # Create and set custom header bar
         header_bar = Gtk.HeaderBar()
         header_bar.set_show_close_button(False)
         header_bar.set_title(title)
-        
-        # Add terminal toggle button to header bar
-        terminal_button = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic", Gtk.IconSize.BUTTON)
-        terminal_button.set_tooltip_text("Toggle Terminal View")
-        header_bar.pack_end(terminal_button)
-        
-        # Add save button to header bar
-        save_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
-        save_button.set_tooltip_text("Save Log to File")
-        header_bar.pack_end(save_button)
-        
-        # Add log control button to header bar
-        log_control_button = Gtk.Button.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON)
-        log_control_button.set_tooltip_text("Start Continuous Logging")
-        header_bar.pack_end(log_control_button)
-        
-        # Set the header bar
         update_dialog.set_titlebar(header_bar)
-        
+
         # Add close button if cancellation is allowed
         if allow_cancel:
             cancel_button = update_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
             cancel_button.get_style_context().add_class('destructive-action')
-        
-        # Create stack for switching between progress and terminal views
-        stack = Gtk.Stack()
-        stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        stack.set_transition_duration(150)
-        
+
         # Progress view
         progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         progress_box.set_margin_start(10)
         progress_box.set_margin_end(10)
         progress_box.set_margin_top(10)
         progress_box.set_margin_bottom(10)
-        
+
         # Status label with better text handling
         status_label = Gtk.Label()
         status_label.set_line_wrap(True)
@@ -3586,123 +3294,32 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         status_label.set_justify(Gtk.Justification.LEFT)
         status_label.set_halign(Gtk.Align.START)
         status_label.set_text("Starting update...")
-        
+
         # Create a scrolled window for status label that expands
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.set_size_request(-1, 60)
         scroll.add(status_label)
         progress_box.pack_start(scroll, True, True, 0)
-        
+
         # Progress bar that expands horizontally
         progress_bar = Gtk.ProgressBar()
         progress_bar.set_show_text(True)
         progress_bar.set_size_request(-1, 20)
         progress_box.pack_start(progress_bar, False, True, 0)
-        
-        # Terminal view
-        terminal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        terminal_box.set_margin_start(10)
-        terminal_box.set_margin_end(10)
-        terminal_box.set_margin_top(10)
-        terminal_box.set_margin_bottom(10)
-        
-        terminal_scroll = Gtk.ScrolledWindow()
-        terminal_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        terminal_scroll.set_size_request(400, 150)  # Reduced from 200
-        terminal_scroll.set_vexpand(True)
-        terminal_scroll.set_hexpand(True)
-        
-        # Create terminal view with monospace font
-        terminal_view = Gtk.TextView()
-        terminal_view.set_editable(False)
-        terminal_view.set_cursor_visible(False)
-        terminal_view.set_monospace(True)
-        terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        
-        # Set terminal colors using CSS classes
-        terminal_view.get_style_context().add_class('terminal-view')
-        
-        # Initialize the terminal emulator
-        terminal_emulator = TerminalEmulator(terminal_view)
-        
-        # Add terminal view to scroll window
-        terminal_scroll.add(terminal_view)
-        terminal_box.pack_start(terminal_scroll, True, True, 0)
-        
-        # Add views to stack
-        stack.add_named(progress_box, "progress")
-        stack.add_named(terminal_box, "terminal")
-        stack.set_visible_child_name("progress")
-        
-        # Add stack to dialog's content area with margins
+
+        # Add progress_box directly to content area
         content_area = update_dialog.get_content_area()
-        content_area.add(stack)
-        
+        content_area.add(progress_box)
+
         # Make the dialog resizable and set compact default size
         update_dialog.set_resizable(True)
-        update_dialog.set_default_size(400, 200)  # Reduced from 500x300
-        
-        def toggle_terminal(button):
-            current = stack.get_visible_child_name()
-            stack.set_visible_child_name("terminal" if current == "progress" else "progress")
-            button.set_tooltip_text("Show Progress" if current == "progress" else "Show Terminal")
-        
-        terminal_button.connect("clicked", toggle_terminal)
-        
-        # Function to toggle continuous logging on/off
-        def on_log_control_clicked(button):
-            if self.logging_active:
-                # Stop logging
-                if self.log_file:
-                    try:
-                        self.log_file.write("\n--- Logging stopped manually by user ---\n")
-                        self.log_file.close()
-                    except Exception:
-                        pass
-                    self.log_file = None
-                self.logging_active = False
-                self.log_file_path = None
-                # Update button
-                log_control_button.set_image(Gtk.Image.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON))
-                log_control_button.set_tooltip_text("Start Continuous Logging")
-                self.update_terminal(terminal_view, "\nContinuous logging stopped.\n")
-            else:
-                # Start logging to a new file
-                try:
-                    log_dir = os.path.join(APPSTORE_DIR, "logs")
-                    os.makedirs(log_dir, exist_ok=True)
-                    
-                    timestamp = time.strftime("%Y%m%d-%H%M%S")
-                    self.log_file_path = os.path.join(log_dir, f"continuous_log_{timestamp}.log")
-                    
-                    # Get current terminal content
-                    buf = terminal_view.get_buffer()
-                    start, end = buf.get_bounds()
-                    text = buf.get_text(start, end, False)
-                    
-                    # Start logging with existing content
-                    self.log_file = open(self.log_file_path, 'w')
-                    self.log_file.write(text)
-                    self.log_file.flush()
-                    self.logging_active = True
-                    
-                    # Update button
-                    log_control_button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic", Gtk.IconSize.BUTTON))
-                    log_control_button.set_tooltip_text("Stop Continuous Logging")
-                    self.update_terminal(terminal_view, f"\nContinuous logging started - saving to {self.log_file_path}\n")
-                except Exception as e:
-                    self.update_terminal(terminal_view, f"\nError setting up logging: {e}\n")
-        
-        # Connect buttons
-        terminal_button.connect("clicked", toggle_terminal)
-        save_button.connect("clicked", on_save_log_clicked)
-        log_control_button.connect("clicked", on_log_control_clicked)
-        
+        update_dialog.set_default_size(400, 200)
+
         # Show all widgets
         update_dialog.show_all()
-        
-        return update_dialog, status_label, progress_bar, terminal_view
+
+        return update_dialog, status_label, progress_bar
 
     def on_update_clicked(self, button, app):
         """Handle update button click"""
@@ -3718,8 +3335,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             dialog.destroy()
 
             if response == Gtk.ResponseType.YES:
-                # Create update dialog with terminal functionality
-                update_dialog, status_label, progress_bar, terminal_view = self.create_update_dialog(
+                # Create update dialog
+                update_dialog, status_label, progress_bar = self.create_update_dialog(
                     title=f"Updating {app['app_name']}...",
                     allow_cancel=True
                 )
@@ -3772,7 +3389,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 os.killpg(os.getpgid(update_process.pid), signal.SIGKILL)
                                 
                             terminal_update = "Update cancelled by user. Terminating process..."
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, terminal_update))
+                            
                         except Exception as e:
                             print(f"Error terminating process: {e}")
                     
@@ -3825,11 +3442,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         return False
                     
                     # Always update terminal view
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_text))
                     
-                    # Make sure terminal view is shown if setting is enabled
-                    if stack and self.get_setting("use_terminal_for_progress", False):
-                        GLib.idle_add(lambda s=stack: s.set_visible_child_name("terminal"))
                     
                     # Disable cancel button if installation is near completion (80% or more)
                     if fraction >= 0.8 and cancel_button:
@@ -3837,7 +3450,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if not hasattr(cancel_button, 'tooltip_set'):
                             cancel_button.set_tooltip_text("Update is almost complete and cannot be cancelled")
                             setattr(cancel_button, 'tooltip_set', True)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUpdate is almost complete and cannot be cancelled\n"))
+                            
                     
                     progress_bar.set_fraction(fraction)
                     progress_bar.set_text(f"{int(fraction * 100)}%")
@@ -3892,8 +3505,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         
                             # Ensure we have at least one line
                             total_lines = max(1, total_lines)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, 
-                                  f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
+
                         except Exception as e:
                             print(f"Error counting script lines: {e}")
                             # Default to a reasonable number if counting fails
@@ -3979,7 +3591,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     GLib.idle_add(update_progress, current_progress, progress_message)
                                     
                                     # Also update terminal
-                                    GLib.idle_add(lambda m=progress_message: self.update_terminal(terminal_view, m + "\n"))
+                                    
                                     
                                     # Don't skip processing this line for logging
                                 except Exception as e:
@@ -4011,7 +3623,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             GLib.idle_add(update_progress, current_progress, line)
                             
                             # Update terminal
-                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                            
 
                         update_process.wait()
                         if update_process.returncode == 0 and not update_cancelled:
@@ -5020,65 +4632,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     return None if category == "All Apps" else category
         return None
 
-    def update_terminal(self, terminal_view, text):
-        """Update the terminal view with new text and append to log file if logging is active"""
-        if not text:
-            return
-    
-        # Create a terminal emulator for the text view if it doesn't exist yet
-        if not hasattr(terminal_view, 'terminal_emulator'):
-            # Set terminal styling if not already applied
-            terminal_view.set_monospace(True)
-            terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
-            terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0.9, 0.9, 0.9, 1))
-            terminal_view.get_style_context().add_class('terminal-view')
-            
-            # Initialize the terminal emulator
-            terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
-    
-        # Process and append the text
-        terminal_view.terminal_emulator.append_text(text)
-        
-        # Ensure terminal is scrolled to show the latest content
-        mark = terminal_view.get_buffer().create_mark(None, terminal_view.get_buffer().get_end_iter(), False)
-        GLib.idle_add(lambda: terminal_view.scroll_mark_onscreen(mark) and terminal_view.get_buffer().delete_mark(mark))
-    
-        # Append to log file if continuous logging is active
-        if self.logging_active and self.log_file:
-            try:
-                # Strip ANSI codes when writing to log file
-                clean_text = AnsiColorParser().strip_ansi(text)
-                
-                # Write to log file, ensuring a newline is added if needed
-                if self.log_file.tell() > 0:
-                    # Move to the position before the last character
-                    self.log_file.seek(self.log_file.tell() - 1, 0)
-                    last_char = self.log_file.read(1)
-                    self.log_file.seek(0, 2)  # Move back to the end
-                    
-                    # If the last character isn't a newline and the new text doesn't start with one,
-                    # add a newline before writing
-                    if last_char != '\n' and not clean_text.startswith('\n'):
-                        self.log_file.write('\n')
-                        
-                self.log_file.write(clean_text)
-                self.log_file.flush()  # Ensure it's written immediately
-            except Exception as e:
-                # If there's an error writing to the log file, disable logging
-                try:
-                    error_msg = f"\nError writing to log file: {str(e)}\nLogging disabled.\n"
-                    terminal_view.terminal_emulator.append_text(error_msg)
-                    self.log_file.close()
-                except Exception:
-                    pass
-                self.log_file = None
-                self.logging_active = False
-                self.log_file_path = None
-    
-        return False
 
     def create_progress_dialog(self, title="Installing...", allow_cancel=True):
-        """Create an enhanced progress dialog with advanced terminal integration"""
+        """Create a simplified progress dialog"""
         # Create dialog
         progress_dialog = Gtk.Dialog(
             title=title,
@@ -5086,54 +4642,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             modal=True,
             destroy_with_parent=True
         )
-        
-        # Variables for continuous logging
-        self.log_file_path = None
-        self.logging_active = False
-        self.log_file = None
-        
+
         # Create and set custom header bar
         header_bar = Gtk.HeaderBar()
         header_bar.set_show_close_button(False)
         header_bar.set_title(title)
-        
-        # Add terminal toggle button to header bar with enhanced styling
-        terminal_button = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic", Gtk.IconSize.BUTTON)
-        terminal_button.set_tooltip_text("Toggle Terminal View")
-        terminal_button.get_style_context().add_class("suggested-action")
-        header_bar.pack_end(terminal_button)
-        
-        # Add save button to header bar
-        save_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
-        save_button.set_tooltip_text("Save Log to File")
-        header_bar.pack_end(save_button)
-        
-        # Add log control button to header bar (start/stop logging)
-        log_control_button = Gtk.Button.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON)
-        log_control_button.set_tooltip_text("Start Continuous Logging")
-        log_control_button.get_style_context().add_class("destructive-action")
-        header_bar.pack_end(log_control_button)
-        
-        # Set the header bar
         progress_dialog.set_titlebar(header_bar)
-        
+
         # Add close button if cancellation is allowed
         if allow_cancel:
             cancel_button = progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
             cancel_button.get_style_context().add_class('destructive-action')
-        
-        # Create stack for switching between progress and terminal views
-        stack = Gtk.Stack()
-        stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        stack.set_transition_duration(150)
-        
+
         # Progress view
         progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         progress_box.set_margin_start(10)
         progress_box.set_margin_end(10)
         progress_box.set_margin_top(10)
         progress_box.set_margin_bottom(10)
-        
+
         # Status label with better text handling
         status_label = Gtk.Label()
         status_label.set_line_wrap(True)
@@ -5141,14 +4668,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         status_label.set_justify(Gtk.Justification.LEFT)
         status_label.set_halign(Gtk.Align.START)
         status_label.set_text("Starting...")
-        
+
         # Create a scrolled window for status label that expands
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_size_request(-1, 60)
+        scroll.set_size_request(-1, 60) # Keep a decent height for messages
         scroll.add(status_label)
         progress_box.pack_start(scroll, True, True, 0)
-        
+
         # Progress bar that expands horizontally with enhanced styling
         progress_bar = Gtk.ProgressBar()
         progress_bar.set_show_text(True)
@@ -5161,103 +4688,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 border-radius: 4px;
             }
             progressbar progress {
-                background-color: #3584e4;
+                background-color: #3584e4; /* Default GTK blue */
                 border-radius: 3px;
             }
         """)
         progress_ctx = progress_bar.get_style_context()
         progress_ctx.add_provider(css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         progress_box.pack_start(progress_bar, False, True, 0)
-        
-        # Terminal view with enhanced styling
-        terminal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        terminal_box.set_margin_start(10)
-        terminal_box.set_margin_end(10)
-        terminal_box.set_margin_top(10)
-        terminal_box.set_margin_bottom(10)
-        
-        terminal_scroll = Gtk.ScrolledWindow()
-        terminal_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        terminal_scroll.set_size_request(450, 200)
-        terminal_scroll.set_vexpand(True)
-        terminal_scroll.set_hexpand(True)
-        
-        # Create terminal view with monospace font and better styling
-        terminal_view = Gtk.TextView()
-        terminal_view.set_editable(False)
-        terminal_view.set_cursor_visible(False)
-        terminal_view.set_monospace(True)
-        terminal_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        
-        # Set terminal colors directly
-        terminal_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
-        terminal_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0.9, 0.9, 0.9, 1))
-        terminal_view.get_style_context().add_class('terminal-view')
-        
-        # Initialize the terminal emulator
-        terminal_emulator = TerminalEmulator(terminal_view)
-        
-        # Add terminal view to scroll window
-        terminal_scroll.add(terminal_view)
-        terminal_box.pack_start(terminal_scroll, True, True, 0)
-        
-        # Add enhanced terminal control buttons
-        terminal_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        terminal_button_box.set_halign(Gtk.Align.END)
-        terminal_button_box.set_margin_top(5)
-        
-        # Clear terminal button
-        clear_button = Gtk.Button()
-        clear_icon = Gtk.Image.new_from_icon_name("edit-clear-symbolic", Gtk.IconSize.SMALL_TOOLBAR)
-        clear_button.set_image(clear_icon)
-        clear_button.set_tooltip_text("Clear Terminal")
-        terminal_button_box.pack_end(clear_button, False, False, 0)
-        
-        # Connect clear button
-        clear_button.connect("clicked", lambda b: terminal_emulator.clear())
-        
-        terminal_box.pack_start(terminal_button_box, False, False, 0)
-        
-        # Add views to stack
-        stack.add_named(progress_box, "progress")
-        stack.add_named(terminal_box, "terminal")
-        
-        # Set the initial view based on user preference
-        use_terminal = self.get_setting("use_terminal_for_progress", False)
-        initial_view = "terminal" if use_terminal else "progress"
-        stack.set_visible_child_name(initial_view)
-        
-        # Update button styling based on initial view
-        if use_terminal:
-            terminal_button.get_style_context().remove_class("suggested-action")
-        
-        # Update tooltip based on initial view
-        terminal_button.set_tooltip_text("Show Progress" if use_terminal else "Show Terminal")
-        
-        # Add stack to dialog's content area with margins
+
+        # Add progress_box to dialog's content area
         content_area = progress_dialog.get_content_area()
-        content_area.add(stack)
-        
+        content_area.add(progress_box)
+
         # Make the dialog resizable and set appropriate default size
-        progress_dialog.set_resizable(True)
-        progress_dialog.set_default_size(500, 300)
-        
-        def toggle_terminal(button):
-            """Toggle between progress and terminal views"""
-            current = stack.get_visible_child_name()
-            new_view = "terminal" if current == "progress" else "progress"
-            stack.set_visible_child_name(new_view)
-            
-            # Update button appearance based on active view
-            if new_view == "terminal":
-                button.set_tooltip_text("Show Progress")
-                button.get_style_context().remove_class("suggested-action")
-            else:
-                button.set_tooltip_text("Show Terminal")
-                button.get_style_context().add_class("suggested-action")
-        
-        terminal_button.connect("clicked", toggle_terminal)
-        
+        progress_dialog.set_resizable(True) # Allow resizing for longer messages
+        progress_dialog.set_default_size(450, 150) # Adjusted default size
+
+        # Store references for updating
+        progress_dialog.status_label = status_label
+        progress_dialog.progress_bar = progress_bar
+
         # Show all widgets
         progress_dialog.show_all()
         
@@ -5281,173 +4731,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 else:
                     # Dialog destruction is already being handled elsewhere
                     pass
+
+
         
-        # Function to save log content to file
-        def on_save_log_clicked(button):
-            # Get current log content
-            buf = terminal_view.get_buffer()
-            start, end = buf.get_bounds()
-            text = buf.get_text(start, end, False)
-            if not text.strip():
-                # Show error if terminal is empty
-                self.show_error_dialog("Terminal is empty. Nothing to save.")
-                return
-                
-            # Create file chooser dialog
-            file_dialog = Gtk.FileChooserDialog(
-                title="Save Log",
-                parent=progress_dialog,
-                action=Gtk.FileChooserAction.SAVE
-            )
-            file_dialog.add_buttons(
-                Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                Gtk.STOCK_SAVE, Gtk.ResponseType.OK
-            )
-            
-            # Set default filename with timestamp
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            default_filename = f"{title.lower().replace(' ', '_')}_{timestamp}.log"
-            file_dialog.set_current_name(default_filename)
-            
-            # Add file filters
-            log_filter = Gtk.FileFilter()
-            log_filter.set_name("Log files")
-            log_filter.add_pattern("*.log")
-            file_dialog.add_filter(log_filter)
-            
-            text_filter = Gtk.FileFilter()
-            text_filter.set_name("Text files")
-            text_filter.add_pattern("*.txt")
-            file_dialog.add_filter(text_filter)
-            
-            all_filter = Gtk.FileFilter()
-            all_filter.set_name("All files")
-            all_filter.add_pattern("*")
-            file_dialog.add_filter(all_filter)
-            
-            # Show the dialog
-            response = file_dialog.run()
-            
-            if response == Gtk.ResponseType.OK:
-                filename = file_dialog.get_filename()
-                try:
-                    with open(filename, 'w') as f:
-                        clean_text = AnsiColorParser().strip_ansi(text)
-                        f.write(clean_text)
-                    
-                    # Show a confirmation in the terminal
-                    terminal_emulator.append_text(f"\nLog saved to: {filename}\n")
-                    
-                    # Also add progress label confirmation
-                    current_text = status_label.get_text()
-                    status_label.set_text(f"{current_text}\nLog saved to: {filename}")
-                except Exception as e:
-                    error_msg = f"Error saving log: {str(e)}"
-                    terminal_emulator.append_text(f"\n{error_msg}\n")
-                    self.show_error_dialog(error_msg)
-            
-            file_dialog.destroy()
-            
-        # Connect the save button
-        save_button.connect("clicked", on_save_log_clicked)
-        
-        # Function to handle log control (start/stop logging)
-        def on_log_control_clicked(button):
-            if self.logging_active and self.log_file:
-                # Stop logging
-                try:
-                    self.log_file.write("\n--- Logging stopped ---\n")
-                    self.log_file.close()
-                except Exception:
-                    pass
-                self.log_file = None
-                self.logging_active = False
-                
-                # Update button appearance
-                button.set_tooltip_text("Start Continuous Logging")
-                button.set_image(Gtk.Image.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON))
-                button.get_style_context().add_class("destructive-action")
-                button.get_style_context().remove_class("suggested-action")
-                
-                # Notify in terminal
-                terminal_emulator.append_text("\n--- Continuous logging stopped ---\n")
-            else:
-                # Start logging - create file chooser dialog
-                file_dialog = Gtk.FileChooserDialog(
-                    title="Save Continuous Log",
-                    parent=progress_dialog,
-                    action=Gtk.FileChooserAction.SAVE
-                )
-                file_dialog.add_buttons(
-                    Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                    Gtk.STOCK_SAVE, Gtk.ResponseType.OK
-                )
-                
-                # Set default filename with timestamp
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                default_filename = f"{title.lower().replace(' ', '_')}_{timestamp}_continuous.log"
-                file_dialog.set_current_name(default_filename)
-                
-                # Add file filters
-                log_filter = Gtk.FileFilter()
-                log_filter.set_name("Log files")
-                log_filter.add_pattern("*.log")
-                file_dialog.add_filter(log_filter)
-                
-                # Show the dialog
-                response = file_dialog.run()
-                
-                if response == Gtk.ResponseType.OK:
-                    filename = file_dialog.get_filename()
-                    try:
-                        # Open log file for writing
-                        self.log_file = open(filename, 'w')
-                        self.log_file_path = filename
-                        self.logging_active = True
-                        
-                        # Write header
-                        current_time = time.strftime("%Y-%m-%d %H:%M:%S")
-                        self.log_file.write(f"--- Continuous logging started: {current_time} ---\n")
-                        
-                        # Get current terminal content and write to log
-                        terminal_text = terminal_emulator.get_text()
-                        if terminal_text:
-                            clean_text = AnsiColorParser().strip_ansi(terminal_text)
-                            self.log_file.write("--- Existing terminal content ---\n")
-                            self.log_file.write(clean_text)
-                            self.log_file.write("\n--- New log entries follow ---\n")
-                            self.log_file.flush()
-                        
-                        # Update button appearance
-                        button.set_tooltip_text("Stop Continuous Logging")
-                        button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic", Gtk.IconSize.BUTTON))
-                        button.get_style_context().remove_class("destructive-action")
-                        button.get_style_context().add_class("suggested-action")
-                        
-                        # Notify in terminal
-                        terminal_emulator.append_text(f"\n--- Continuous logging started to: {filename} ---\n")
-                    except Exception as e:
-                        error_msg = f"Error starting continuous logging: {str(e)}"
-                        terminal_emulator.append_text(f"\n{error_msg}\n")
-                        self.show_error_dialog(error_msg)
-                        
-                        # Reset logging state
-                        if self.log_file:
-                            try:
-                                self.log_file.close()
-                            except Exception:
-                                pass
-                        self.log_file = None
-                        self.logging_active = False
-                        self.log_file_path = None
-                
-                file_dialog.destroy()
-        
-        # Connect the log control button
-        log_control_button.connect("clicked", on_log_control_clicked)
-        
-        # Return dialog, status label, progress bar, and terminal view
-        return progress_dialog, status_label, progress_bar, terminal_view
+        # Return dialog, status label, and progress bar
+        return progress_dialog, status_label, progress_bar
 
     def ensure_correct_update_button_visibility(self):
         """Ensure update button is only visible on updates tab"""
@@ -5563,14 +4851,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 with open(SETTINGS_FILE, 'r') as f:
                     self.settings = json.load(f)
                     # Add any keys that might be missing in old settings files
-                    if "use_terminal_for_progress" not in self.settings:
-                        self.settings["use_terminal_for_progress"] = False
                     if "enable_auto_refresh" not in self.settings:
                         self.settings["enable_auto_refresh"] = True
                     if "last_category" not in self.settings:
                         self.settings["last_category"] = "All Apps"
-                    if "show_command_output" not in self.settings:
-                        self.settings["show_command_output"] = False
                     if "enable_fuzzy_search" not in self.settings:
                         self.settings["enable_fuzzy_search"] = False
                     # Save the updated settings
@@ -5578,10 +4862,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             else:
                 # Create default settings
                 self.settings = {
-                    "use_terminal_for_progress": False,
                     "enable_auto_refresh": True,
                     "last_category": "All Apps",
-                    "show_command_output": False,
                     "enable_fuzzy_search": False
                     # Add more default settings as needed
                 }
@@ -5592,10 +4874,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             print(f"Error loading settings: {e}")
             # Fallback to default settings
             self.settings = {
-                "use_terminal_for_progress": False,
                 "enable_auto_refresh": True,
                 "last_category": "All Apps",
-                "show_command_output": False,
                 "enable_fuzzy_search": False
             }
     
@@ -5798,277 +5078,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error checking distro app installation by path: {e}")
             return False
-
-class AnsiColorParser:
-    """Class to parse ANSI escape sequences and apply formatting to a GTK TextView"""
-    
-    # ANSI escape sequence regex
-    ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[((?:\d+;)*\d+)?([A-Za-z])')
-    
-    # Basic ANSI color codes
-    COLORS = {
-        # Foreground colors
-        '30': (0.0, 0.0, 0.0),      # Black
-        '31': (0.8, 0.0, 0.0),      # Red
-        '32': (0.0, 0.8, 0.0),      # Green
-        '33': (0.8, 0.8, 0.0),      # Yellow
-        '34': (0.0, 0.0, 0.8),      # Blue
-        '35': (0.8, 0.0, 0.8),      # Magenta
-        '36': (0.0, 0.8, 0.8),      # Cyan
-        '37': (0.8, 0.8, 0.8),      # White
-        '90': (0.5, 0.5, 0.5),      # Bright Black (Gray)
-        '91': (1.0, 0.0, 0.0),      # Bright Red
-        '92': (0.0, 1.0, 0.0),      # Bright Green
-        '93': (1.0, 1.0, 0.0),      # Bright Yellow
-        '94': (0.0, 0.0, 1.0),      # Bright Blue
-        '95': (1.0, 0.0, 1.0),      # Bright Magenta
-        '96': (0.0, 1.0, 1.0),      # Bright Cyan
-        '97': (1.0, 1.0, 1.0),      # Bright White
-        # Background colors
-        '40': (0.0, 0.0, 0.0),      # Black
-        '41': (0.8, 0.0, 0.0),      # Red
-        '42': (0.0, 0.8, 0.0),      # Green
-        '43': (0.8, 0.8, 0.0),      # Yellow
-        '44': (0.0, 0.0, 0.8),      # Blue
-        '45': (0.8, 0.0, 0.8),      # Magenta
-        '46': (0.0, 0.8, 0.8),      # Cyan
-        '47': (0.8, 0.8, 0.8),      # White
-        '100': (0.5, 0.5, 0.5),     # Bright Black (Gray)
-        '101': (1.0, 0.0, 0.0),     # Bright Red
-        '102': (0.0, 1.0, 0.0),     # Bright Green
-        '103': (1.0, 1.0, 0.0),     # Bright Yellow
-        '104': (0.0, 0.0, 1.0),     # Bright Blue
-        '105': (1.0, 0.0, 1.0),     # Bright Magenta
-        '106': (0.0, 1.0, 1.0),     # Bright Cyan
-        '107': (1.0, 1.0, 1.0),     # Bright White
-    }
-    
-    # Text attributes
-    ATTRIBUTES = {
-        '0': 'reset',        # Reset all attributes
-        '1': 'bold',         # Bold or increased intensity
-        '2': 'dim',          # Dim or decreased intensity
-        '3': 'italic',       # Italic
-        '4': 'underline',    # Underline
-        '5': 'blink',        # Blink (not widely supported)
-        '7': 'reverse',      # Reverse (swap fg and bg colors)
-        '9': 'strikethrough' # Strikethrough
-    }
-    
-    def __init__(self):
-        # Initialize tag table for the TextView buffer
-        self.tags = {}
-    
-    def ensure_tag(self, buffer, tag_name, properties):
-        """Ensure a tag exists in the buffer with the specified properties"""
-        if tag_name not in self.tags:
-            tag = buffer.create_tag(tag_name)
-            for prop, value in properties.items():
-                tag.set_property(prop, value)
-            self.tags[tag_name] = tag
-        return self.tags[tag_name]
-    
-    def apply_formatting(self, buffer, text):
-        """Parse text with ANSI escape sequences and insert into buffer with appropriate formatting"""
-        end_iter = buffer.get_end_iter()
-        cursor_pos = 0
-        
-        # Current formatting state
-        fg_color = None
-        bg_color = None
-        bold = False
-        italic = False
-        underline = False
-        
-        # Process the text and find ANSI escape sequences
-        for match in self.ANSI_ESCAPE_PATTERN.finditer(text):
-            # Insert the text before the escape sequence
-            start_pos = match.start()
-            if start_pos > cursor_pos:
-                plain_text = text[cursor_pos:start_pos]
-                # Apply current formatting to plain text
-                tags = []
-                
-                # Create and apply color tags
-                if fg_color:
-                    fg_tag_name = f"fg_{fg_color[0]}_{fg_color[1]}_{fg_color[2]}"
-                    fg_tag = self.ensure_tag(buffer, fg_tag_name, {
-                        "foreground-rgba": Gdk.RGBA(*fg_color, 1.0)
-                    })
-                    tags.append(fg_tag)
-                
-                if bg_color:
-                    bg_tag_name = f"bg_{bg_color[0]}_{bg_color[1]}_{bg_color[2]}"
-                    bg_tag = self.ensure_tag(buffer, bg_tag_name, {
-                        "background-rgba": Gdk.RGBA(*bg_color, 1.0)
-                    })
-                    tags.append(bg_tag)
-                
-                # Apply text attribute tags
-                if bold:
-                    bold_tag = self.ensure_tag(buffer, "bold", {"weight": Pango.Weight.BOLD})
-                    tags.append(bold_tag)
-                
-                if italic:
-                    italic_tag = self.ensure_tag(buffer, "italic", {"style": Pango.Style.ITALIC})
-                    tags.append(italic_tag)
-                
-                if underline:
-                    underline_tag = self.ensure_tag(buffer, "underline", 
-                                                   {"underline": Pango.Underline.SINGLE})
-                    tags.append(underline_tag)
-                
-                # Insert text with all applicable tags
-                start_mark = buffer.create_mark(None, end_iter, True)
-                buffer.insert(end_iter, plain_text)
-                for tag in tags:
-                    start_iter = buffer.get_iter_at_mark(start_mark)
-                    buffer.apply_tag(tag, start_iter, end_iter)
-                buffer.delete_mark(start_mark)
-            
-            # Process the escape sequence
-            params = match.group(1)
-            command = match.group(2)
-            
-            if command == 'm' and params:  # SGR (Select Graphic Rendition)
-                for param in params.split(';'):
-                    if not param:
-                        continue
-                        
-                    # Reset all attributes
-                    if param == '0':
-                        fg_color = None
-                        bg_color = None
-                        bold = False
-                        italic = False
-                        underline = False
-                    
-                    # Process text attributes
-                    elif param in self.ATTRIBUTES:
-                        attr = self.ATTRIBUTES[param]
-                        if attr == 'bold':
-                            bold = True
-                        elif attr == 'italic':
-                            italic = True
-                        elif attr == 'underline':
-                            underline = True
-                    
-                    # Process foreground colors
-                    elif param in self.COLORS and int(param) < 40:
-                        fg_color = self.COLORS[param]
-                    
-                    # Process background colors
-                    elif param in self.COLORS and int(param) >= 40:
-                        bg_color = self.COLORS[param]
-            
-            # Update cursor position
-            cursor_pos = match.end()
-        
-        # Insert any remaining text
-        if cursor_pos < len(text):
-            remaining_text = text[cursor_pos:]
-            # Apply current formatting to remaining text
-            tags = []
-            
-            # Create and apply color tags
-            if fg_color:
-                fg_tag_name = f"fg_{fg_color[0]}_{fg_color[1]}_{fg_color[2]}"
-                fg_tag = self.ensure_tag(buffer, fg_tag_name, {
-                    "foreground-rgba": Gdk.RGBA(*fg_color, 1.0)
-                })
-                tags.append(fg_tag)
-            
-            if bg_color:
-                bg_tag_name = f"bg_{bg_color[0]}_{bg_color[1]}_{bg_color[2]}"
-                bg_tag = self.ensure_tag(buffer, bg_tag_name, {
-                    "background-rgba": Gdk.RGBA(*bg_color, 1.0)
-                })
-                tags.append(bg_tag)
-            
-            # Apply text attribute tags
-            if bold:
-                bold_tag = self.ensure_tag(buffer, "bold", {"weight": Pango.Weight.BOLD})
-                tags.append(bold_tag)
-            
-            if italic:
-                italic_tag = self.ensure_tag(buffer, "italic", {"style": Pango.Style.ITALIC})
-                tags.append(italic_tag)
-            
-            if underline:
-                underline_tag = self.ensure_tag(buffer, "underline", 
-                                               {"underline": Pango.Underline.SINGLE})
-                tags.append(underline_tag)
-            
-            # Insert text with all applicable tags
-            start_mark = buffer.create_mark(None, end_iter, True)
-            buffer.insert(end_iter, remaining_text)
-            for tag in tags:
-                start_iter = buffer.get_iter_at_mark(start_mark)
-                buffer.apply_tag(tag, start_iter, end_iter)
-            buffer.delete_mark(start_mark)
-    
-    def strip_ansi(self, text):
-        """Remove ANSI escape sequences from text"""
-        return self.ANSI_ESCAPE_PATTERN.sub('', text)
-
-class TerminalEmulator:
-    """Emulates a terminal in a GTK TextView"""
-    
-    def __init__(self, text_view):
-        self.text_view = text_view
-        self.buffer = text_view.get_buffer()
-        self.ansi_parser = AnsiColorParser()
-        
-        # Ensure monospace font for terminal-like appearance
-        self.text_view.set_monospace(True)
-        
-        # Set initial terminal colors
-        self.text_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
-        self.text_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
-        
-        # Add terminal view style class
-        self.text_view.get_style_context().add_class("terminal-view")
-    
-    def append_text(self, text, with_ansi=True):
-        """Append text to the terminal view, processing ANSI escape sequences if with_ansi is True"""
-        if not text:
-            return
-            
-        # Check if we need to add a newline before the new text
-        if self.buffer.get_char_count() > 0:
-            # Get the last character in the buffer
-            end_iter = self.buffer.get_end_iter()
-            start_iter = end_iter.copy()
-            if start_iter.backward_char():  # This returns False if we can't move back (empty buffer)
-                last_char = self.buffer.get_text(start_iter, end_iter, False)
-                
-                # If the last character isn't a newline and the new text doesn't start with one,
-                # add a newline before the new text
-                if last_char != '\n' and not text.startswith('\n'):
-                    # Insert a newline first
-                    self.buffer.insert(end_iter, '\n')
-            
-        # Process text with ANSI escape sequences
-        if with_ansi:
-            self.ansi_parser.apply_formatting(self.buffer, text)
-        else:
-            # Just append the text without processing
-            end_iter = self.buffer.get_end_iter()
-            self.buffer.insert(end_iter, text)
-        
-        # Scroll to the end
-        mark = self.buffer.create_mark(None, self.buffer.get_end_iter(), False)
-        self.text_view.scroll_mark_onscreen(mark)
-        self.buffer.delete_mark(mark)
-    
-    def clear(self):
-        """Clear the terminal view"""
-        self.buffer.delete(self.buffer.get_start_iter(), self.buffer.get_end_iter())
-    
-    def get_text(self):
-        """Get the terminal contents"""
-        start_iter, end_iter = self.buffer.get_bounds()
-        return self.buffer.get_text(start_iter, end_iter, False)
 
 def main():
     app = AppStoreApplication()

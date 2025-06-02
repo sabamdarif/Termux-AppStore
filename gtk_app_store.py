@@ -1916,28 +1916,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             install_cancelled = False
             script_file = None
             
-            # Get cancel button using the dialog's action area
-            cancel_button = None
-            # Modern approach to find buttons in a dialog
-            for widget in progress_dialog.get_content_area().get_children():
-                if isinstance(widget, Gtk.ButtonBox):
-                    for button in widget.get_children():
-                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                            cancel_button = button
-                            break
-                    if cancel_button:
-                        break
-            
-            # Fallback to old method if not found
-            if not cancel_button:
-                try:
-                    for button in progress_dialog.get_action_area().get_children():
-                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                            cancel_button = button
-                            break
-                except (AttributeError, TypeError):
-                    # get_action_area is deprecated, so it might not be available
-                    pass
+            # Get cancel button
+            cancel_button = progress_dialog.get_widget_for_response(Gtk.ResponseType.CANCEL)
 
             def on_cancel_clicked(*args):
                 """Handle cancel button click"""
@@ -2379,28 +2359,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             uninstall_cancelled = False
             script_file = None
             
-            # Get cancel button using the dialog's action area
-            cancel_button = None
-            # Modern approach to find buttons in a dialog
-            for widget in progress_dialog.get_content_area().get_children():
-                if isinstance(widget, Gtk.ButtonBox):
-                    for button in widget.get_children():
-                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                            cancel_button = button
-                            break
-                    if cancel_button:
-                        break
-            
-            # Fallback to old method if not found
-            if not cancel_button:
-                try:
-                    for button in progress_dialog.get_action_area().get_children():
-                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                            cancel_button = button
-                            break
-                except (AttributeError, TypeError):
-                    # get_action_area is deprecated, so it might not be available
-                    pass
+            # Get cancel button
+            cancel_button = progress_dialog.get_widget_for_response(Gtk.ResponseType.CANCEL)
 
             def on_cancel_clicked(*args):
                 """Handle cancel button click"""
@@ -3346,28 +3306,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 update_cancelled = False
                 script_file = None
                 
-                # Get cancel button using the dialog's action area
-                cancel_button = None
-                # Modern approach to find buttons in a dialog
-                for widget in update_dialog.get_content_area().get_children():
-                    if isinstance(widget, Gtk.ButtonBox):
-                        for button in widget.get_children():
-                            if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                                cancel_button = button
-                                break
-                        if cancel_button:
-                            break
-                
-                # Fallback to old method if not found
-                if not cancel_button:
-                    try:
-                        for button in update_dialog.get_action_area().get_children():
-                            if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
-                                cancel_button = button
-                                break
-                    except (AttributeError, TypeError):
-                        # get_action_area is deprecated, so it might not be available
-                        pass
+                # Get cancel button
+                cancel_button = update_dialog.get_widget_for_response(Gtk.ResponseType.CANCEL)
 
                 def on_cancel_clicked(*args):
                     nonlocal update_process, update_cancelled, update_dialog, script_file
@@ -4054,6 +3994,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 # Now compare versions and update pending_updates
                 print("\n=== Comparing Versions ===")
+                self.pending_updates.clear()
+                print("Cleared pending updates before new check.")
                 for app in new_apps_data:
                     print(f"\nChecking app: {app['app_name']}")
                     print(f"Is installed? {app['folder_name'] in self.installed_apps}")

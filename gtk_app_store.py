@@ -25,14 +25,21 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Type checking imports for pyright
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+# Tell pyright that these modules exist
+# pyright: reportMissingImports=false
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
 from PIL import Image
 
 # Fuzzy search libraries
 try:
+    # pyright: reportMissingImports=false
     from fuzzywuzzy import fuzz, process
 except ImportError:
     try:
+        # pyright: reportMissingImports=false
         from thefuzz import fuzz, process
     except ImportError:
         print(
@@ -137,6 +144,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             False  # Add flag to prevent multiple connectivity dialogs
         )
         self.cancellation_in_progress = False  # Add flag to track dialog cancellation
+
+        # Initialize variables that might be used before assignment
+        self.install_process = None
+        self.script_file = None
+        self.script_path = None
+        self.uninstall_process = None
+        self.update_process = None
+        self.process = None
 
         # Initialize search variables
         self.search_timeout_id = None
@@ -2442,7 +2457,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             GLib.idle_add(progress_dialog.destroy)
                             return
 
-                        line = install_process.stdout.readline()
+                        line = (
+                            install_process.stdout.readline()
+                            if install_process and install_process.stdout
+                            else None
+                        )
                         if not line and install_process.poll() is not None:
                             break
 
@@ -2868,15 +2887,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         preexec_fn=os.setsid,
                     )
 
-                    for line in uninstall_process.stdout:
-                        if uninstall_cancelled:
-                            os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
-                            msg = "Uninstallation cancelled!"
-                            GLib.idle_add(update_progress, 1.0, msg)
+                    if uninstall_process and uninstall_process.stdout:
+                        for line in uninstall_process.stdout:
+                            if uninstall_cancelled:
+                                os.killpg(
+                                    os.getpgid(uninstall_process.pid), signal.SIGTERM
+                                )
+                                msg = "Uninstallation cancelled!"
+                                GLib.idle_add(update_progress, 1.0, msg)
 
-                            time.sleep(1)
-                            GLib.idle_add(progress_dialog.destroy)
-                            return
+                                time.sleep(1)
+                                GLib.idle_add(progress_dialog.destroy)
+                                return
 
                         # Update current line
                         current_line += 1
@@ -3922,7 +3944,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 GLib.idle_add(update_dialog.destroy)
                                 return
 
-                            line = update_process.stdout.readline()
+                            line = (
+                                update_process.stdout.readline()
+                                if update_process and update_process.stdout
+                                else None
+                            )
                             if not line and update_process.poll() is not None:
                                 break
 
@@ -4232,9 +4258,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         universal_newlines=True,
                     )
 
-                    for line in process.stdout:
-                        print(line.strip())
-                    process.wait()
+                    if process and process.stdout:
+                        for line in process.stdout:
+                            print(line.strip())
+                    if process:
+                        process.wait()
 
                 # Check and update distro repositories if available
                 print("\n=== Checking Distro Repositories ===")
@@ -4312,9 +4340,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                             )
 
                                             # Read and display the output from the distro update command
-                                            for line in update_process.stdout:
-                                                print(line.strip())
-                                                # Log update output if logging is active
+                                            if update_process and update_process.stdout:
+                                                for line in update_process.stdout:
+                                                    print(line.strip())
+                                                    # Log update output if logging is active
                                                 if (
                                                     self.logging_active
                                                     and self.log_file

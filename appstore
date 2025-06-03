@@ -139,7 +139,6 @@ install_appstore() {
     check_and_create_directory "$APP_DIR"
 
     download_file "$APP_DIR/gtk_app_store.py" "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/gtk_app_store.py"
-    download_file "$APP_DIR/terminal_emulator.py" "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/terminal_emulator.py"
     download_file "$APP_DIR/requirements.txt" "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/requirements.txt"
 
     check_and_create_directory "$APP_DIR/inbuild_functions"
@@ -148,7 +147,6 @@ install_appstore() {
 
     check_and_create_directory "$APP_DIR/style"
     download_file "$APP_DIR/style/style.css" "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/style/style.css"
-    download_file "$APP_DIR/style/terminal_style.css" "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/style/terminal_style.css"
 
     download_file "$PREFIX/share/applications/org.sabamdarif.termux.appstore.desktop" "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/org.sabamdarif.termux.appstore.desktop"
     if [[ ! -f "$PREFIX/bin/appstore" ]]; then
@@ -168,14 +166,12 @@ update_appstore() {
         exit 1
     fi
 
-    # Map of local paths to GitHub file paths
+    # Map of local paths to actual file name (on github)
     declare -A file_map=(
         ["$APP_DIR/gtk_app_store.py"]="gtk_app_store.py"
-        ["$APP_DIR/terminal_emulator.py"]="terminal_emulator.py"
         ["$APP_DIR/inbuild_functions/inbuild_functions"]="inbuild_functions/inbuild_functions"
         ["$APP_DIR/requirements.txt"]="requirements.txt"
         ["$APP_DIR/style/style.css"]="style/style.css"
-        ["$APP_DIR/style/terminal_style.css"]="style/terminal_style.css"
         ["$PREFIX/bin/appstore"]="appstore"
         ["$PREFIX/share/applications/org.sabamdarif.termux.appstore.desktop"]="org.sabamdarif.termux.appstore.desktop"
     )
@@ -232,7 +228,6 @@ remove_appstore() {
     exit 0
 }
 
-# --- handle CLI args ---
 while [[ $# -gt 0 ]]; do
     case $1 in
     -i | --install) install_appstore ;;
@@ -246,27 +241,21 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# --- pre-launch checks ---
-# 1) python3
 if ! command -v python3 &>/dev/null; then
     show_notification "Error: Python 3 is not installed. Please install with 'pkg install python'."
     exit 1
 fi
 
-# 2) pip
 if ! command -v pip &>/dev/null; then
     show_notification "Error: pip is not installed. Please install with 'pkg install python-pip'."
     exit 1
 fi
 
-# 3) file-existence check (all downloaded assets)
 required_files=(
     "$APP_DIR/gtk_app_store.py"
-    "$APP_DIR/terminal_emulator.py"
     "$REQUIREMENTS_FILE"
     "$APP_DIR/inbuild_functions/inbuild_functions"
     "$APP_DIR/style/style.css"
-    "$APP_DIR/style/terminal_style.css"
     "$PREFIX/share/applications/org.sabamdarif.termux.appstore.desktop"
 )
 
@@ -283,7 +272,6 @@ Please reinstall: appstore --install"
     exit 1
 fi
 
-# 4) Python-package dependencies
 declare -A PACKAGE_IMPORTS=(
     [Pillow]=PIL [PyYAML]=yaml [requests]=requests
     [urllib3]=urllib3 [fuzzywuzzy]=fuzzywuzzy [thefuzz]=thefuzz
@@ -311,7 +299,6 @@ if [[ -n "$MISSING_DEPS" ]]; then
     exit 1
 fi
 
-# All clear, launch
 echo "All checks passed, launching App Store..."
 python3 "$APP_SCRIPT"
 exit $?

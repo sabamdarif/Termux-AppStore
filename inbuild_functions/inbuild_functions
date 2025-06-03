@@ -96,29 +96,29 @@ function download_file() {
     local max_retries=5
     local attempt=1
 
-    echo "PROGRESS:0:Checking dependencies for download"
+    echo "Checking dependencies for download"
     if ! command -v aria2c &>/dev/null; then
-        echo "PROGRESS:5:Installing aria2 for download capability"
+        echo "Installing aria2 for download capability"
         package_install_and_check "aria2"
     fi
-    echo "PROGRESS:10:Preparing for download"
+    echo "Preparing for download"
     check_and_delete "$file_name"
 
     while ((attempt <= max_retries)); do
-        echo "PROGRESS:$((10 + (attempt - 1) * 10)):Downloading $file_name (Attempt $attempt/$max_retries)"
+        echo "Downloading $file_name (Attempt $attempt/$max_retries)"
 
         # Use aria2c with console log level info for basic progress info
-        if aria2c --summary-interval=10 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" \
+        if aria2c -x10 --retry-wait=5 --max-tries=5 --dir="./" \
             "$url" && [[ -f "$file_name" && -s "$file_name" ]]; then
 
-            echo "PROGRESS:95:Verifying download: $file_name"
+            echo "Verifying download: $file_name"
             print_success "Download completed: $file_name"
-            echo "PROGRESS:100:Download successful: $file_name"
+            echo "Download successful: $file_name"
             return 0
         fi
 
         print_warn "Download failed, attempt $attempt of $max_retries."
-        echo "PROGRESS:$((10 + attempt * 10)):Retrying download after failure (Attempt $attempt)"
+        echo "Retrying download after failure (Attempt $attempt)"
         sleep 2
         ((attempt++))
     done
@@ -132,7 +132,7 @@ function extract() {
     local max_retries=5
     local attempt=1
 
-    echo "PROGRESS:0:Preparing to extract $archive"
+    echo "Preparing to extract $archive"
 
     while ((attempt <= max_retries)); do
         if [[ ! -f "$archive" ]]; then
@@ -141,54 +141,54 @@ function extract() {
 
         local dir_arg=""
         if [[ -n "$output_dir" ]]; then
-            echo "PROGRESS:5:Creating output directory: $output_dir"
+            echo "Creating output directory: $output_dir"
             check_and_create_directory "$output_dir"
             dir_arg="-C $output_dir"
         fi
 
-        echo "PROGRESS:10:Extracting $(basename "$archive") (Attempt $attempt/$max_retries)"
+        echo "Extracting $(basename "$archive") (Attempt $attempt/$max_retries)"
 
         case "$archive" in
         *.tar.gz | *.tgz)
-            echo "PROGRESS:30:Extracting tar.gz archive"
+            echo "Extracting tar.gz archive"
             if tar xvzf "$archive" $dir_arg --no-same-owner -h; then
-                echo "PROGRESS:90:Finalizing extraction"
+                echo "Finalizing extraction"
                 break
             fi
             ;;
         *.tar.xz)
-            echo "PROGRESS:30:Extracting tar.xz archive"
+            echo "Extracting tar.xz archive"
             if tar xvJf "$archive" $dir_arg --no-same-owner -h; then
-                echo "PROGRESS:90:Finalizing extraction"
+                echo "Finalizing extraction"
                 break
             fi
             ;;
         *.tar.bz2 | *.tbz2)
-            echo "PROGRESS:30:Extracting tar.bz2 archive"
+            echo "Extracting tar.bz2 archive"
             if tar xvjf "$archive" $dir_arg --no-same-owner -h; then
-                echo "PROGRESS:90:Finalizing extraction"
+                echo "Finalizing extraction"
                 break
             fi
             ;;
         *.tar)
-            echo "PROGRESS:30:Extracting tar archive"
+            echo "Extracting tar archive"
             if tar xvf "$archive" $dir_arg --no-same-owner -h; then
-                echo "PROGRESS:90:Finalizing extraction"
+                echo "Finalizing extraction"
                 break
             fi
             ;;
         *.bz2)
-            echo "PROGRESS:30:Extracting bz2 file"
+            echo "Extracting bz2 file"
             if [[ -n "$output_dir" ]]; then
-                echo "PROGRESS:60:Decompressing to target directory"
+                echo "Decompressing to target directory"
                 if bunzip2 -c "$archive" >"$output_dir/$(basename "${archive%.bz2}")"; then
-                    echo "PROGRESS:90:Finalizing bz2 extraction"
+                    echo "Finalizing bz2 extraction"
                     break
                 fi
             else
-                echo "PROGRESS:60:Decompressing in current directory"
+                echo "Decompressing in current directory"
                 if bunzip2 "$archive"; then
-                    echo "PROGRESS:90:Finalizing bz2 extraction"
+                    echo "Finalizing bz2 extraction"
                     break
                 fi
             fi
@@ -316,205 +316,183 @@ function detact_package_manager() {
     fi
 }
 
-# will check if the package is already installed or not, if it installed then it will reinstall it and at the end it will print success/failed message
-function package_install_and_check() {
-    local max_retries=3
-    local attempt=1
-    local packs_list=($@)
-    local total_packages=${#packs_list[@]}
-    local current_package=0
-
-    # Show total packages count
-    echo "PROGRESS:0:Starting installation of $total_packages packages"
-
-    for package_name in "${packs_list[@]}"; do
-        ((current_package++))
-        local percent=$(((current_package - 1) * 100 / total_packages))
-        echo "PROGRESS:$percent:Processing package: $package_name ($current_package of $total_packages)"
-        attempt=1
-
-        # For APT systems, run dpkg --configure -a before attempting the install
-        if [[ "$PACKAGE_MANAGER" != "pacman" ]]; then
-            echo "Checking and fixing any corrupted installations..."
-            check_and_delete "$PREFIX/var/lib/dpkg/lock-frontend"
-            check_and_delete "$PREFIX/var/lib/dpkg/lock"
-            dpkg --configure -a
-        fi
-
-        while ((attempt <= max_retries)); do
-            if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-                # Check if package is already installed
-                if pacman -Qi "$package_name" >/dev/null 2>&1; then
-                    echo "PROGRESS:$percent:Package $package_name already installed"
-                    break
-                fi
-
-                if [[ $package_name == *"*"* ]]; then
-                    echo "Processing wildcard pattern: $package_name"
-                    packages=$(pacman -Ssq "${package_name%*}" 2>/dev/null)
-                    local matched_count=$(echo "$packages" | wc -w)
-                    local current_matched=0
-
-                    for pkgs in $packages; do
-                        ((current_matched++))
-                        local sub_percent=$((percent + (current_matched * 100 / matched_count / total_packages)))
-                        echo "PROGRESS:$sub_percent:Installing matched package: $pkgs ($current_matched of $matched_count)"
-                        if pacman -Sy --noconfirm --overwrite '*' "$pkgs"; then
-                            print_success "$pkgs installed successfully"
+# will check if the package is already installed or not, if it installed then reinstall and print success/failed message
+function package_install_and_check {
+    log_debug "Starting package installation for: $*"
+    packs_list=($@)
+    # pacman part
+    if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+        for package_name in "${packs_list[@]}"; do
+            retry_count=0
+            max_retries=5
+            install_success=false
+            while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+                retry_count=$((retry_count + 1))
+                check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+                if [[ "$package_name" == *"*"* ]]; then
+                    log_debug "Processing wildcard pattern: $package_name"
+                    packages=$(pacman -Ssq | grep -E "^${package_name//\*/.*}$")
+                    log_debug "matched packages: ${C}$packages"
+                    for package in $packages; do
+                        print_msg "Installing Package : ${C}$package"
+                        # INFO:- need know if --overwrite '*' is a good option or not, might need to change
+                        pacman -Sy --noconfirm --overwrite '*' "$package"
+                        if pacman -Qi "$package" >/dev/null 2>&1; then
+                            print_success "Successfully install package: ${C}$package"
+                            install_success=true
+                            break
+                        else
+                            print_warn "Failed to install package: ${C}${package}. ${Y}Trying again..."
                         fi
                     done
-                    break
                 else
-                    echo "PROGRESS:$percent:Installing $package_name with pacman..."
-
-                    # Break pacman installation into stages
-                    echo "PROGRESS:$((percent + 20)):Syncing repositories..."
-                    pacman -Sy --noconfirm
-
-                    echo "PROGRESS:$((percent + 40)):Installing $package_name..."
-                    if pacman -S --noconfirm --overwrite '*' "$package_name"; then
-                        local final_percent=$(((current_package * 100) / total_packages))
-                        echo "PROGRESS:$final_percent:$package_name installed successfully"
-                        print_success "$package_name installed successfully"
-                        break
-                    fi
-                fi
-            else
-                # For APT-based systems, first check if the package is installed
-                if dpkg -s "$package_name" >/dev/null 2>&1; then
-                    echo "PROGRESS:$percent:Package already installed. Attempting reconfiguration and reinstallation..."
-                    dpkg --configure -a
-
-                    # Break apt installation into stages
-                    echo "PROGRESS:$((percent + 20)):Updating package lists..."
-                    apt-get update -y
-
-                    echo "PROGRESS:$((percent + 40)):Reinstalling $package_name..."
-                    apt-get reinstall "$package_name" -y
-
-                    echo "PROGRESS:$((percent + 70)):Finalizing installation..."
-                else
-                    echo "PROGRESS:$percent:Installing package after fixing potential issues..."
-                    dpkg --configure -a
-
-                    # Break apt installation into stages with periodic progress updates
-                    echo "PROGRESS:$((percent + 10)):Updating package lists..."
-                    apt-get update -y
-
-                    echo "PROGRESS:$((percent + 20)):Resolving dependencies..."
-                    # Use a status update approach based on key progress stages in apt output
-                    apt-get install "$package_name" -y | while IFS= read -r line; do
-                        # Echo all output to ensure it's captured for logging
-                        echo "$line"
-
-                        # Detect various stages of installation and update progress accordingly
-                        if [[ "$line" == *"Get:"* ]]; then
-                            echo "PROGRESS:$((percent + 30)):Downloading packages..."
-                        elif [[ "$line" == *"Unpacking"* ]]; then
-                            echo "PROGRESS:$((percent + 50)):Unpacking files..."
-                        elif [[ "$line" == *"Setting up"* ]]; then
-                            echo "PROGRESS:$((percent + 70)):Setting up packages..."
-                        elif [[ "$line" == *"Processing triggers"* ]]; then
-                            echo "PROGRESS:$((percent + 85)):Processing triggers..."
-                        fi
-                    done
-
-                    echo "PROGRESS:$((percent + 90)):Verifying installation..."
-                fi
-
-                if dpkg -s "$package_name" >/dev/null 2>&1; then
-                    local final_percent=$(((current_package * 100) / total_packages))
-                    echo "PROGRESS:$final_percent:$package_name installed successfully"
-                    print_success "$package_name installed successfully"
-                    break
-                fi
-            fi
-
-            print_warn "Installation failed, attempt $attempt of $max_retries."
-            sleep 2
-            ((attempt++))
-        done
-
-        if ((attempt > max_retries)); then
-            print_failed "Failed to install $package_name after $max_retries attempts"
-        fi
-    done
-
-    # Signal completion
-    echo "PROGRESS:100:Package installation complete"
-}
-
-# will check the package is installed or not then remove it
-function package_remove_and_check() {
-    local max_retries=3
-    local attempt=1
-    local packs_list=($@)
-
-    for package_name in "${packs_list[@]}"; do
-        echo "Processing package: $package_name"
-        attempt=1
-
-        # For APT-based systems, attempt to fix any broken installations before removal
-        if [[ "$PACKAGE_MANAGER" != "pacman" ]]; then
-            echo "Fixing any potential broken installations before removal..."
-            dpkg --configure -a
-        fi
-
-        while ((attempt <= max_retries)); do
-            if [[ $package_name == *"*"* ]]; then
-                echo "Processing wildcard pattern: $package_name"
-                if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-                    packages=$(pacman -Qq | grep -E "${package_name//\*/.*}")
-                else
-                    packages=$(dpkg --get-selections | awk '{print $1}' | grep -E "${package_name//\*/.*}")
-                fi
-
-                for pkg in $packages; do
-                    echo "Removing matched package: $pkg"
-                    if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-                        if pacman -Qi "$pkg" >/dev/null 2>&1; then
-                            if pacman -Rnds --noconfirm "$pkg"; then
-                                print_success "$pkg removed successfully"
-                            fi
-                        fi
-                    else
-                        if dpkg -s "$pkg" >/dev/null 2>&1; then
-                            dpkg --configure -a
-                            if apt-get autoremove "$pkg" -y; then
-                                print_success "$pkg removed successfully"
-                            fi
-                        fi
-                    fi
-                done
-                break
-            else
-                if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+                    print_msg "Installing Package : ${C}$package_name"
+                    pacman -Sy --noconfirm --overwrite '*' "$package_name"
                     if pacman -Qi "$package_name" >/dev/null 2>&1; then
-                        if pacman -Rnds --noconfirm "$package_name"; then
-                            print_success "$package_name removed successfully"
-                            break
-                        fi
-                    fi
-                else
-                    if dpkg -s "$package_name" >/dev/null 2>&1; then
-                        dpkg --configure -a
-                        if apt-get autoremove "$package_name" -y; then
-                            print_success "$package_name removed successfully"
-                            break
-                        fi
+                        print_success "Successfully install package: ${C}$package_name"
+                        install_success=true
+                        break
+                    else
+                        print_warn "Failed to install package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
                     fi
                 fi
-            fi
-
-            print_warn "Removal failed, attempt $attempt of $max_retries."
-            sleep 2
-            ((attempt++))
+            done
         done
+    else
+        #apt part
+        for package_name in "${packs_list[@]}"; do
+            retry_count=0
+            max_retries=5
+            install_success=false
 
-        if ((attempt > max_retries)); then
-            print_failed "Failed to remove $package_name after $max_retries attempts"
-        fi
-    done
+            while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+                retry_count=$((retry_count + 1))
+                if [[ "$package_name" == *"*"* ]]; then
+                    log_debug "Processng wildcard pattern: $package_name"
+                    # OPTIM:- have to find any easier command then this
+                    # TEST:- on first test it work much better
+                    packages=$(apt-cache search . | awk '{print $1}' | grep -E "^${package_name//\*/.*}$" | sort -u)
+                    log_debug "matched packages: $packages"
+                    for package in $packages; do
+                        print_msg "Installing package: ${C}$package"
+                        dpkg --configure -a
+                        apt --fix-broken install -y
+                        if dpkg -s "$package" >/dev/null 2>&1; then
+                            apt reinstall "$package" -y
+                        else
+                            apt install "$package" -y
+                        fi
+                        if dpkg -s "$package" >/dev/null 2>&1; then
+                            print_success "Successfully install package: ${C}$package"
+                            install_success=true
+                            break
+                        else
+                            print_warn "Failed to install package: ${C}${package}. ${Y}Trying again...($retry_count)"
+                        fi
+                    done
+                else
+                    print_msg "Installing package: ${C}$package_name"
+                    dpkg --configure -a
+                    apt --fix-broken install -y
+                    if dpkg -s "$package_name" >/dev/null 2>&1; then
+                        apt reinstall "$package_name" -y
+                    else
+                        apt install "$package_name" -y
+                    fi
+
+                    if dpkg -s "$package_name" >/dev/null 2>&1; then
+                        print_success "Successfully install package: ${C}$package_name"
+                        install_success=true
+                    else
+                        print_warn "Failed to install package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
+                    fi
+                fi
+            done
+        done
+    fi
+
+}
+# will check the package is installed or not then remove it
+# OPTIM:- it also need the changes liks package_install_and_check if ever did changes on that, mostly in the apt-cache part
+function package_check_and_remove() {
+    log_debug "Starting package removal for: $*"
+    packs_list=($@)
+
+    if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+        for package_name in "${packs_list[@]}"; do
+            retry_count=0
+            max_retries=5
+            remove_success=false
+            while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+                retry_count=$((retry_count + 1))
+                check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+                if [[ "$package_name" == *"*"* ]]; then
+                    log_debug "Processing wildcard pattern: $package_name"
+                    packages=$(pacman -Ssq | grep -E "^${package_name//\*/.*}$")
+                    log_debug "matched packages: $packages"
+                    for package in $packages; do
+                        print_msg "Removing Package : ${C}$package"
+                        pacman -Rnds --noconfirm "$package"
+                        if ! pacman -Qi "$package" >/dev/null 2>&1; then
+                            print_success "Successfully remove package: ${C}$package"
+                            remove_success=true
+                            break
+                        else
+                            print_warn "Failed to remove package: ${C}${package}. ${Y}Trying again...($retry_count)"
+                        fi
+                    done
+                else
+                    print_msg "Removing Package : ${C}$package_name"
+                    pacman -Rnds --noconfirm "$package_name"
+                    if ! pacman -Qi "$package_name" >/dev/null 2>&1; then
+                        print_success "Successfully remove package: ${C}$package_name"
+                        remove_success=true
+                        break
+                    else
+                        print_warn "Failed to remove package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
+                    fi
+                fi
+            done
+        done
+    else
+        for package_name in "${packs_list[@]}"; do
+            retry_count=0
+            max_retries=5
+            remove_success=false
+
+            while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+                retry_count=$((retry_count + 1))
+                if [[ "$package_name" == *"*"* ]]; then
+                    log_debug "Processng wildcard pattern: $package_name"
+                    packages=$(apt-cache search . | awk '{print $1}' | grep -E "^${package_name//\*/.*}$" | sort -u)
+                    log_debug "matched packages: $packages"
+                    for package in $packages; do
+                        print_msg "Removing package: ${C}$package"
+                        dpkg --configure -a >/dev/null
+                        apt autoremove "$package" -y
+                        if ! dpkg -s "$package" >/dev/null 2>&1; then
+                            print_success "Successfully remove package: ${C}$package"
+                            remove_success=true
+                            break
+                        else
+                            print_warn "Failed to remove package: ${C}${package}. ${Y}Trying again...($retry_count)"
+                        fi
+                    done
+                else
+                    print_msg "Removing package: ${C}$package_name"
+                    dpkg --configure -a >/dev/null
+                    apt autoremove "$package" -y
+                    if ! dpkg -s "$package_name" >/dev/null 2>&1; then
+                        print_success "Successfully remove package: ${C}$package_name"
+                        remove_success=true
+                    else
+                        print_warn "Failed to remove package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
+                    fi
+                fi
+            done
+        done
+    fi
+
 }
 
 function get_file_name_number() {

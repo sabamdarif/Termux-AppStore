@@ -12,11 +12,17 @@ show_notification() {
     echo "$1"
 }
 
-source /data/data/com.termux/files/usr/etc/termux-desktop/common_functions
+if [[ "$fm_tools_install_from_td_installer" != "true" ]]; then
+    if [[ -f /data/data/com.termux/files/usr/etc/termux-desktop/common_functions ]]; then
+        source /data/data/com.termux/files/usr/etc/termux-desktop/common_functions
+    else
+        echo -e "\033[0;31m[☓]\033[0;31m It looks like common_functions is missing from your system, make sure you install sabamdarif/termux-desktop\033[0m"
+    fi
+fi
 
 install_appstore() {
     app_version="${1:-src}"
-    package_install_and_check aria2 python python3 pygobject python-pillow git
+    package_install_and_check aria2 python python-pip pygobject python-pillow git
     check_and_delete "$APP_DIR"
     check_and_create_directory "$APP_DIR"
 

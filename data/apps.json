@@ -598,6 +598,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/icon-64.png"
   },
   {
+    "app_name": "Linuxthemestore",
+    "folder_name": "Linuxthemestore",
+    "description": "Theme and icon store for linux",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "run_cmd": "linuxthemestore",
+    "supported_arch": "aarch64,arm",
+    "version": "v1.0.4",
+    "package_name": "linuxthemestore-git",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Linuxthemestore/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Linuxthemestore/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Linuxthemestore/logo.png"
+  },
+  {
     "app_name": "Lximage qt",
     "folder_name": "Lximage-qt",
     "description": "LXQt Image Viewer",

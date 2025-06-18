@@ -8,13 +8,13 @@ app_type="native"
 
 app_arch=$(uname -m)
 case "$app_arch" in
-aarch64) archtype="arm64" ;;
+aarch64) archtype="aarch64" ;;
 armv7* | arm) archtype="arm" ;;
 *) print_failed "Unsupported architectures" ;;
 esac
 
-deb_file_name="linuxthemestore-git_${version}_${archtype}.deb"
-download_file "https://github.com/sabamdarif/linuxthemestore/releases/download/${version}-termux/${deb_file_name}"
+deb_file_name="linuxthemestore-git_${version#v}_${archtype}.deb"
+download_file "https://github.com/sabamdarif/linuxthemestore/releases/download/${version#v}-termux/${deb_file_name}"
 dpkg --configure -a
 apt --fix-broken install -y
 apt install ./${deb_file_name} -y

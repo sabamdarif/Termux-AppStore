@@ -3,7 +3,7 @@
 supported_arch="aarch64,arm"
 package_name="void"
 run_cmd="/opt/void/void --no-sandbox"
-version="1.99.30040"
+version="1.99.30044"
 app_type="distro"
 page_url="https://github.com/voideditor/binaries"
 working_dir="${distro_path}/opt"

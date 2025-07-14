@@ -2,10 +2,10 @@
 
 supported_arch="aarch64"
 package_name="cursor"
-version="0.49.4"
+version="1.2.1"
 app_type="distro"
 supported_distro="all"
-page_url="https://downloads.cursor.com/production/ec408037b24566b11e6132c58bbe6ad27046eb91/linux/arm64"
+page_url="https://downloads.cursor.com/production/031e7e0ff1e2eda9c1a0f5df67d44053b059c5df/linux/arm64"
 pause_update=true
 run_cmd="/opt/AppImageLauncher/cursor/AppRun --no-sandbox"
 

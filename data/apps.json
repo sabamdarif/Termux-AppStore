@@ -81,6 +81,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/icon-64.png"
   },
   {
+    "app_name": "Blender",
+    "folder_name": "Blender",
+    "description": "Free and open-source 3D computer graphics software",
+    "categories": [
+      "Graphics"
+    ],
+    "app_type": "native",
+    "run_cmd": "blender",
+    "supported_arch": "aarch64",
+    "version": "4.4.3",
+    "package_name": "blender",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Blender/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Blender/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Blender/logo.png"
+  },
+  {
     "app_name": "Brave browser",
     "folder_name": "Brave-browser",
     "description": "Brave is a free and open-source web browser developed by Brave Software, Inc. based on the Chromium web browser.",
@@ -163,6 +179,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Darktable/logo.png"
   },
   {
+    "app_name": "Dconf editor",
+    "folder_name": "Dconf-editor",
+    "description": "A GSettings editor for GNOME",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "dconf-editor",
+    "supported_arch": "aarch64,arm",
+    "version": "45.0.1",
+    "package_name": "dconf-editor",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dconf-editor/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dconf-editor/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Dconf-editor/logo.png"
+  },
+  {
     "app_name": "Deadbeef",
     "folder_name": "Deadbeef",
     "description": "A modular cross-platform audio player",
@@ -225,6 +257,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Evince/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Evince/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Evince/logo.png"
+  },
+  {
+    "app_name": "Extension manager",
+    "folder_name": "Extension-manager",
+    "description": "A utility for browsing and installing GNOME Shell Extensions",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "extension-manager",
+    "supported_arch": "aarch64,arm",
+    "version": "0.6.3",
+    "package_name": "extension-manager",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Extension-manager/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Extension-manager/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Extension-manager/logo.png"
   },
   {
     "app_name": "Eye of gnome",

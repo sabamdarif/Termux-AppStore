@@ -52,6 +52,9 @@ except ImportError:
 TERMUX_PREFIX = "/data/data/com.termux/files/usr"
 TERMUX_TMP = os.path.join(TERMUX_PREFIX, "tmp")
 
+# Logging paths
+APPSTORE_LOG_DIR = os.path.join(TERMUX_TMP, "appstore")
+
 # App store paths
 APPSTORE_DIR = os.path.expanduser("~/.appstore")
 APPSTORE_LOGO_DIR = os.path.join(APPSTORE_DIR, "logo")
@@ -74,6 +77,52 @@ LAST_VERSION_CHECK_FILE = os.path.join(
 )  # Changed from .termux_appstore
 SETTINGS_FILE = os.path.join(APPSTORE_DIR, "settings.json")  # User settings file
 
+
+# Function to create and setup logging
+def setup_logging(log_type):
+    """Set up logging for different operations (app_launch, install, update, uninstall, check-for-update)
+    Returns a tuple of (log_file_object, log_file_path)
+    """
+    try:
+        # Create log directory if it doesn't exist
+        os.makedirs(APPSTORE_LOG_DIR, exist_ok=True)
+        
+        # Generate timestamp and random ID for the log file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        random_id = os.urandom(4).hex()  # 8 character random hex string
+        
+        # Create log file name
+        log_filename = f"{log_type}_log_{timestamp}_{random_id}.log"
+        log_file_path = os.path.join(APPSTORE_LOG_DIR, log_filename)
+        
+        # Open log file
+        log_file = open(log_file_path, "w")
+        
+        # Write header
+        log_file.write(f"--- {log_type.upper()} LOG START ---\n")
+        log_file.write(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        log_file.write(f"System: {platform.system()} {platform.release()}\n")
+        log_file.write(f"Architecture: {platform.machine()}\n")
+        log_file.write("---\n\n")
+        
+        # Flush to ensure header is written immediately
+        log_file.flush()
+        
+        return log_file, log_file_path
+    except Exception as e:
+        print(f"Error setting up logging: {e}")
+        return None, None
+
+# Function to log message
+def log_message(log_file, message):
+    """Write a message to the log file with timestamp"""
+    if log_file and not log_file.closed:
+        try:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            log_file.write(f"[{timestamp}] {message}\n")
+            log_file.flush()
+        except Exception as e:
+            print(f"Error writing to log file: {e}")
 
 # Function to validate logo size
 def validate_logo_size(logo_path):
@@ -589,34 +638,51 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def setup_directories(self):
         """Create necessary directories for the app store"""
         try:
+            # Set up app launch logging
+            self.log_file, self.log_file_path = setup_logging("app_launch")
+            self.logging_active = bool(self.log_file)
+            log_message(self.log_file, "Starting Termux AppStore")
+            
             # Set up partial setup detection
             needs_setup = False
+            log_message(self.log_file, "Setting up directories")
 
             # Create main directories
             os.makedirs(APPSTORE_DIR, exist_ok=True)
+            log_message(self.log_file, f"Created main directory: {APPSTORE_DIR}")
 
             # Check if other required directories exist
             if not os.path.exists(APPSTORE_LOGO_DIR):
                 needs_setup = True
                 os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
+                log_message(self.log_file, f"Created logo directory: {APPSTORE_LOGO_DIR}")
 
             if not os.path.exists(APPSTORE_OLD_JSON_DIR):
                 needs_setup = True
                 os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
+                log_message(self.log_file, f"Created old JSON directory: {APPSTORE_OLD_JSON_DIR}")
+                
+            # Create log directory if it doesn't exist
+            os.makedirs(APPSTORE_LOG_DIR, exist_ok=True)
+            log_message(self.log_file, f"Ensured log directory exists: {APPSTORE_LOG_DIR}")
 
             # Migrate data from old directory structure if needed
+            log_message(self.log_file, "Checking for data migration needs")
             self.migrate_old_data()
 
             # Check for distro configuration
+            log_message(self.log_file, "Checking distro configuration")
             self.check_distro_configuration()
 
             # Initialize apps.json if it doesn't exist
             if not os.path.exists(APPSTORE_JSON):
+                log_message(self.log_file, "First time setup: Initializing app store...")
                 print("First time setup: Initializing app store...")
                 needs_setup = True
 
             # Initialize updates tracking file if it doesn't exist
             if not os.path.exists(self.updates_tracking_file):
+                log_message(self.log_file, f"Creating updates tracking file: {self.updates_tracking_file}")
                 with open(self.updates_tracking_file, "w") as f:
                     json.dump({}, f)
 
@@ -672,11 +738,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def check_for_updates(self):
         """Check for app updates when the application starts"""
+        log_message(self.log_file, "Checking for app updates")
         # Make sure we have connectivity (but don't show the dialog)
         if not self.check_internet_connection():
             print(
                 "No internet connection detected during initial check, skipping auto-refresh"
             )
+            log_message(self.log_file, "No internet connection detected, skipping auto-refresh")
             # Still need to load existing data
             self.load_app_metadata_and_setup_ui()
             return
@@ -1004,13 +1072,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Check if a refresh operation is already in progress
         if self.is_refreshing:
             print("Refresh already in progress, skipping this request")
+            log_message(self.log_file, "Refresh already in progress, skipping this request")
             return
 
         print("\nStarting refresh process...")
+        log_message(self.log_file, f"Starting refresh process (manual: {is_manual})")
 
         # Check for internet connectivity first (unless explicitly skipped)
         if not skip_connectivity_check and not self.check_internet_connection():
             print("No internet connection available, showing prompt")
+            log_message(self.log_file, "No internet connection available, showing prompt")
 
             # Always immediately hide spinner and loading label
             self.spinner.stop()
@@ -1281,10 +1352,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         try:
             # Create temp directory if it doesn't exist
             os.makedirs(TERMUX_TMP, exist_ok=True)
+            log_message(self.log_file, f"Created temp directory: {TERMUX_TMP}")
 
             # Download logos zip file
             logos_zip = os.path.join(TERMUX_TMP, "logos.zip")
             logos_url = "https://github.com/sabamdarif/Termux-AppStore/releases/download/logos/logos.zip"
+            log_message(self.log_file, f"Preparing to download logos from: {logos_url}")
 
             print("Downloading logos archive...")
 
@@ -1294,6 +1367,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Try aria2c first (most efficient)
             try:
                 print("Trying aria2c...")
+                log_message(self.log_file, "Attempting download with aria2c")
                 command = (
                     f"aria2c -x 16 -s 16 '{logos_url}' -d '{TERMUX_TMP}' -o 'logos.zip'"
                 )
@@ -1303,15 +1377,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 if result.returncode == 0:
                     download_success = True
                     print("Download with aria2c successful")
+                    log_message(self.log_file, "Download with aria2c successful")
                 else:
                     print(f"aria2c failed: {result.stderr}")
+                    log_message(self.log_file, f"aria2c failed: {result.stderr}")
             except Exception as e:
                 print(f"Error using aria2c: {e}")
+                log_message(self.log_file, f"Error using aria2c: {e}")
 
             # Try wget if aria2c failed
             if not download_success:
                 try:
                     print("Trying wget...")
+                    log_message(self.log_file, "Attempting download with wget")
                     command = f"wget '{logos_url}' -O '{logos_zip}'"
                     result = subprocess.run(
                         command, shell=True, capture_output=True, text=True
@@ -1319,15 +1397,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if result.returncode == 0:
                         download_success = True
                         print("Download with wget successful")
+                        log_message(self.log_file, "Download with wget successful")
                     else:
                         print(f"wget failed: {result.stderr}")
+                        log_message(self.log_file, f"wget failed: {result.stderr}")
                 except Exception as e:
                     print(f"Error using wget: {e}")
+                    log_message(self.log_file, f"Error using wget: {e}")
 
             # Try curl if wget failed
             if not download_success:
                 try:
                     print("Trying curl...")
+                    log_message(self.log_file, "Attempting download with curl")
                     command = f"curl -L '{logos_url}' -o '{logos_zip}'"
                     result = subprocess.run(
                         command, shell=True, capture_output=True, text=True
@@ -1335,34 +1417,44 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if result.returncode == 0:
                         download_success = True
                         print("Download with curl successful")
+                        log_message(self.log_file, "Download with curl successful")
                     else:
                         print(f"curl failed: {result.stderr}")
+                        log_message(self.log_file, f"curl failed: {result.stderr}")
                 except Exception as e:
                     print(f"Error using curl: {e}")
+                    log_message(self.log_file, f"Error using curl: {e}")
 
             # Check if any download method succeeded
             if not download_success:
                 print("All download methods failed")
+                log_message(self.log_file, "All download methods failed")
                 # Check if the directory already exists and has some content
                 if os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
                     print("Using existing logo directory since download failed")
+                    log_message(self.log_file, f"Using existing logo directory: {APPSTORE_LOGO_DIR} since download failed")
                     return True
+                log_message(self.log_file, "No existing logo directory with content, returning failure")
                 return False
 
             # Create logo directory
             os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
+            log_message(self.log_file, f"Created logo directory: {APPSTORE_LOGO_DIR}")
 
             # Extract logos
             print("Extracting logos...")
+            log_message(self.log_file, f"Extracting logos from {logos_zip} to {APPSTORE_LOGO_DIR}")
             try:
                 command = f"unzip -o '{logos_zip}' -d '{APPSTORE_LOGO_DIR}'"
                 result = subprocess.run(
                     command, shell=True, capture_output=True, text=True
                 )
+                log_message(self.log_file, f"Extraction command result code: {result.returncode}")
 
                 # Clean up zip file
                 if os.path.exists(logos_zip):
                     os.remove(logos_zip)
+                    log_message(self.log_file, f"Removed temporary zip file: {logos_zip}")
 
                 # If extraction fails but directory exists with content, consider it a success
                 if (
@@ -1371,34 +1463,48 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     and os.listdir(APPSTORE_LOGO_DIR)
                 ):
                     print("Using existing logo directory since extraction failed")
+                    log_message(self.log_file, f"Extraction failed but using existing logo directory: {APPSTORE_LOGO_DIR}")
                     return True
-
+                
+                if result.returncode == 0:
+                    log_message(self.log_file, "Logo extraction completed successfully")
+                else:
+                    log_message(self.log_file, f"Extraction failed with code {result.returncode} and no existing logo directory available")
+                
                 return result.returncode == 0
             except Exception as e:
                 print(f"Error extracting logos: {e}")
+                log_message(self.log_file, f"Exception during logo extraction: {e}")
                 # If extraction fails but directory exists with content, consider it a success
                 if os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
                     print("Using existing logo directory since extraction failed")
+                    log_message(self.log_file, f"Using existing logo directory: {APPSTORE_LOGO_DIR} after extraction exception")
                     return True
+                log_message(self.log_file, "No existing logo directory with content after extraction exception")
                 return False
 
         except Exception as e:
             print(f"Error handling logos: {e}")
+            log_message(self.log_file, f"General exception in download_and_extract_logos: {e}")
             # Check if the directory already exists and has some content
             if os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
                 print("Using existing logo directory since an error occurred")
+                log_message(self.log_file, f"Using existing logo directory: {APPSTORE_LOGO_DIR} after general exception")
                 return True
+            log_message(self.log_file, "No existing logo directory with content after general exception")
             return False
 
     def refresh_data_background(self):
         try:
             print("\nStarting refresh process...")
+            log_message(self.log_file, "Starting refresh data background process")
 
             # Double-check that we're not already refreshing
             if not self.is_refreshing:
                 print(
                     "Warning: Refresh flag not set, but refresh_data_background was called"
                 )
+                log_message(self.log_file, "Warning: Refresh flag not set, but refresh_data_background was called")
                 self.is_refreshing = True
 
             # Ensure spinner is visible
@@ -1407,47 +1513,60 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Load existing pending updates to preserve them
             existing_updates = self.pending_updates.copy()
             print(f"Preserving existing updates: {existing_updates}")
+            log_message(self.log_file, f"Preserving existing updates: {existing_updates}")
 
             # 1. First ensure old_json directory exists
             os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
             old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, "apps.json")
+            log_message(self.log_file, f"Ensuring old_json directory exists: {APPSTORE_OLD_JSON_DIR}")
 
             # 2. If current apps.json exists, back it up before deleting
             if os.path.exists(APPSTORE_JSON):
                 print("Backing up current apps.json...")
+                log_message(self.log_file, f"Backing up current apps.json to {old_json_path}")
                 shutil.copy2(APPSTORE_JSON, old_json_path)
                 os.remove(APPSTORE_JSON)
 
             # 3. Download new apps.json
             print("Downloading new apps.json...")
+            log_message(self.log_file, f"Downloading new apps.json from {GITHUB_APPS_JSON}")
             command = (
                 f"aria2c -x 16 -s 16 {GITHUB_APPS_JSON} -d {APPSTORE_DIR} -o apps.json"
             )
             result = os.system(command)
             if result != 0:
                 print("Error downloading apps.json")
+                log_message(self.log_file, "Error downloading apps.json")
                 GLib.idle_add(self.refresh_error, "Failed to download apps.json")
                 return False
 
             # 4. Handle logos - delete existing, download and extract new
             if os.path.exists(APPSTORE_LOGO_DIR):
                 print("Removing existing logos...")
+                log_message(self.log_file, f"Removing existing logos directory: {APPSTORE_LOGO_DIR}")
                 shutil.rmtree(APPSTORE_LOGO_DIR)
 
             print("Downloading and extracting new logos...")
+            log_message(self.log_file, "Downloading and extracting new logos")
             if not self.download_and_extract_logos():
                 print("Error handling logos")
+                log_message(self.log_file, "Error downloading or extracting logos")
                 GLib.idle_add(self.refresh_error, "Failed to update logos")
                 return False
 
             # 5. Filter apps based on architecture compatibility
             print("Filtering apps based on architecture...")
+            log_message(self.log_file, f"Filtering apps based on system architecture: {self.system_arch}")
             with open(APPSTORE_JSON, "r") as f:
                 all_apps = json.load(f)
+            
+            log_message(self.log_file, f"Loaded {len(all_apps)} apps from apps.json")
 
             compatible_archs = self.arch_compatibility.get(
                 self.system_arch, [self.system_arch]
             )
+            log_message(self.log_file, f"Compatible architectures: {compatible_archs}")
+            
             filtered_apps = []
             for app in all_apps:
                 app_arch = app.get("supported_arch", "")
@@ -1463,6 +1582,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     print(f"Added compatible app: {app['app_name']} ({app_arch})")
                 else:
                     print(f"Skipped incompatible app: {app['app_name']} ({app_arch})")
+            
+            log_message(self.log_file, f"Filtered to {len(filtered_apps)} compatible apps")
 
             # 6. Check installed packages and update versions
             print("Checking installed packages and versions...")
@@ -1702,10 +1823,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Save filtered apps with updated versions
             with open(APPSTORE_JSON, "w") as f:
                 json.dump(filtered_apps, f, indent=2)
+            log_message(self.log_file, f"Saved {len(filtered_apps)} filtered apps to {APPSTORE_JSON}")
 
             # Save updated installed apps list
             with open(self.installed_apps_file, "w") as f:
                 json.dump(list(installed_apps), f, indent=2)
+            log_message(self.log_file, f"Saved {len(installed_apps)} installed apps to {self.installed_apps_file}")
 
             self.installed_apps = list(installed_apps)
 
@@ -1716,18 +1839,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if app_id in self.installed_apps:
                         self.pending_updates[app_id] = version
                 print(f"Restored pending updates: {self.pending_updates}")
+                log_message(self.log_file, f"Restored pending updates: {self.pending_updates}")
                 self.save_pending_updates()
 
             print("Refresh completed successfully!")
+            log_message(self.log_file, "Refresh completed successfully!")
 
             if not self.stop_background_tasks:
                 GLib.idle_add(self.refresh_complete)
 
         except Exception as e:
             print(f"Error during refresh: {e}")
+            log_message(self.log_file, f"Error during refresh: {e}")
             import traceback
 
             traceback.print_exc()
+            error_traceback = traceback.format_exc()
+            log_message(self.log_file, f"Traceback:\n{error_traceback}")
             if not self.stop_background_tasks:
                 GLib.idle_add(self.refresh_error, str(e))
 
@@ -1743,6 +1871,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def refresh_complete(self):
         """Called when background refresh is complete"""
         print("Refresh completed")
+        log_message(self.log_file, "Refresh complete callback triggered")
         self.is_refreshing = False
 
         # Stop the spinner
@@ -1758,6 +1887,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         with open(LAST_VERSION_CHECK_FILE, "w") as f:
             f.write(str(current_time.timestamp()))
         print(f"Updated last version check timestamp: {current_time}")
+        log_message(self.log_file, f"Updated last version check timestamp: {current_time}")
 
         # Show header tabs box again
         if hasattr(self, "header_tabs_box"):
@@ -2206,6 +2336,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         dialog.destroy()
 
         if response == Gtk.ResponseType.YES:
+            # Set up logging for installation
+            self.log_file, self.log_file_path = setup_logging("install")
+            self.logging_active = bool(self.log_file)
+            log_message(self.log_file, f"Starting installation of {app['app_name']}")
+            log_message(self.log_file, f"App details: {app['folder_name']}, Version: {app.get('version', 'N/A')}")
+            
             # Create progress dialog
             progress_dialog, status_label, progress_bar = self.create_progress_dialog(
                 "Installing..."
@@ -2354,16 +2490,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                     # Download script (20%)
                     GLib.idle_add(update_progress, 0.2, "Downloading install script...")
+                    log_message(self.log_file, f"Downloading install script from {app['install_url']}")
                     script_file = self.download_script(app["install_url"])
                     if not script_file or install_cancelled:
+                        log_message(self.log_file, "Download failed or installation cancelled")
                         if script_file and os.path.exists(script_file):
                             os.remove(script_file)
                         GLib.idle_add(progress_dialog.destroy)
                         return
+                    log_message(self.log_file, f"Install script downloaded to {script_file}")
 
                     # Make script executable (30%)
                     GLib.idle_add(update_progress, 0.3, "Preparing installation...")
+                    log_message(self.log_file, "Making script executable")
                     os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
+                    log_message(self.log_file, "Script is now executable")
 
                     # Count the number of significant lines in the script to track progress
                     total_lines = 0
@@ -2436,6 +2577,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(
                         update_progress, base_progress, "Starting installation..."
                     )
+                    log_message(self.log_file, f"Analyzed script: {total_lines} operations, {heavyweight_ops_count} heavyweight operations")
+                    log_message(self.log_file, "Executing installation script")
                     install_process = subprocess.Popen(
                         ["bash", script_file],
                         stdout=subprocess.PIPE,
@@ -2444,6 +2587,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         bufsize=1,
                         preexec_fn=os.setsid,  # Create new process group
                     )
+                    log_message(self.log_file, f"Installation process started with PID: {install_process.pid}")
 
                     while True:
                         if install_cancelled:
@@ -2471,6 +2615,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                         # Update current line
                         current_line += 1
+                        
+                        # Log the output line
+                        log_message(self.log_file, f"Output: {line}")
 
                         # Determine if this output line indicates a heavyweight operation
                         is_heavyweight = False
@@ -2478,6 +2625,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if func in line:
                                 is_heavyweight = True
                                 processed_heavyweight_ops += 1
+                                log_message(self.log_file, f"Detected heavyweight operation: {func}")
                                 break
 
                         # Update appropriate counter based on operation type
@@ -2604,6 +2752,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def modify_script(self, script_path):
         """Add source line for common functions after shebang"""
         try:
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Modifying script to include common functions: {script_path}")
             # Read the original script content
             with open(script_path, "r") as f:
                 content = f.read()
@@ -2612,6 +2762,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             inbuild_functions_path = (
                 Path(__file__).parent / "inbuild_functions" / "inbuild_functions"
             )
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Using inbuild_functions path: {inbuild_functions_path}")
 
             # Add inbuild_functions source after shebang
             # Try both common shebang variants
@@ -2620,6 +2772,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 "#!/bin/bash\n",
             ]:
                 if shebang in content:
+                    if self.logging_active and self.log_file:
+                        log_message(self.log_file, f"Found compatible shebang: {shebang.strip()}")
                     new_content = content.replace(
                         shebang, f"{shebang}source {inbuild_functions_path}\n"
                     )
@@ -2627,13 +2781,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # Write modified content back
                     with open(script_path, "w") as f:
                         f.write(new_content)
+                    if self.logging_active and self.log_file:
+                        log_message(self.log_file, "Successfully modified script with common functions")
                     return True
 
             print("No compatible shebang found in script")
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, "No compatible shebang found in script")
             return False
 
         except Exception as e:
             print(f"Error injecting common_functions source: {e}")
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Error injecting common_functions source: {e}")
             return False
 
     def download_script(self, url):
@@ -2641,33 +2801,49 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         try:
             # Create temp directory if it doesn't exist
             os.makedirs(TERMUX_TMP, exist_ok=True)
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Created temp directory: {TERMUX_TMP}")
 
             # Create a temporary file
             script_name = f"appstore_{int(time.time())}.sh"
             script_path = os.path.join(TERMUX_TMP, script_name)
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Created temporary script file: {script_path}")
 
             # Download using aria2c with proper encoding handling
             print(f"Downloading script from {url} to {script_path}")
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Downloading script from {url} to {script_path}")
             command = f"aria2c -x 16 -s 16 '{url}' -d '{TERMUX_TMP}' -o '{script_name}'"
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Download command: {command}")
             result = subprocess.run(
                 command, shell=True, capture_output=True, text=True, encoding="utf-8"
             )
 
             if result.returncode != 0:
                 print(f"Download failed: {result.stderr}")
+                if self.logging_active and self.log_file:
+                    log_message(self.log_file, f"Download failed with return code {result.returncode}: {result.stderr}")
                 return None
 
             # Verify file exists and is readable
             if not os.path.exists(script_path):
                 print("Script file not found after download")
+                if self.logging_active and self.log_file:
+                    log_message(self.log_file, "Script file not found after download")
                 return None
 
             # Read file content to verify encoding
             try:
                 with open(script_path, "r", encoding="utf-8") as f:
                     content = f.read()
+                if self.logging_active and self.log_file:
+                    log_message(self.log_file, "Script file successfully read and encoding verified")
             except UnicodeDecodeError:
                 print("Script file has invalid encoding")
+                if self.logging_active and self.log_file:
+                    log_message(self.log_file, "Script file has invalid encoding, removing file")
                 if os.path.exists(script_path):
                     os.remove(script_path)
                 return None
@@ -2675,13 +2851,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Modify script to source common functions
             if not self.modify_script(script_path):
                 print("Failed to modify script")
+                if self.logging_active and self.log_file:
+                    log_message(self.log_file, "Failed to modify script with common functions")
                 return None
 
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Script successfully downloaded and prepared: {script_path}")
             return script_path
         except Exception as e:
             print(f"Error downloading script: {e}")
+            if self.logging_active and self.log_file:
+                log_message(self.log_file, f"Exception during script download: {e}")
             if script_path and os.path.exists(script_path):
                 os.remove(script_path)
+                if self.logging_active and self.log_file:
+                    log_message(self.log_file, f"Removed incomplete script file: {script_path}")
             return None
 
     def on_uninstall_clicked(self, button, app):
@@ -2697,6 +2881,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         dialog.destroy()
 
         if response == Gtk.ResponseType.YES:
+            # Set up logging for uninstallation
+            self.log_file, self.log_file_path = setup_logging("uninstall")
+            self.logging_active = bool(self.log_file)
+            log_message(self.log_file, f"Starting uninstallation of {app['app_name']}")
+            log_message(self.log_file, f"App details: {app['folder_name']}, Version: {app.get('version', 'N/A')}")
+            
             # Create progress dialog
             progress_dialog, status_label, progress_bar = self.create_progress_dialog(
                 title="Uninstalling...", allow_cancel=True
@@ -2793,21 +2983,27 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(
                         update_progress, 0.1, "Downloading uninstall script..."
                     )
+                    log_message(self.log_file, f"Downloading uninstall script from {uninstall_url}")
 
                     script_file = self.download_script(uninstall_url)
 
                     if not script_file:
                         error_msg = "Failed to download uninstall script!"
+                        log_message(self.log_file, "Failed to download uninstall script")
                         GLib.idle_add(update_progress, 1.0, error_msg)
 
                         time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
                         return
+                    
+                    log_message(self.log_file, f"Uninstall script downloaded to {script_file}")
 
                     # Make script executable
+                    log_message(self.log_file, "Making script executable")
                     os.chmod(script_file, 0o755)
                     status_msg = "Preparing uninstallation..."
                     GLib.idle_add(update_progress, 0.2, status_msg)
+                    log_message(self.log_file, "Script is now executable")
 
                     # Count the number of significant lines in the script to track progress
                     total_lines = 0
@@ -2877,6 +3073,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # Execute script with better progress tracking
                     status_msg = "Starting uninstallation..."
                     GLib.idle_add(update_progress, base_progress, status_msg)
+                    
+                    log_message(self.log_file, f"Analyzed script: {total_lines} operations, {heavyweight_ops_count} heavyweight operations")
+                    log_message(self.log_file, "Executing uninstallation script")
 
                     uninstall_process = subprocess.Popen(
                         [script_file],
@@ -2886,6 +3085,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         bufsize=1,
                         preexec_fn=os.setsid,
                     )
+                    
+                    log_message(self.log_file, f"Uninstallation process started with PID: {uninstall_process.pid}")
 
                     if uninstall_process and uninstall_process.stdout:
                         for line in uninstall_process.stdout:
@@ -2902,6 +3103,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                         # Update current line
                         current_line += 1
+                        
+                        # Log the output line
+                        log_message(self.log_file, f"Output: {line.strip()}")
 
                         # Determine if this output line indicates a heavyweight operation
                         is_heavyweight = False
@@ -2909,6 +3113,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if func in line:
                                 is_heavyweight = True
                                 processed_heavyweight_ops += 1
+                                log_message(self.log_file, f"Detected heavyweight operation: {func}")
                                 break
 
                         # Update appropriate counter based on operation type
@@ -3483,6 +3688,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Save any pending state
             self.save_installed_apps()
             self.save_pending_updates()
+            
+            # Close any open log files if not already closed by on_quit_clicked
+            if hasattr(self, "log_file") and self.log_file and not self.log_file.closed:
+                try:
+                    log_message(self.log_file, "Application exiting")
+                    self.log_file.write("\n--- Application closed ---\n")
+                    self.log_file.close()
+                except Exception as e:
+                    print(f"Error closing log file: {e}")
+                self.log_file = None
+                self.logging_active = False
+                self.log_file_path = None
 
             # Quit the application
             self.get_application().quit()
@@ -3495,26 +3712,32 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def refresh_error(self, error_message):
         """Handle refresh error"""
         print(f"Refresh error: {error_message}")
+        log_message(self.log_file, f"Refresh error handler called: {error_message}")
 
         # Reset the refreshing flag
         self.is_refreshing = False
+        log_message(self.log_file, "Reset refreshing flag to False")
 
         # Hide the loading indicators
         self.spinner.stop()
         self.spinner.hide()
         self.loading_label.hide()
+        log_message(self.log_file, "Hidden loading indicators")
         # self.refresh_button.set_sensitive(True)
 
         # Show the header bar again in case of error
         header_bar = self.get_titlebar()
         if header_bar:
             header_bar.show()
+            log_message(self.log_file, "Showing header bar again")
 
         # Show error dialog
         self.show_error_dialog(f"Refresh failed: {error_message}")
+        log_message(self.log_file, f"Displayed error dialog: Refresh failed: {error_message}")
 
         # Setup UI with existing data
         self.setup_app_list_ui()
+        log_message(self.log_file, "Setting up UI with existing data")
 
     def download_apps(self):
         """Download apps in the background"""

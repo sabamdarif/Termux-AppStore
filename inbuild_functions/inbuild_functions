@@ -317,7 +317,7 @@ function detact_package_manager() {
 }
 
 # will check if the package is already installed or not, if it installed then reinstall and print success/failed message
-function package_install_and_check {
+function package_install_and_check() {
     log_debug "Starting package installation for: $*"
     packs_list=($@)
     # pacman part
@@ -414,7 +414,7 @@ function package_install_and_check {
 }
 # will check the package is installed or not then remove it
 # OPTIM:- it also need the changes liks package_install_and_check if ever did changes on that, mostly in the apt-cache part
-function package_check_and_remove() {
+function package_remove_and_check() {
     log_debug "Starting package removal for: $*"
     packs_list=($@)
 

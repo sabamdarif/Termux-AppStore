@@ -20,11 +20,11 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
-
 # Type checking imports for pyright
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -3942,6 +3942,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             dialog.destroy()
 
             if response == Gtk.ResponseType.YES:
+                # Set up logging for update
+                self.log_file, self.log_file_path = setup_logging("update")
+                self.logging_active = bool(self.log_file)
+                log_message(self.log_file, f"Starting update of {app['app_name']}")
+                log_message(self.log_file, f"App details: {app['folder_name']}, Version: {app.get('version', 'N/A')} -> {self.pending_updates.get(app['folder_name'], {}).get('version', 'N/A')}")
+                
                 # Create update dialog
                 update_dialog, status_label, progress_bar = self.create_update_dialog(
                     title=f"Updating {app['app_name']}...", allow_cancel=True
@@ -4030,6 +4036,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     elif isinstance(status_text, str) and status_text.strip():
                         status_label.set_text(status_text)
 
+                    # Log progress update if logging is active
+                    if self.logging_active and self.log_file:
+                        try:
+                            progress_percent = int(fraction * 100)
+                            log_message(self.log_file, f"[Progress {progress_percent}%] {status_text}")
+                        except Exception as e:
+                            print(f"Error logging progress update: {e}")
+
                     # Get the stack widget from the progress dialog
                     stack = None
                     try:
@@ -4058,24 +4072,34 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 def update_thread():
                     nonlocal script_file, update_process
                     try:
+                        # Log the start of the update thread
+                        log_message(self.log_file, "Starting update thread")
+                        
                         # Download script (20%)
                         GLib.idle_add(
                             update_progress, 0.2, "Downloading update script..."
                         )
+                        log_message(self.log_file, f"Downloading update script from {app['install_url']}")
                         script_file = self.download_script(app["install_url"])
                         if not script_file or update_cancelled:
+                            log_message(self.log_file, "Failed to download update script or update cancelled")
                             if script_file and os.path.exists(script_file):
                                 os.remove(script_file)
+                                log_message(self.log_file, f"Removed script file: {script_file}")
                             GLib.idle_add(update_dialog.destroy)
                             return
+                        log_message(self.log_file, f"Successfully downloaded update script to {script_file}")
 
                         # Make script executable (30%)
                         GLib.idle_add(update_progress, 0.3, "Preparing update...")
+                        log_message(self.log_file, "Making script executable")
                         os.chmod(
                             script_file, os.stat(script_file).st_mode | stat.S_IEXEC
                         )
+                        log_message(self.log_file, "Script is now executable")
 
                         # Count the number of significant lines in the script to track progress
+                        log_message(self.log_file, "Analyzing update script to track progress")
                         total_lines = 0
                         significant_lines = []
                         heavyweight_functions = [
@@ -4108,16 +4132,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                             # Ensure we have at least one line
                             total_lines = max(1, total_lines)
+                            log_message(self.log_file, f"Script analysis complete: {total_lines} significant lines, {heavyweight_ops_count} heavyweight operations")
 
                         except Exception as e:
-                            print(f"Error counting script lines: {e}")
+                            error_msg = f"Error counting script lines: {e}"
+                            print(error_msg)
+                            log_message(self.log_file, error_msg)
                             # Default to a reasonable number if counting fails
                             total_lines = 100
                             heavyweight_ops_count = 0
                             total_ops_count = total_lines
+                            log_message(self.log_file, f"Using default values: {total_lines} lines, {heavyweight_ops_count} heavyweight operations")
 
                         # Calculate base progress (downloading and preparation = 30%)
                         base_progress = 0.3
+                        log_message(self.log_file, f"Base progress set to {base_progress * 100}%")
 
                         # Distribute progress weights:
                         # - 40% for heavyweight operations
@@ -4128,6 +4157,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if total_ops_count - heavyweight_ops_count > 0
                             else 0.6
                         )
+                        log_message(self.log_file, f"Progress weights: heavyweight={heavyweight_weight}, normal={normal_ops_weight}")
 
                         # Calculate progress weights for each type of line
                         heavyweight_progress_per_op = heavyweight_weight / max(
@@ -4136,16 +4166,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         normal_progress_per_op = normal_ops_weight / max(
                             1, total_ops_count - heavyweight_ops_count
                         )
+                        log_message(self.log_file, f"Progress per operation: heavyweight={heavyweight_progress_per_op:.4f}, normal={normal_progress_per_op:.4f}")
 
                         # Process state tracking
                         current_line = 0
                         processed_heavyweight_ops = 0
                         processed_normal_ops = 0
+                        log_message(self.log_file, "Progress tracking initialized")
 
                         # Execute script with better progress tracking
                         GLib.idle_add(
                             update_progress, base_progress, "Starting update..."
                         )
+                        log_message(self.log_file, "Executing update script")
                         update_process = subprocess.Popen(
                             ["bash", script_file],
                             stdout=subprocess.PIPE,
@@ -4154,15 +4187,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             bufsize=1,
                             preexec_fn=os.setsid,
                         )
+                        log_message(self.log_file, f"Update process started with PID: {update_process.pid}")
 
                         while True:
                             if update_cancelled:
+                                log_message(self.log_file, "Update cancelled by user, terminating process")
                                 try:
                                     os.killpg(
                                         os.getpgid(update_process.pid), signal.SIGTERM
                                     )
                                     update_process.wait(timeout=2)
-                                except:
+                                    log_message(self.log_file, "Process terminated successfully")
+                                except Exception as e:
+                                    log_message(self.log_file, f"Error terminating process: {e}")
                                     pass
                                 GLib.idle_add(update_dialog.destroy)
                                 return
@@ -4173,11 +4210,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 else None
                             )
                             if not line and update_process.poll() is not None:
+                                log_message(self.log_file, "End of output stream reached, process complete")
                                 break
 
                             line = line.strip()
                             if not line:
                                 continue
+
+                            # Log the output line (but avoid excessive logging for common output)
+                            if not line.startswith("[#") and not "ETA" in line:
+                                log_message(self.log_file, f"Script output: {line}")
 
                             # Update current line
                             current_line += 1
@@ -4192,6 +4234,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     percent = (
                                         float(percent_str) / 100
                                     )  # Convert to 0-1 range
+                                    log_message(self.log_file, f"Progress marker: {percent_str}% - {progress_message}")
 
                                     # Use a much more conservative mapping approach
                                     # Map the progress more gradually with stronger emphasis on early stages
@@ -4209,6 +4252,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                                     # Cap at 0.8 (80%) to reserve the final 20% for completion
                                     current_progress = min(0.8, mapped_progress)
+                                    log_message(self.log_file, f"Mapped progress: {percent:.2f} -> {current_progress:.2f}")
 
                                     # Update progress with the extracted message
                                     GLib.idle_add(
@@ -4222,7 +4266,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     # Don't skip processing this line for logging
                                 except Exception as e:
                                     # If any parsing error occurs, fall back to regular handling
-                                    print(f"Error parsing progress marker: {e}")
+                                    error_msg = f"Error parsing progress marker: {e}"
+                                    print(error_msg)
+                                    log_message(self.log_file, error_msg)
 
                             # Determine if this output line indicates a heavyweight operation
                             is_heavyweight = False
@@ -4230,6 +4276,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 if func in line:
                                     is_heavyweight = True
                                     processed_heavyweight_ops += 1
+                                    log_message(self.log_file, f"Detected heavyweight operation: {func} (total: {processed_heavyweight_ops})")
                                     break
 
                             # Update appropriate counter based on operation type
@@ -4248,6 +4295,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 base_progress + heavyweight_progress + normal_progress
                             )
 
+                            # Log progress details periodically (every 10 operations)
+                            if (processed_heavyweight_ops + processed_normal_ops) % 10 == 0:
+                                log_message(self.log_file, f"Progress calculation: base={base_progress:.2f}, heavyweight={heavyweight_progress:.2f}, normal={normal_progress:.2f}, total={current_progress:.2f}")
+
                             # Cap progress at 80% - the final 20% is reserved for completion tasks
                             current_progress = min(0.8, current_progress)
 
@@ -4257,67 +4308,97 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             # Update terminal
 
                         update_process.wait()
+                        log_message(self.log_file, f"Update process completed with return code: {update_process.returncode}")
+                        
                         if update_process.returncode == 0 and not update_cancelled:
+                            log_message(self.log_file, "Update successful, finalizing...")
                             GLib.idle_add(update_progress, 0.95, "Finalizing update...")
 
                             # Remove from pending updates
                             if app["folder_name"] in self.pending_updates:
                                 del self.pending_updates[app["folder_name"]]
                                 self.save_pending_updates()
+                                log_message(self.log_file, f"Removed {app['app_name']} from pending updates")
                                 print(f"Removed {app['app_name']} from pending updates")
 
                             time.sleep(0.5)
                             GLib.idle_add(update_progress, 1.0, "Update complete!")
+                            log_message(self.log_file, "Update completed successfully")
                             time.sleep(1)
                             GLib.idle_add(update_dialog.destroy)
 
                             # Refresh both the main app list and updates list
                             def refresh_ui():
+                                log_message(self.log_file, "Refreshing UI after update")
                                 self.load_app_metadata()  # Reload app data
                                 if self.updates_button.get_style_context().has_class(
                                     "selected"
                                 ):
+                                    log_message(self.log_file, "Refreshing updates view")
                                     self.show_update_apps()  # Refresh updates view if we're in it
                                 else:
+                                    log_message(self.log_file, "Refreshing main apps view")
                                     self.show_apps()  # Otherwise refresh main view
+                                log_message(self.log_file, "UI refresh complete")
 
                             GLib.idle_add(refresh_ui)
                         else:
+                            failure_message = "Update failed with non-zero exit code" if not update_cancelled else "Update was cancelled by user"
+                            log_message(self.log_file, failure_message)
                             GLib.idle_add(update_progress, 1.0, "Update failed!")
                             time.sleep(2)
                             GLib.idle_add(update_dialog.destroy)
 
                     except Exception as e:
-                        print(f"Update error: {str(e)}")
+                        error_message = f"Update error: {str(e)}"
+                        print(error_message)
+                        log_message(self.log_file, error_message)
+                        log_message(self.log_file, traceback.format_exc())
                         GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
                         time.sleep(2)
                         GLib.idle_add(update_dialog.destroy)
 
                     finally:
+                        log_message(self.log_file, "Update thread cleanup")
                         if update_process:
                             try:
                                 os.killpg(
                                     os.getpgid(update_process.pid), signal.SIGTERM
                                 )
-                            except:
+                                log_message(self.log_file, "Terminated any remaining update process")
+                            except Exception as e:
+                                log_message(self.log_file, f"Failed to terminate process: {e}")
                                 pass
                         update_process = None
                         if script_file and os.path.exists(script_file):
                             try:
                                 os.remove(script_file)
-                                print(f"Cleaned up script: {script_file}")
+                                cleanup_msg = f"Cleaned up script: {script_file}"
+                                print(cleanup_msg)
+                                log_message(self.log_file, cleanup_msg)
                             except Exception as e:
-                                print(f"Error cleaning up script: {e}")
+                                error_msg = f"Error cleaning up script: {e}"
+                                print(error_msg)
+                                log_message(self.log_file, error_msg)
 
                 # Connect the response signal and cancel button
+                log_message(self.log_file, "Starting update thread")
                 thread = threading.Thread(target=update_thread)
                 thread.daemon = True
                 thread.start()
+                log_message(self.log_file, f"Update thread started with ID: {thread.ident}")
 
         except Exception as e:
-            print(f"Error in update process: {e}")
+            error_msg = f"Error in update process: {e}"
+            print(error_msg)
             import traceback
 
+            # Log the error if logging is active
+            if self.log_file:
+                log_message(self.log_file, error_msg)
+                log_message(self.log_file, traceback.format_exc())
+                log_message(self.log_file, "Update process failed")
+            
             traceback.print_exc()
 
     def on_update_system(self, button):

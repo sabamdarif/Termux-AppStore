@@ -14,3 +14,4 @@ fuzzywuzzy>=0.18.0
 
 # Alternative to fuzzywuzzy (uncomment if using this instead)
 # thefuzz>=0.19.0
+packaging>=23.0

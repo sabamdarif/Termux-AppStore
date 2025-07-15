@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # Tell pyright that these modules exist
 # pyright: reportMissingImports=false
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango
+from packaging import version
 from PIL import Image
 
 # Fuzzy search libraries
@@ -1018,13 +1019,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         None,
                     )
                     if old_app:
-                        old_version = old_app.get("version")
-                        new_version = app.get("version")
-                        if old_version and new_version and old_version != new_version:
+                        old_version_raw = old_app.get("version")
+                        new_version_raw = app.get("version")
+                        
+                        # Normalize versions for comparison
+                        # Use the new is_newer method for comparison
+                        if self.is_newer(old_version_raw, new_version_raw):
                             print(
-                                f"Update found for {app['app_name']}: {old_version} -> {new_version}"
+                                f"Update found for {app['app_name']}: {old_version_raw} -> {new_version_raw}"
                             )
-                            self.pending_updates[app["folder_name"]] = new_version
+                            self.pending_updates[app["folder_name"]] = new_version_raw
 
             # Step 7: Save pending updates
             self.save_pending_updates()
@@ -3844,26 +3848,67 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             traceback.print_exc()
 
+    def normalize_version(self, version):
+        """Normalize version string for consistent comparison"""
+        if not version or not isinstance(version, str):
+            return version
+            
+        if version in ["termux_local_version", "distro_local_version", "Unavailable"]:
+            return version
+            
+        # Apply the same normalization as in the UI display
+        normalized = version.split(",")[0].strip()
+        normalized = normalized.split()[0].strip()
+        # Remove leading 'v' if present
+        if normalized.startswith("v"):
+            normalized = normalized[1:]
+        return normalized
+
+    def is_newer(self, old_version_str, new_version_str):
+        """Check if new_version_str is newer than old_version_str."""
+        try:
+            # Handle cases where version might be None or not a string
+            if not all(isinstance(v, str) for v in [old_version_str, new_version_str]):
+                return False
+
+            # Normalize versions before parsing
+            old_v_normalized = self.normalize_version(old_version_str)
+            new_v_normalized = self.normalize_version(new_version_str)
+
+            # Skip special version strings
+            if old_v_normalized in ["termux_local_version", "distro_local_version", "Unavailable"] or \
+               new_v_normalized in ["termux_local_version", "distro_local_version", "Unavailable"]:
+                return False
+
+            # Use the packaging library for robust version comparison
+            return version.parse(new_v_normalized) > version.parse(old_v_normalized)
+
+        except (version.InvalidVersion, TypeError, ValueError) as e:
+            print(f"Error comparing versions '{old_version_str}' and '{new_version_str}': {e}")
+            # Fallback to simple string comparison for safety, though it might be inaccurate
+            return new_version_str > old_version_str
+        
     def compare_versions(self, old_data, new_data):
         """Compare versions between old and new apps.json"""
         updates = {}
         print("\nComparing versions:")
         for new_app in new_data:
             app_name = new_app["folder_name"]
-            new_version = new_app.get("version")
+            new_version = self.normalize_version(new_app.get("version"))
 
             # Find corresponding app in old data
             old_app = next(
                 (app for app in old_data if app["folder_name"] == app_name), None
             )
             if old_app:
-                old_version = old_app.get("version")
-                print(f"Comparing {app_name}: old={old_version}, new={new_version}")
-                if new_version and old_version != new_version:
+                old_version_raw = old_app.get("version")
+                new_version_raw = new_app.get("version")
+                print(f"Comparing {app_name}: old={old_version_raw}, new={new_version_raw}")
+                if self.is_newer(old_version_raw, new_version_raw):
                     print(
-                        f"Update found for {app_name}: {old_version} -> {new_version}"
+                        f"Update found for {app_name}: {old_version_raw} -> {new_version_raw}"
                     )
-                    updates[app_name] = new_version
+                    updates[app_name] = new_version_raw
 
         print(f"Total updates found: {len(updates)}")
         print(f"Updates: {updates}")
@@ -3946,7 +3991,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.log_file, self.log_file_path = setup_logging("update")
                 self.logging_active = bool(self.log_file)
                 log_message(self.log_file, f"Starting update of {app['app_name']}")
-                log_message(self.log_file, f"App details: {app['folder_name']}, Version: {app.get('version', 'N/A')} -> {self.pending_updates.get(app['folder_name'], {}).get('version', 'N/A')}")
+                log_message(self.log_file, f"App details: {app['folder_name']}, Version: {app.get('version', 'N/A')} -> {self.pending_updates.get(app['folder_name'], 'N/A')}")
                 
                 # Create update dialog
                 update_dialog, status_label, progress_bar = self.create_update_dialog(
@@ -4891,10 +4936,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         print(f"Found old app data? {old_app is not None}")
 
                         if old_app:
-                            old_version = old_app.get("version")
-                            new_version = app.get("version")
-                            print(f"Old version: {old_version}")
-                            print(f"New version: {new_version}")
+                            old_version_raw = old_app.get("version")
+                            new_version_raw = app.get("version")
+                            print(f"Raw old version: {old_version_raw}")
+                            print(f"Raw new version: {new_version_raw}")
+                            
+                            # Normalize versions for comparison
+                            old_version = self.normalize_version(old_version_raw)
+                            new_version = self.normalize_version(new_version_raw)
+                            print(f"Normalized old version: {old_version}")
+                            print(f"Normalized new version: {new_version}")
 
                             # Skip comparison if either version is unavailable
                             if old_version in [

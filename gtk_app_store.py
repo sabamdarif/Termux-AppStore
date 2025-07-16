@@ -125,6 +125,44 @@ def log_message(log_file, message):
         except Exception as e:
             print(f"Error writing to log file: {e}")
 
+# Function to log app open events
+def log_app_open(app_name):
+    """Log when an app is opened via the Open button
+    Creates a log file with the app name in the filename
+    """
+    try:
+        # Create log directory if it doesn't exist
+        os.makedirs(APPSTORE_LOG_DIR, exist_ok=True)
+        
+        # Sanitize app name for filename (replace spaces and special chars with hyphens)
+        sanitized_app_name = "".join([c if c.isalnum() else "-" for c in app_name])
+        
+        # Generate timestamp and random ID for the log file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        random_id = os.urandom(4).hex()  # 8 character random hex string
+        
+        # Create log file name with the app name
+        log_filename = f"{sanitized_app_name}_open_log_{timestamp}_{random_id}.log"
+        log_file_path = os.path.join(APPSTORE_LOG_DIR, log_filename)
+        
+        # Open log file
+        log_file = open(log_file_path, "w")
+        
+        # Write header
+        log_file.write(f"--- {app_name.upper()} OPEN LOG START ---\n")
+        log_file.write(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        log_file.write(f"System: {platform.system()} {platform.release()}\n")
+        log_file.write(f"Architecture: {platform.machine()}\n")
+        log_file.write("---\n\n")
+        
+        # Flush to ensure header is written immediately
+        log_file.flush()
+        
+        return log_file, log_file_path
+    except Exception as e:
+        print(f"Error setting up app open logging: {e}")
+        return None, None
+
 # Function to validate logo size
 def validate_logo_size(logo_path):
     """Check if the logo is within the required size range."""
@@ -3756,14 +3794,39 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.show_error_dialog("No run command specified for this app")
                 return
 
+            # Get app name for logging
+            app_name = app.get("name", "Unknown")
+            
+            # Set up logging for this app open event
+            log_file, log_file_path = log_app_open(app_name)
+            
+            # Log the run command
+            if log_file:
+                log_message(log_file, f"Running command: {run_cmd}")
+
             # Prefix pdrun for distro apps
             if app.get("app_type") == "distro":
                 run_cmd = f"pdrun {run_cmd}"
+                if log_file:
+                    log_message(log_file, "Using pdrun prefix for distro app")
 
-            # Just run the command
-            subprocess.Popen(["bash", "-c", run_cmd])
+            # Run the command and capture output for logging
+            process = subprocess.Popen(
+                ["bash", "-c", run_cmd],
+                stdout=log_file if log_file else None,
+                stderr=subprocess.STDOUT if log_file else None
+            )
+            
+            # Log the process ID if logging is enabled
+            if log_file:
+                log_message(log_file, f"Process started with PID: {process.pid}")
         except Exception as e:
-            self.show_error_dialog(f"Error opening app: {e}")
+            error_msg = f"Error opening app: {e}"
+            self.show_error_dialog(error_msg)
+            # Log the error if log file is available
+            if 'log_file' in locals() and log_file:
+                log_message(log_file, error_msg)
+                log_file.close()
 
     def start_task_processor(self):
         """Start the background task processor thread"""

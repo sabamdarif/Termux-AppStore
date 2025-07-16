@@ -246,7 +246,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Maps system architecture to compatible architectures
         self.arch_compatibility = {
-            "aarch64": ["aarch64", "arm64", "arm", "all", "any"],
+            "aarch64": ["aarch64", "arm64", "all", "any"],
             "armv8l": ["arm", "armv7", "armhf", "all", "any"],
             "armv7l": ["arm", "armv7", "armhf", "all", "any"],
             "x86_64": ["x86_64", "amd64", "x86", "all", "any"],

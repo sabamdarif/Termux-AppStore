@@ -1,5 +1,4 @@
 name: Update Apps Metadata
-
 on:
   push:
     paths:
@@ -8,7 +7,6 @@ on:
     paths:
       - 'apps/**'
   workflow_dispatch:
-
 jobs:
   update-metadata:
     runs-on: ubuntu-latest
@@ -16,28 +14,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install Pillow
           pip install pathlib
-
       - name: Update apps.json
         run: python .github/scripts/update_metadata.py
-
       - name: Check for changes
         id: check_changes
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then
             echo "changes=true" >> $GITHUB_OUTPUT
           fi
-
       - name: Create logos archive
         run: |
           mkdir -p logo
@@ -55,8 +48,7 @@ jobs:
             fi
           done
           cd logo && zip -r ../logos.zip * && cd ..
-
-      - name: Create Release
+      - name: Create Logos Release
         uses: softprops/action-gh-release@v1
         with:
           files: logos.zip
@@ -64,10 +56,17 @@ jobs:
           name: App Logos
           body: Archive of all app logos
           token: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: Create Apps Data Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: data/apps.json
+          tag_name: apps_data
+          name: Apps Data
+          body: Apps metadata JSON file
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Commit and push if changed
         if: steps.check_changes.outputs.changes == 'true'
-        run: |
+        run: |-
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "GitHub Action"
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
@@ -76,3 +75,4 @@ jobs:
             git commit -m "Update apps metadata"
             git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:$BRANCH_NAME
           )
+

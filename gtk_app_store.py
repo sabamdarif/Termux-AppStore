@@ -66,7 +66,7 @@ APPSTORE_DIR = os.path.expanduser("~/.appstore")
 APPSTORE_LOGO_DIR = os.path.join(APPSTORE_DIR, "logo")
 APPSTORE_JSON = os.path.join(APPSTORE_DIR, "apps.json")
 LAST_REFRESH_FILE = os.path.join(APPSTORE_DIR, "last_refresh")
-GITHUB_APPS_JSON = "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/data/apps.json"
+GITHUB_APPS_JSON = "https://github.com/sabamdarif/Termux-AppStore/releases/download/apps_data/apps.json"
 
 # Add these constants after the existing path definitions
 APPSTORE_OLD_JSON_DIR = os.path.join(APPSTORE_DIR, 'old_json')

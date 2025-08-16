@@ -30,7 +30,7 @@ echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft
 # Final update of package lists
 sudo apt-get update -y
 
-# sudo apt install code -y
+sudo apt install code -y
 '
 
 elif [[ "$selected_distro" == "fedora" ]]; then

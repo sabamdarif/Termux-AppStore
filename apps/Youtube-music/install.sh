@@ -3,7 +3,7 @@
 supported_arch="Invalid,choice(s).,Please,choose,from:,aarch64,arm,aarch64,arm"
 package_name="youtube-music"
 run_cmd="youtube-music"
-version="v3.10.0"
+version="v3.11.0"
 app_type="distro"
 supported_distro="all"
 page_url="https://github.com/th-ch/youtube-music"

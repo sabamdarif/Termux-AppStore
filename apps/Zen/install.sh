@@ -3,7 +3,7 @@
 supported_arch="aarch64"
 package_name="zen-browser"
 run_cmd="/opt/zen-browser/zen-browser --no-sandbox"
-version="1.15.5b"
+version="1.16.1b"
 app_type="distro"
 page_url="https://github.com/zen-browser/desktop"
 working_dir="${distro_path}/opt"

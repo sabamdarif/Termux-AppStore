@@ -1,0 +1,1 @@
+A GTK4 application that downloads images of waifus

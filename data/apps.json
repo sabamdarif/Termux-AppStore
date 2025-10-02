@@ -1155,6 +1155,7 @@
       "Internet"
     ],
     "app_type": "native",
+    "run_cmd": "waifudownloader",
     "supported_arch": "aarch64",
     "version": "0.2.9",
     "package_name": "waifudownloader",

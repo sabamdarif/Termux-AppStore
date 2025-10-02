@@ -6,7 +6,7 @@ version="0.2.9"
 app_type="native"
 
 deb_file_name="${package_name}_${version}_${supported_arch}.deb"
-download_url="https://github.com/WOOD6563/WaifuDownloader-termux/releases/download/Master/${deb_file_name}"
+download_url="https://github.com/WOOD6563/WaifuDownloader-termux/releases/tag/Huhhhhhh/${deb_file_name}"
 
 dpkg --configure -a
 apt --fix-broken install -y

@@ -1148,6 +1148,21 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Void/logo.png"
   },
   {
+    "app_name": "WaifuDownloader",
+    "folder_name": "WaifuDownloader",
+    "description": "A GTK4 application that downloads images of waifus",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "supported_arch": "aarch64",
+    "version": "0.2.9",
+    "package_name": "waifudownloader",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/WaifuDownloader/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/WaifuDownloader/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/WaifuDownloader/logo.png"
+  },
+  {
     "app_name": "Webcord",
     "folder_name": "Webcord",
     "description": "Fast Discord client for ARM that mimics the official Discord client.",

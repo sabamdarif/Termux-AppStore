@@ -2,6 +2,7 @@
 
 supported_arch="aarch64"
 package_name="waifudownloader"
+run_cmd="waifudownloader"
 version="0.2.9"
 app_type="native"
 

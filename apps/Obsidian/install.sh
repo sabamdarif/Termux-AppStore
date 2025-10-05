@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 supported_arch="arm64"
-version="v1.9.12"
+version="v1.9.14"
 app_type="distro"
 supported_distro="all"
 # working_dir="${distro_path}/opt/AppImageLauncher"

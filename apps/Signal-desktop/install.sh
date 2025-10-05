@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 supported_arch="aarch64"
-version="v7.72.1"
+version="v7.73.0"
 app_type="distro"
 supported_distro="all"
 working_dir="${distro_path}/root"

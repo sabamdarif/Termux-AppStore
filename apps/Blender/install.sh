@@ -19,6 +19,7 @@ mkdir blender
 cd blender || exit 1
 check_and_delete "$deb_file_name"
 download_file "https://github.com/sabamdarif/Termux-AppStore/releases/download/files/${deb_file_name}"
+unzip -o "${deb_file_name}"
 dpkg --configure -a
 apt --fix-broken install -y
 apt install ./*.deb -y

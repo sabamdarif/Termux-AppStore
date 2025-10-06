@@ -950,6 +950,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Signal-desktop/logo.png"
   },
   {
+    "app_name": "Simulide",
+    "folder_name": "Simulide",
+    "description": "SimulIDE Circuit Simulator.",
+    "categories": [
+      "Development"
+    ],
+    "app_type": "native",
+    "run_cmd": "simulide",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "simulide",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Simulide/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Simulide/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Simulide/logo.png"
+  },
+  {
     "app_name": "Spotify qt",
     "folder_name": "Spotify-qt",
     "description": "Lightweight Spotify client using Qt",

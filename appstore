@@ -1,10 +1,14 @@
 #!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
 
-APP_DIR="/data/data/com.termux/files/usr/opt/appstore"
-APP_SCRIPT="$APP_DIR/gtk_app_store.py"
-REQUIREMENTS_FILE="$APP_DIR/requirements.txt"
+# Constants
+readonly APP_DIR="/data/data/com.termux/files/usr/opt/appstore"
+readonly APP_SCRIPT="$APP_DIR/gtk_app_store.py"
+readonly REQUIREMENTS_FILE="$APP_DIR/requirements.txt"
+readonly DESKTOP_FILE="org.sabamdarif.termux.appstore.desktop"
+readonly REPO_URL="https://github.com/sabamdarif/Termux-AppStore"
+readonly COMMON_FUNCTIONS="/data/data/com.termux/files/usr/etc/termux-desktop/common_functions"
 
-# Function to display notifications
 show_notification() {
     if command -v notify-send &>/dev/null; then
         notify-send "Termux App Store" "$1" --urgency=critical
@@ -12,196 +16,292 @@ show_notification() {
     echo "$1"
 }
 
-if [[ -f /data/data/com.termux/files/usr/etc/termux-desktop/common_functions ]]; then
-    source /data/data/com.termux/files/usr/etc/termux-desktop/common_functions
+if [[ -f "$COMMON_FUNCTIONS" ]]; then
+    # shellcheck source=/dev/null
+    source "$COMMON_FUNCTIONS"
 else
-    echo -e "\033[0;31m[☓]\033[0;31m It looks like common_functions is missing from your system, make sure you install sabamdarif/termux-desktop\033[0m"
+    print_failed "common_functions missing. Install sabamdarif/termux-desktop"
+    exit 1
 fi
+detact_package_manager
 
 install_appstore() {
-    app_version="${1:-src}"
-    package_install_and_check aria2 python python-pip pygobject python-pillow git
-    check_and_delete "$APP_DIR"
-    check_and_create_directory "$APP_DIR"
+    local version="${1:-src}"
 
-    git clone -b "$app_version" https://github.com/sabamdarif/Termux-AppStore $APP_DIR
-    cd "$APP_DIR" || exit 1
-    check_and_delete "$PREFIX/bin/appstore"
-    cp appstore "$PREFIX/bin/appstore"
-    chmod +x "$PREFIX/bin/appstore"
-    pip install -r requirements.txt
-    cd "$HOME" || exit 1
-    if [[ -d "$APP_DIR" ]]; then
-        print_success "Termux App Store has been installed"
-    else
-        print_failed "Termux App Store install failed"
+    print_msg "Installing Termux App Store (version: $version)..."
+
+    print_msg "Installing required packages..."
+    package_install_and_check "aria2 python python-pip pygobject python-pillow git" || {
+        print_failed "Failed to install dependencies"
+        return 1
+    }
+
+    check_and_delete "$APP_DIR"
+    check_and_create_directory "$APP_DIR" || {
+        print_failed "Failed to create app directory"
+        return 1
+    }
+
+    print_msg "Cloning repository (branch: $version)..."
+    if ! git clone -b "$version" "$REPO_URL" "$APP_DIR"; then
+        print_failed "Failed to clone repository. Check if version '$version' exists."
+        return 1
     fi
+
+    print_msg "Creating launcher symlink..."
+    check_and_delete "$PREFIX/bin/appstore"
+    if [[ -f "$APP_DIR/appstore" ]]; then
+        ln -sf "$APP_DIR/appstore" "$PREFIX/bin/appstore" || {
+            print_failed "Failed to create symlink"
+            return 1
+        }
+        chmod +x "$PREFIX/bin/appstore"
+    else
+        print_failed "Launcher script not found in repository"
+        return 1
+    fi
+
+    print_msg "Installing desktop file..."
+    if [[ -f "$APP_DIR/$DESKTOP_FILE" ]]; then
+        check_and_create_directory "$PREFIX/share/applications"
+        cp "$APP_DIR/$DESKTOP_FILE" "$PREFIX/share/applications/" || {
+            print_failed "Failed to copy desktop file"
+            return 1
+        }
+    else
+        print_failed "Desktop file not found in repository"
+    fi
+
+    if [[ -f "$REQUIREMENTS_FILE" ]]; then
+        print_msg "Installing Python dependencies..."
+        pip install -r "$REQUIREMENTS_FILE" || {
+            print_failed "Failed to install Python dependencies"
+            return 1
+        }
+    else
+        print_failed "requirements.txt not found"
+    fi
+
+    if verify_installation; then
+        print_success "Termux App Store installed successfully"
+    else
+        print_failed "Installation verification failed"
+        return 1
+    fi
+}
+
+verify_installation() {
+    local required_files=(
+        "$APP_SCRIPT"
+        "$APP_DIR/inbuild_functions/inbuild_functions"
+        "$APP_DIR/style/style.css"
+    )
+
+    local missing_files=()
+    for file in "${required_files[@]}"; do
+        [[ -f "$file" ]] || missing_files+=("$file")
+    done
+
+    if ((${#missing_files[@]} > 0)); then
+        print_failed "Missing required files:"
+        printf '  • %s\n' "${missing_files[@]}" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 update_appstore() {
     if [[ ! -d "$APP_DIR" ]]; then
-        print_msg "Install the app store first. Run appstore --install"
-        exit 1
+        print_failed "App store not installed. Run: appstore --install"
+        return 1
     fi
 
-    # Map of local paths to actual file name (on github)
-    declare -A file_map=(
-        ["$APP_DIR/gtk_app_store.py"]="gtk_app_store.py"
-        ["$APP_DIR/inbuild_functions/inbuild_functions"]="inbuild_functions/inbuild_functions"
-        ["$APP_DIR/requirements.txt"]="requirements.txt"
-        ["$APP_DIR/style/style.css"]="style/style.css"
-        ["$PREFIX/bin/appstore"]="appstore"
-        ["$PREFIX/share/applications/org.sabamdarif.termux.appstore.desktop"]="org.sabamdarif.termux.appstore.desktop"
-    )
+    print_msg "Checking for updates..."
 
     local update_needed=false
-    local failed_hash_checks=()
+    local changed_files=()
 
-    for local_path in "${!file_map[@]}"; do
-        file="${file_map[$local_path]}"
+    # List of files to check: "local_path|github_path"
+    local files_to_check=(
+        "$APP_DIR/gtk_app_store.py|gtk_app_store.py"
+        "$APP_DIR/inbuild_functions/inbuild_functions|inbuild_functions/inbuild_functions"
+        "$APP_DIR/requirements.txt|requirements.txt"
+        "$APP_DIR/style/style.css|style/style.css"
+        "$APP_DIR/appstore|appstore"
+        "$PREFIX/share/applications/$DESKTOP_FILE|$DESKTOP_FILE"
+    )
+
+    for entry in "${files_to_check[@]}"; do
+        local local_path="${entry%|*}"
+        local github_path="${entry#*|}"
 
         # Get GitHub file hash
-        github_hash=$(curl -sL "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/${file}" | sha256sum | cut -d ' ' -f 1)
+        local github_hash
+        github_hash=$(curl -sL "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/${github_path}" | sha256sum | awk '{print $1}')
 
         # Get local file hash
         if [[ -f "$local_path" ]]; then
-            local_hash=$(sha256sum "$local_path" | cut -d ' ' -f 1)
-        else
-            failed_hash_checks+=("$file")
-            update_needed=true
-            continue
-        fi
+            local local_hash
+            local_hash=$(sha256sum "$local_path" | awk '{print $1}')
 
-        # Compare hashes
-        if [[ "$local_hash" != "$github_hash" ]]; then
+            # Compare hashes
+            if [[ "$local_hash" != "$github_hash" ]]; then
+                update_needed=true
+                changed_files+=("$github_path")
+            fi
+        else
             update_needed=true
-            failed_hash_checks+=("$file")
+            changed_files+=("$github_path (missing)")
         fi
     done
 
     if [[ "$update_needed" == true ]]; then
-        echo "[-] Updates found for the following files:"
-        printf '%s\n' "${failed_hash_checks[@]}"
+        print_msg "Updates available for:"
+        printf '  • %s\n' "${changed_files[@]}"
         echo
 
-        confirmation_y_or_n "Would you like to update the appstore to the latest version" confirm_update
+        local confirm_update
+        confirmation_y_or_n "Update to the latest version?" confirm_update
 
         if [[ "$confirm_update" == "y" ]]; then
             print_msg "Updating appstore..."
-            install_appstore
-            print_success "Appstore updated successfully"
+            install_appstore "src" && print_success "Appstore updated successfully"
         else
-            print_msg "Skipping appstore update"
+            print_msg "Update cancelled"
         fi
     else
-        print_success "You are using the latest version"
+        print_success "Already using the latest version"
     fi
 }
 
 remove_appstore() {
     print_msg "Removing Termux App Store..."
-    check_and_delete "$APP_DIR" "$PREFIX/share/applications/org.sabamdarif.termux.appstore.desktop"
-    print_success "Termux App Store has been removed."
+    check_and_delete "$APP_DIR $PREFIX/share/applications/$DESKTOP_FILE $PREFIX/bin/appstore"
+    print_success "Termux App Store removed"
 }
 
-# Fixed argument handling
-while [[ $# -gt 0 ]]; do
-    case $1 in
-    -i | --install)
-        if [[ -n "$2" && ! "$2" =~ ^- ]]; then
-            install_appstore "$2"
-            exit 0
+check_dependencies() {
+    if ! command -v python3 &>/dev/null; then
+        show_notification "Error: Python 3 not installed. Run: pkg install python"
+        return 1
+    fi
 
-        else
-            install_appstore "src"
-            exit 0
+    if ! command -v pip &>/dev/null; then
+        show_notification "Error: pip not installed. Run: pkg install python-pip"
+        return 1
+    fi
 
+    return 0
+}
+
+check_python_dependencies() {
+    print_msg "Checking Python dependencies..."
+
+    local missing_deps=()
+
+    # Check each package from requirements.txt
+    while IFS= read -r line; do
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        local pkg
+        pkg=$(echo "$line" | sed -E 's/^([A-Za-z0-9_-]+).*/\1/')
+
+        # Map package names to import names
+        local import_name="$pkg"
+        case "$pkg" in
+        Pillow) import_name="PIL" ;;
+        PyYAML) import_name="yaml" ;;
+        esac
+
+        if ! python3 -c "import $import_name" &>/dev/null; then
+            missing_deps+=("$pkg")
         fi
-        ;;
-    -u | --update)
-        update_appstore
-        exit 0
+    done <"$REQUIREMENTS_FILE"
 
-        ;;
-    -r | --remove)
-        remove_appstore
-        exit 0
+    # Check PyGObject
+    if ! python3 -c "import gi" &>/dev/null; then
+        missing_deps+=("PyGObject")
+    fi
 
-        ;;
-    -h | --help)
-        echo "Usage: appstore [OPTION]"
-        echo "  -i, --install [version]   Install the app store (default: src)"
-        echo "  -u, --update              Update the app store"
-        echo "  -r, --remove              Remove the app store"
-        echo "  -h, --help                Display this help message"
-        exit 0
-        ;;
-    *)
-        echo "Unknown option: $1"
-        echo "Use 'appstore --help' for usage information"
-        exit 1
-        ;;
-    esac
-done
+    if ((${#missing_deps[@]} > 0)); then
+        show_notification "Missing Python dependencies: ${missing_deps[*]}"
+        print_failed "Install with: pip install -r $REQUIREMENTS_FILE"
+        print_msg "For PyGObject: pkg install python-gobject"
+        return 1
+    fi
 
-if ! command -v python3 &>/dev/null; then
-    show_notification "Error: Python 3 is not installed. Please install with 'pkg install python'."
-    exit 1
-fi
+    print_success "All dependencies satisfied"
+    return 0
+}
 
-if ! command -v pip &>/dev/null; then
-    show_notification "Error: pip is not installed. Please install with 'pkg install python-pip'."
-    exit 1
-fi
+launch_appstore() {
+    check_dependencies || return 1
+    verify_installation || {
+        print_failed "Installation corrupted. Reinstall with: appstore --install"
+        return 1
+    }
+    check_python_dependencies || return 1
 
-required_files=(
-    "$APP_DIR/gtk_app_store.py"
-    "$REQUIREMENTS_FILE"
-    "$APP_DIR/inbuild_functions/inbuild_functions"
-    "$APP_DIR/style/style.css"
-    "$PREFIX/share/applications/org.sabamdarif.termux.appstore.desktop"
-)
+    print_success "Launching App Store..."
+    python3 "$APP_SCRIPT"
+}
 
-missing_files=()
-for f in "${required_files[@]}"; do
-    [[ -e "$f" ]] || missing_files+=("$f")
-done
+show_help() {
+    cat <<EOF
+Usage: appstore [OPTION] [VERSION]
 
-if ((${#missing_files[@]})); then
-    missing_list=$(printf "  • %s\n" "${missing_files[@]}")
-    show_notification "Error: Missing files:
-$missing_list
-Please reinstall: appstore --install"
-    exit 1
-fi
+Options:
+  -i, --install [VERSION]   Install app store (default: src)
+  -u, --update              Check and update to latest version
+  -r, --remove              Remove app store
+  -h, --help                Show this help message
 
-declare -A PACKAGE_IMPORTS=(
-    [Pillow]=PIL [PyYAML]=yaml [requests]=requests
-    [urllib3]=urllib3 [fuzzywuzzy]=fuzzywuzzy [thefuzz]=thefuzz
-)
-
-print_msg "Checking Python dependencies..."
-MISSING_DEPS=""
-while IFS= read -r line || [[ -n $line ]]; do
-    [[ $line =~ ^# ]] && continue
-    pkg=$(echo "$line" | sed -E 's/^([A-Za-z0-9_-]+).*/\1/')
-    imp=${PACKAGE_IMPORTS[$pkg]:-$pkg}
-    python3 -c "import $imp" &>/dev/null || MISSING_DEPS+="${MISSING_DEPS:+, }$pkg"
-done <"$REQUIREMENTS_FILE"
-
-python3 - <<'EOF' &>/dev/null
-import gi
+Examples:
+  appstore --install        Install latest version (src branch)
+  appstore --install v0.5.4 Install specific version
+  appstore                  Launch app store
+  appstore --update         Update to latest version
 EOF
-if [[ $? -ne 0 ]]; then
-    MISSING_DEPS+="${MISSING_DEPS:+, }PyGObject"
-fi
+}
 
-if [[ -n "$MISSING_DEPS" ]]; then
-    show_notification "Error: Missing Python deps: $MISSING_DEPS. Install with 'pip install -r $REQUIREMENTS_FILE'"
-    print_msg "For PyGObject, use: pkg install python-gobject"
-    exit 1
-fi
+main() {
+    if [[ $# -eq 0 ]]; then
+        launch_appstore
+        exit $?
+    fi
 
-print_success "All checks passed, launching App Store..."
-python3 "$APP_SCRIPT"
-exit $?
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        -i | --install)
+            shift
+            if [[ -n "${1:-}" && ! "$1" =~ ^- ]]; then
+                install_appstore "$1"
+                exit $?
+            else
+                install_appstore "src"
+                exit $?
+            fi
+            ;;
+        -u | --update)
+            update_appstore
+            exit $?
+            ;;
+        -r | --remove)
+            remove_appstore
+            exit $?
+            ;;
+        -h | --help)
+            show_help
+            exit 0
+            ;;
+        *)
+            print_failed "Unknown option: $1"
+            echo "Use 'appstore --help' for usage information"
+            exit 1
+            ;;
+        esac
+    done
+}
+
+main "$@"

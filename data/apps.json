@@ -998,23 +998,6 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotify-qt/logo.png"
   },
   {
-    "app_name": "Spotube",
-    "folder_name": "Spotube",
-    "description": "Open source Spotify client that doesn't require Premium nor uses Electron!",
-    "categories": [
-      "Internet"
-    ],
-    "app_type": "distro",
-    "run_cmd": "/opt/spotube/spotube --no-sandbox",
-    "supported_arch": "aarch64",
-    "version": "v3.9.0",
-    "supported_distro": "all",
-    "package_name": "spotube",
-    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotube/install.sh",
-    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotube/uninstall.sh",
-    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Spotube/logo.png"
-  },
-  {
     "app_name": "Tageditor",
     "folder_name": "Tageditor",
     "description": "A tag editor with Qt GUI and command-line interface. Supports MP4 (iTunes), ID3, Vorbis, Opus, FLAC and Matroska",

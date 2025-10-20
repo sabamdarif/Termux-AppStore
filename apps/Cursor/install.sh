@@ -2,14 +2,14 @@
 
 supported_arch="aarch64"
 package_name="cursor"
-version="1.2.1"
+version="1.7.52"
 app_type="distro"
 supported_distro="all"
-page_url="https://downloads.cursor.com/production/031e7e0ff1e2eda9c1a0f5df67d44053b059c5df/linux/arm64"
+page_url="https://downloads.cursor.com/production/9675251a06b1314d50ff34b0cbe5109b78f848cd/linux/arm64"
 pause_update=true
 run_cmd="/opt/AppImageLauncher/cursor/AppRun --no-sandbox"
 
-cd ${TMPDIR}
+cd "${TMPDIR}" || exit 1
 
 appimage_filename="Cursor-${version}-${supported_arch}.AppImage"
 

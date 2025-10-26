@@ -1,4 +1,4 @@
-#! /data/data/com.termux/files/usr/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 
 supported_arch="aarch64,arm"
 package_name="shotcut"
@@ -9,3 +9,4 @@ app_type="native"
 run_cmd="shotcut"
 
 package_install_and_check "shotcut jack jack2 jack-example-tools"
+

@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: write 
+      actions: write
 
     steps:
       - name: Checkout repository
@@ -37,10 +37,10 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "GitHub Action"
-          
+
           git add -A
           git commit -m "Update app versions with latest releases from GitHub"
-          
+
           # Push changes
           git push origin HEAD:${GITHUB_REF#refs/heads/}
 

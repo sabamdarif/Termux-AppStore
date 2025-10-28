@@ -22,16 +22,16 @@ def compress_image(image_path, min_size=50, max_size=100):
     if is_svg(image_path):
         print(f"{image_path} is an SVG file, skipping compression.")
         return
-        
+
     try:
         with Image.open(image_path) as img:
             width, height = img.size
-            
+
             # Check if resizing is necessary
             if min_size <= width <= max_size and min_size <= height <= max_size:
                 print(f"{image_path} is already within the required dimensions.")
                 return
-            
+
             # Calculate the new size while maintaining aspect ratio
             aspect_ratio = width / height
             if width > height:  # Landscape orientation
@@ -44,7 +44,7 @@ def compress_image(image_path, min_size=50, max_size=100):
             # Ensure the resized dimensions are within the min/max range
             new_width = max(min_size, min(new_width, max_size))
             new_height = max(min_size, min(new_height, max_size))
-            
+
             # Resize the image
             resized_img = img.resize((new_width, new_height), Image.ANTIALIAS)
             resized_img.save(image_path, optimize=True)
@@ -59,19 +59,19 @@ def read_file_content(app_folder, filename):
     files = list(app_folder.glob('*'))
     print(f"\nChecking {app_folder.name}:")
     print(f"Available files: {[f.name for f in files]}")
-    
+
     # Try filename without extension
     content = read_single_file(app_folder / filename)
     if content is not None:
         print(f"Found {filename}")
         return content
-        
+
     # Try filename with .txt extension
     content = read_single_file(app_folder / f"{filename}.txt")
     if content is not None:
         print(f"Found {filename}.txt")
         return content
-        
+
     print(f"Could not find {filename} or {filename}.txt")
     return None
 
@@ -194,7 +194,7 @@ def get_app_metadata(app_folder):
         'fedora_run_cmd': None,
         'archlinux_run_cmd': None
     }
-    
+
     if install_sh_path.exists():
         try:
             with open(install_sh_path, 'r') as f:
@@ -218,9 +218,9 @@ def get_app_metadata(app_folder):
                     elif line.strip().startswith('package_name='):
                         package_name = line.split('=')[1].strip().strip('"\'')
                         metadata['package_name'] = package_name
-                    
+
                     # Add checks for distro-specific run commands
-                    elif line.strip().startswith(('ubuntu_run_cmd=', 'debian_run_cmd=', 
+                    elif line.strip().startswith(('ubuntu_run_cmd=', 'debian_run_cmd=',
                          'fedora_run_cmd=', 'archlinux_run_cmd=')):
                         cmd_type = line.split('=')[0].strip()
                         cmd_value = line.split('=')[1].strip().strip('"\'')

@@ -664,10 +664,38 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     f.write('n')
                 self.distro_enabled = False
 
+            # Check for distro type (proot or chroot)
+            self.selected_distro_type = "proot"  # Default to proot
+            termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            if os.path.exists(termux_desktop_config):
+                try:
+                    with open(termux_desktop_config, 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith('selected_distro_type='):
+                                self.selected_distro_type = line.split('=')[1].strip().strip('"').strip("'").lower()
+                                print(f"Found selected_distro_type: {self.selected_distro_type}")
+                                break
+                except Exception as e:
+                    print(f"Error reading distro type from config: {e}")
+
         except Exception as e:
             print(f"Error checking distro configuration: {e}")
             self.distro_enabled = False
             self.selected_distro = None
+            self.selected_distro_type = "proot"
+
+    def get_distro_command(self, selected_distro=None):
+        """Get the appropriate distro command based on distro type"""
+        if selected_distro is None:
+            selected_distro = self.selected_distro
+
+        distro_type = getattr(self, 'selected_distro_type', 'proot')
+
+        if distro_type == 'chroot':
+            return f"chroot-distro login {selected_distro} --shared-tmp -- /bin/bash -c"
+        else:  # Default to proot
+            return f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c"
 
     def check_for_updates(self):
         """Check for app updates when the application starts"""
@@ -807,19 +835,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Step 4: Get actual versions for distro apps if distro is enabled
             if distro_enabled and selected_distro:
-                # First check if proot-distro is working correctly
-                test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
+                # First check if distro is working correctly
+                test_cmd = f"{self.get_distro_command(selected_distro)} 'echo test'"
                 try:
                     test_result = subprocess.run(['bash', '-c', test_cmd],
                                               capture_output=True,
                                               text=True,
                                               timeout=10)
                     if test_result.returncode != 0:
-                        print(f"Error: proot-distro test failed for {selected_distro}")
+                        print(f"Error: distro test failed for {selected_distro}")
                         print(f"Stderr: {test_result.stderr}")
                         return
                 except Exception as e:
-                    print(f"Error testing proot-distro: {e}")
+                    print(f"Error testing distro: {e}")
                     return
 
                 # Process all distro apps
@@ -848,14 +876,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             continue
 
                         print(f"Checking version for {app['app_name']} using package name: {package_name}...")
-                        cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
+                        cmd = self.get_distro_command(selected_distro)
 
                         if selected_distro in ['ubuntu', 'debian']:
-                            cmd += f"'latest_version=$(apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\") && echo \"$latest_version\"'"
+                            cmd += f" 'latest_version=$(apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\") && echo \"$latest_version\"'"
                         elif selected_distro == 'fedora':
-                            cmd += f"'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \") && echo \"$latest_version\"'"
+                            cmd += f" 'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \") && echo \"$latest_version\"'"
                         elif selected_distro == 'archlinux':
-                            cmd += f"'latest_version=$(pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\") && echo \"$latest_version\"'"
+                            cmd += f" 'latest_version=$(pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\") && echo \"$latest_version\"'"
 
                         try:
                             result = subprocess.run(['bash', '-c', cmd],
@@ -1165,18 +1193,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Check if a package is installed in the selected distro"""
         try:
             # Build command based on distro type
-            cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
+            cmd = self.get_distro_command(selected_distro)
 
             if selected_distro in ['ubuntu', 'debian']:
                 # Try dpkg -l first
-                cmd += f"'dpkg -l | grep -q \"^ii  {package_name}\" || "
+                cmd += f" 'dpkg -l | grep -q \"^ii  {package_name}\" || "
                 # Try apt list as fallback
                 cmd += f"apt list --installed 2>/dev/null | grep -q \"^{package_name}/\"'"
             elif selected_distro == 'fedora':
-                cmd += f"'rpm -q {package_name} >/dev/null 2>&1'"
+                cmd += f" 'rpm -q {package_name} >/dev/null 2>&1'"
             elif selected_distro == 'archlinux':
                 # Try pacman -Qi first
-                cmd += f"'pacman -Qi {package_name} >/dev/null 2>&1 || "
+                cmd += f" 'pacman -Qi {package_name} >/dev/null 2>&1 || "
                 # Try pacman -Q as fallback
                 cmd += f"pacman -Q {package_name} >/dev/null 2>&1'"
 
@@ -1420,7 +1448,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Check distro packages if distro is enabled
             if distro_enabled and selected_distro:
-                test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
+                test_cmd = f"{self.get_distro_command(selected_distro)} 'echo test'"
                 try:
                     test_result = subprocess.run(['bash', '-c', test_cmd],
                                               capture_output=True,
@@ -1476,12 +1504,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     print(f"Selected distro: {selected_distro}")
 
                                     version_cmd = None
+                                    base_cmd = self.get_distro_command(selected_distro)
                                     if selected_distro in ['ubuntu', 'debian']:
-                                        version_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\" | tr -d \"\\n\"'"
+                                        version_cmd = f"{base_cmd} 'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\" | tr -d \"\\n\"'"
                                     elif selected_distro == 'fedora':
-                                        version_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F\": \" \"/^Version/ {{print \\$2}}\" | tr -d \"\\n\") && echo \"$latest_version\"'"
+                                        version_cmd = f"{base_cmd} 'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F\": \" \"/^Version/ {{print \\$2}}\" | tr -d \"\\n\") && echo \"$latest_version\"'"
                                     elif selected_distro == 'archlinux':
-                                        version_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\" | tr -d \"\\n\"'"
+                                        version_cmd = f"{base_cmd} 'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\" | tr -d \"\\n\"'"
 
                                     if not version_cmd:
                                         print(f"Skipping {app['app_name']}: unsupported distro {selected_distro}")
@@ -4110,25 +4139,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         print(f"Distro enabled: {distro_enabled}, Selected distro: {selected_distro}")
 
                         if distro_enabled and selected_distro:
-                            # Test if proot-distro is working
-                            test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
+                            # Test if distro is working
+                            test_cmd = f"{self.get_distro_command(selected_distro)} 'echo test'"
                             try:
                                 test_result = subprocess.run(['bash', '-c', test_cmd],
                                                           capture_output=True,
                                                           text=True,
                                                           timeout=10)
                                 if test_result.returncode == 0:
-                                    print(f"proot-distro test successful for {selected_distro}")
+                                    print(f"Distro test successful for {selected_distro}")
                                     update_progress_safe(25, f"Updating {selected_distro} repositories...")
 
                                     # Create distro update command based on distro type
                                     distro_update_cmd = ""
+                                    base_cmd = self.get_distro_command(selected_distro)
                                     if selected_distro in ['ubuntu', 'debian']:
-                                        distro_update_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'apt update -y'"
+                                        distro_update_cmd = f"{base_cmd} 'apt update -y'"
                                     elif selected_distro == 'fedora':
-                                        distro_update_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'dnf check-update -y || true'"
+                                        distro_update_cmd = f"{base_cmd} 'dnf check-update -y || true'"
                                     elif selected_distro == 'archlinux':
-                                        distro_update_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'pacman -Sy --noconfirm'"
+                                        distro_update_cmd = f"{base_cmd} 'pacman -Sy --noconfirm'"
 
                                     if distro_update_cmd:
                                         print(f"Running {selected_distro} update command: {distro_update_cmd}")
@@ -4154,9 +4184,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                         except Exception as e:
                                             print(f"Error updating {selected_distro} repositories: {e}")
                                 else:
-                                    print(f"proot-distro test failed for {selected_distro}: {test_result.stderr}")
+                                    print(f"Distro test failed for {selected_distro}: {test_result.stderr}")
                             except Exception as e:
-                                print(f"Error during proot-distro test: {e}")
+                                print(f"Error during distro test: {e}")
                     except Exception as e:
                         print(f"Error reading termux desktop config: {e}")
                 else:
@@ -4238,15 +4268,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 print(f"distro_enabled: {distro_enabled}, selected_distro: {selected_distro}")
 
                 if distro_enabled and selected_distro:
-                    # First check if proot-distro is working correctly
-                    test_cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c 'echo test'"
+                    # First check if distro is working correctly
+                    test_cmd = f"{self.get_distro_command(selected_distro)} 'echo test'"
                     try:
                         test_result = subprocess.run(['bash', '-c', test_cmd],
                                                   capture_output=True,
                                                   text=True,
                                                   timeout=10)
                         if test_result.returncode == 0:
-                            print(f"proot-distro test successful for {selected_distro}")
+                            print(f"Distro test successful for {selected_distro}")
 
                             for app in new_apps_data:
                                 if (app.get('app_type') == 'distro' and
@@ -4268,14 +4298,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                         continue
 
                                     print(f"Getting version for {app['app_name']}...")
-                                    cmd = f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c "
+                                    cmd = self.get_distro_command(selected_distro)
 
                                     if selected_distro in ['ubuntu', 'debian']:
-                                        cmd += f"'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
+                                        cmd += f" 'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
                                     elif selected_distro == 'fedora':
-                                        cmd += f"'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
+                                        cmd += f" 'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
                                     elif selected_distro == 'archlinux':
-                                        cmd += f"'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
+                                        cmd += f" 'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
 
                                     try:
                                         result = subprocess.run(['bash', '-c', cmd],
@@ -5527,11 +5557,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Get the path
         path = path_match.group(0).strip()
 
-        # Build full path with distro prefix
-        distro_path = f"/data/data/com.termux/files/home/.proot-distro/{selected_distro}/files{path}"
-
-        # Check if the file exists
-        return os.path.exists(distro_path)
 
 def show_command_output(command, app_name=None, parent=None):
     """Wrapper for the imported show_command_output function"""

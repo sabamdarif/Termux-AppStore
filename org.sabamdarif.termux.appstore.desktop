@@ -8,4 +8,4 @@ Icon=org.gnome.Software
 Terminal=false
 Categories=System;PackageManager;
 StartupWMClass=termux-appstore
-X-GNOME-SingleWindow=true 
+X-GNOME-SingleWindow=true

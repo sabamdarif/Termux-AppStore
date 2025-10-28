@@ -557,7 +557,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Set dialog properties
         about_dialog.set_program_name("Termux App Store")
-        about_dialog.set_version("0.5.4")
+        about_dialog.set_version("0.5.4.1")
         about_dialog.set_comments("A modern graphical package manager for Termux")
         about_dialog.set_copyright("© 2025 Termux Desktop (sabamdarif)")
         about_dialog.set_license_type(Gtk.License.GPL_3_0)

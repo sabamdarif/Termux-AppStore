@@ -186,7 +186,9 @@ function download_file() {
 			check_and_delete "$dest"
 		fi
 
-		if command -v wget &>/dev/null; then
+		if command -v aria2c &>/dev/null; then
+			aria2c --summary-interval=10 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" -o "$dest" "$url"
+		elif command -v wget &>/dev/null; then
 			wget --tries=5 --timeout=15 --retry-connrefused -O "$dest" "$url" 2>/dev/null
 		else
 			curl -# -L "$url" -o "$dest" 2>/dev/null
@@ -334,7 +336,7 @@ function package_install_and_check {
 }
 
 # will check the package is installed or not then remove it
-function package_check_and_remove() {
+function package_remove_and_check() {
 	log_debug "Starting package removal for: $*"
 	local packs_list
 	# Properly splits on spaces
@@ -455,7 +457,7 @@ function get_file_name_number() {
 	echo "$theme_number"
 }
 
-function extract_archive() {
+function extract() {
 	local archive="$1"
 	if [[ ! -f "$archive" ]]; then
 		print_failed "$archive doesn't exist"

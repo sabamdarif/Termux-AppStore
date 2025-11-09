@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Constants
-readonly APP_DIR="/data/data/com.termux/files/usr/opt/appstore"
+readonly APP_DIR="${PREFIX:-/data/data/com.termux/files/usr}/opt/appstore"
 readonly APP_SCRIPT="$APP_DIR/gtk_app_store.py"
 readonly REQUIREMENTS_FILE="$APP_DIR/requirements.txt"
 readonly DESKTOP_FILE="org.sabamdarif.termux.appstore.desktop"

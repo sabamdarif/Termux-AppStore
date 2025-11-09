@@ -161,8 +161,7 @@ function check_and_restore() {
 }
 
 function download_file() {
-	local dest
-	local url
+	local dest url dest_dir dest_file
 	local max_retries=5
 	local attempt=1
 	local successful_attempt=0
@@ -180,14 +179,19 @@ function download_file() {
 		return 1
 	fi
 
+	dest="$(realpath -m "$dest")"
+	dest_dir="$(dirname "$dest")"
+	dest_file="$(basename "$dest")"
+
 	while [[ $attempt -le $max_retries ]]; do
-		print_msg "Downloading $dest..."
+		print_msg "Downloading $dest_file..."
 		if [[ ! -s "$dest" ]]; then
 			check_and_delete "$dest"
 		fi
 
 		if command -v aria2c &>/dev/null; then
-			aria2c --summary-interval=10 -x16 -s16 --retry-wait=15 --max-tries=5 --dir="./" -o "$dest" "$url"
+			aria2c --summary-interval=10 -x16 -s16 --retry-wait=15 --max-tries=5 \
+				--dir="$dest_dir" -o "$dest_file" "$url"
 		elif command -v wget &>/dev/null; then
 			wget --tries=5 --timeout=15 --retry-connrefused -O "$dest" "$url" 2>/dev/null
 		else

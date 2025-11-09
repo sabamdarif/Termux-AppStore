@@ -11,24 +11,35 @@ page_url="https://github.com/Vencord/Vesktop"
 working_dir="${distro_path}/root"
 
 if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]]; then
-	cd "$working_dir" || return
 	filename="vesktop_${version#v}_arm64.deb"
+
+	temp_download="$TMPDIR/${filename}"
+	download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
+
 	distro_run "
 check_and_delete '/root/${filename}'
 "
-	download_file "${page_url}/releases/download/${version}/${filename}"
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		su -c "cp '$temp_download' '${working_dir}/${filename}'"
+	else
+		cp "$temp_download" "${working_dir}/${filename}"
+	fi
+
 	distro_run "
 sudo apt update -y -o Dpkg::Options::='--force-confnew'
-sudo apt install ./${filename} -y
+sudo apt install /root/${filename} -y
 check_and_delete '/root/${filename}'
 "
 elif [[ "$selected_distro" == "fedora" ]]; then
-	cd "$working_dir" || return
 	filename="vesktop_${version#v}_aarch64.rpm"
 	distro_run "
 check_and_delete '/root/${filename}'
 "
-	download_file "${page_url}/releases/download/${version}/${filename}"
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		su -c "cp '$temp_download' '${working_dir}/${filename}'"
+	else
+		cp "$temp_download" "${working_dir}/${filename}"
+	fi
 	distro_run "
 sudo dnf install ./${filename} -y
 check_and_delete '/root/${filename}'

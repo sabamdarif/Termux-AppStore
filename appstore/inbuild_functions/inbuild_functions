@@ -682,11 +682,15 @@ function fix_exec() {
 function install_appimage() {
 	local appimage_file_name="$1"
 	local appimage_directory_name="$2"
-	distro_run '
+	distro_run "
 check_and_create_directory '/opt/AppImageLauncher/'
 check_and_delete '/opt/AppImageLauncher/$appimage_directory_name'
-'
-	mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
+"
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		sudo mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
+	else
+		mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
+	fi
 	distro_run "
 cd /opt/AppImageLauncher
 ldconfig
@@ -920,10 +924,10 @@ CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
 EOF
 	fi
 	if [[ "$selected_distro_type" == "chroot" ]]; then
-		typeset -f banner log_debug print_msg print_success print_failed check_and_delete get_latest_release pd_package_install_and_check | sudo tee -a "$script_path" >/dev/null
+		typeset -f check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths | sudo tee -a "$script_path" >/dev/null
 		echo "$shell_setup_content" | sudo tee -a "$script_path" >/dev/null
 	else
-		typeset -f banner log_debug print_msg print_success print_failed check_and_delete get_latest_release pd_package_install_and_check >>"$script_path"
+		typeset -f check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths >>"$script_path"
 		echo "$shell_setup_content" >>"$script_path"
 	fi
 	# Make script executable

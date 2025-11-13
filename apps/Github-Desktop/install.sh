@@ -1,10 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 supported_arch="aarch64,arm"
-package_name="github-desktop"
 run_cmd="github-desktop --no-sandbox"
 version="release-3.4.13-linux1"
 final_version="${version#release-}"
-pause_update=true
 app_type="distro"
 supported_distro="all"
 page_url="https://github.com/shiftkey/desktop"

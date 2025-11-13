@@ -1,10 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 supported_arch="aarch64"
-package_name="signal-desktop-unofficial"
 run_cmd="/opt/Signal-Unofficial/signal-desktop-unofficial --no-sandbox"
 version="v7.78.0"
-pause_update=true
 app_type="distro"
 supported_distro="all"
 page_url="https://github.com/dennisameling/Signal-Desktop"

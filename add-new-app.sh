@@ -23,7 +23,7 @@ get_valid_input() {
 	local valid_options=("${@:2}")
 
 	while true; do
-		read -p "$prompt" choice
+		read -r -p "$prompt" choice
 		choice=$(echo "$choice" | tr -d '[:space:]')
 
 		for option in "${valid_options[@]}"; do
@@ -42,7 +42,7 @@ get_multiple_choices() {
 	local valid_options=("${@:2}")
 
 	while true; do
-		read -p "$prompt" choices
+		read -r -p "$prompt" choices
 		IFS=',' read -ra selected <<<"$choices"
 
 		valid=true
@@ -126,11 +126,13 @@ fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
 EOF
 	else
 		# Extract the base URL (everything before /releases/download/)
-		local base_url=$(echo "$download_url" | sed 's|\(.*\)/releases/download/.*|\1|')
+		local base_url
+		base_url="${download_url%/releases/download/*}"
 
 		if [[ "$download_url" =~ \.AppImage$ ]]; then
 			# Extract the filename pattern from the download URL
-			local filename_pattern=$(basename "$download_url")
+			local filename_pattern
+			filename_pattern=$(basename "$download_url")
 			# Replace the version and arch in the pattern with variables
 			filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/${version#v}/\${version#v}/g" | sed "s/$supported_arch/\${supported_arch}/g")
 
@@ -142,9 +144,10 @@ run_cmd="/opt/AppImageLauncher/$package_name/$package_name --no-sandbox"
 cd \${TMPDIR}
 
 app_arch=\$(uname -m)
-case " \$app_arch" in
-aarch64) archtype="arm64" ;;
-armv7*|arm) archtype="armv7l" ;;
+case "\$app_arch" in
+    aarch64) archtype="arm64" ;;
+    armv7*|arm) archtype="armv7l" ;;
+    *) print_failed "Unsupported architectures" ;;
 esac
 
 appimage_filename="$filename_pattern"
@@ -152,8 +155,8 @@ appimage_filename="$filename_pattern"
 check_and_delete "\${TMPDIR}/\${appimage_filename} \${PREFIX}/share/applications/pd_added/$package_name.desktop"
 
 print_success "Downloading $package_name AppImage..."
-download_file "\${page_url}/releases/download/\${version}/\$appimage_filename"
-install_appimage "\$appimage_filename" "$package_name"
+download_file "\${page_url}/releases/download/\${version}/\${appimage_filename}"
+install_appimage "\${appimage_filename}" "$package_name"
 
 # Determine which logo file to use
 if [ -f "\${HOME}/.appstore/logo/$folder_name/logo.png" ]; then
@@ -165,10 +168,10 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "\${PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
-Exec=pdrun "\${run_cmd}"
+Exec=pdrun \${run_cmd}
 Terminal=false
 Type=Application
 Icon=\${icon_path}
@@ -180,7 +183,8 @@ DESKTOP_EOF
 EOF
 		elif [[ "$download_url" =~ \.deb$ ]]; then
 			# Extract the filename pattern from the download URL
-			local filename_pattern=$(basename "$download_url")
+			local filename_pattern
+			filename_pattern=$(basename "$download_url")
 			# Replace the version and arch in the pattern with variables
 			filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/${version#v}/\${version#v}/g" | sed "s/$supported_arch/\${supported_arch}/g")
 			cat >>"$folder_path/install.sh" <<EOF
@@ -189,32 +193,44 @@ page_url="$base_url"
 working_dir="\${distro_path}/root"
 
 app_arch=\$(uname -m)
-case " \$app_arch" in
-aarch64) archtype="arm64" ;;
-armv7*|arm) archtype="armv7l" ;;
+case "\$app_arch" in
+    aarch64) archtype="arm64" ;;
+    armv7*|arm) archtype="armv7l" ;;
+    *) print_failed "Unsupported architectures" ;;
 esac
 
 if [[ "\$selected_distro" == "ubuntu" ]] || [[ "\$selected_distro" == "debian" ]]; then
-cd \$working_dir
-filename="${filename_pattern}"
-distro_run "
+    filename="$filename_pattern"
+    temp_download="\$TMPDIR/\${filename}"
+    download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
+    distro_run "
 check_and_delete '/root/\${filename}'
 "
-download_file "${page_url}/releases/download/${version}/${filename}"
-distro_run "
-sudo apt install ./\${filename} -y
+    if [[ "\$selected_distro_type" == "chroot" ]]; then
+        su -c "cp '\$temp_download' '\${working_dir}/\${filename}'"
+    else
+        cp "\$temp_download" "\${working_dir}/\${filename}"
+    fi
+    distro_run "
+sudo apt update -y -o Dpkg::Options::='--force-confnew'
+sudo apt install /root/\${filename} -y
 check_and_delete '/root/\${filename}'
 "
 elif [[ "\$selected_distro" == "fedora" ]]; then
-cd \$working_dir
-filename="${filename_pattern}"
-distro_run "
+    filename="$filename_pattern"
+    temp_download="\$TMPDIR/\${filename}"
+    download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
+    distro_run "
+check_and_delete '/root/app_installer'
 check_and_delete '/root/\${filename}'
 "
-download_file "\${page_url}/releases/download/\${version}/\${filename}"
-distro_run "
+    if [[ "\$selected_distro_type" == "chroot" ]]; then
+        su -c "cp '\$temp_download' '\${working_dir}/\${filename}'"
+    else
+        cp "\$temp_download" "\${working_dir}/\${filename}"
+    fi
+    distro_run "
 cd /root
-check_and_delete 'app_installer'
 check_and_create_directory 'app_installer'
 mv \${filename} app_installer/
 cd app_installer
@@ -239,10 +255,10 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "\${PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
-Exec=pdrun "\${run_cmd}"
+Exec=pdrun \${run_cmd}
 Terminal=false
 Type=Application
 Icon=\${icon_path}
@@ -255,14 +271,15 @@ EOF
 		else
 			# For tar/archive installations
 			# Extract the filename pattern from the download URL
-			local filename_pattern=$(basename "$download_url")
+			local filename_pattern
+			filename_pattern=$(basename "$download_url")
 			# Replace the version and arch in the pattern with variables
 			filename_pattern=$(echo "$filename_pattern" | sed "s/$version/\${version}/g" | sed "s/${version#v}/\${version#v}/g" | sed "s/$supported_arch/\${supported_arch}/g")
 
 			cat >>"$folder_path/install.sh" <<EOF
+supported_distro="$supported_distro"
 page_url="$base_url"
 working_dir="\${distro_path}/opt"
-supported_distro="$supported_distro"
 
 # Check if a distro is selected
 if [ -z "\$selected_distro" ]; then
@@ -270,18 +287,32 @@ if [ -z "\$selected_distro" ]; then
     exit 1
 fi
 
+app_arch=\$(uname -m)
+case "\$app_arch" in
+    aarch64) archtype="arm64" ;;
+    armv7*|arm|armv8l) archtype="armhf" ;;
+    *) print_failed "Unsupported architectures" ;;
+esac
+
+filename="$filename_pattern"
+temp_download="\$TMPDIR/\${filename}"
+download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
+
 distro_run "
-check_and_delete '/opt/${package_name}'
-check_and_create_directory '/opt/${package_name}'
+check_and_delete '/opt/$package_name'
+check_and_create_directory '/opt/$package_name'
 "
-cd \$working_dir/$package_name
-echo "\$(pwd)"
-download_file "\${page_url}/releases/download/\${version}/${filename_pattern}"
+
+if [[ "\$selected_distro_type" == "chroot" ]]; then
+    su -c "cp '\$temp_download' '\${working_dir}/$package_name/\${filename}'"
+else
+    cp "\$temp_download" "\${working_dir}/$package_name/\${filename}"
+fi
+
 distro_run "
 cd /opt/$package_name
-echo '\$(pwd)'
-extract '${filename_pattern}'
-check_and_delete '${filename_pattern}'
+extract '\${filename}'
+check_and_delete '\${filename}'
 "
 
 # Determine which logo file to use
@@ -294,10 +325,10 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee \${PREFIX}/share/applications/pd_added/$package_name.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "\${PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
-Exec=pdrun "\${run_cmd}"
+Exec=pdrun \${run_cmd}
 Terminal=false
 Type=Application
 Icon=\${icon_path}
@@ -356,27 +387,31 @@ check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
 EOF
 		elif [[ "$download_url" =~ \.deb$ ]]; then
 			cat >"$folder_path/uninstall.sh" <<EOF
+#!/data/data/com.termux/files/usr/bin/bash
+
 if [[ "\$selected_distro" == "ubuntu" ]] || [[ "\$selected_distro" == "debian" ]]; then
-distro_run "
+    distro_run "
 sudo apt remove $package_name -y
 "
 elif [[ "\$selected_distro" == "fedora" ]]; then
-distro_run "
+    distro_run "
 rm -rf '/opt/$package_name'
 "
 else
     print_failed "Unsupported distro"
 fi
-check_and_delete "\${PREFIX}/share/applications/pd_added/signal-desktop-unofficial.desktop"
+
+check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
 EOF
 		else
 			cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
 distro_run "
-check_and_delete '${distro_path}/opt/$package_name'
-check_and_delete '$PREFIX/share/applications/pd_added/$package_name.desktop'
+check_and_delete '/opt/$package_name'
 "
+
+check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
 EOF
 		fi
 	fi
@@ -386,7 +421,7 @@ EOF
 
 main() {
 	# Get app information
-	read -p "Enter app name: " app_name
+	read -r -p "Enter app name: " app_name
 	folder_name=$(sanitize_folder_name "$app_name")
 
 	# Get supported architectures
@@ -402,37 +437,37 @@ main() {
 	if [ "$app_type" = "distro" ]; then
 		supported_distro=$(get_valid_input "Enter supported distro (debian/ubuntu/fedora/all): " "debian" "ubuntu" "fedora" "all")
 
-		read -p "Is it available in the distro's repository? (yes/no): " is_repo_pkg
+		read -r -p "Is it available in the distro's repository? (yes/no): " is_repo_pkg
 		is_repo_pkg=$(echo "$is_repo_pkg" | tr '[:upper:]' '[:lower:]')
 
 		if [ "$is_repo_pkg" != "yes" ] && [ "$is_repo_pkg" != "y" ]; then
 			is_repo_pkg="no"
-			read -p "Enter the download URL for the tar file: " download_url
+			read -r -p "Enter the download URL for the file: " download_url
 			# Extract version from GitHub URL
 			if [[ $download_url =~ /releases/download/(v[0-9]+\.[0-9]+\.[0-9]+)/ ]]; then
 				version="${BASH_REMATCH[1]}"
 				echo "Detected version: $version"
 			else
-				read -p "Could not detect version from URL. Please enter version manually: " version
+				read -r -p "Could not detect version from URL. Please enter version manually: " version
 			fi
 		else
 			is_repo_pkg="yes"
-			read -p "Enter version (press Enter for default): " version
+			read -r -p "Enter version (press Enter for default): " version
 			version=${version:-${app_type}_local_version}
 		fi
 	else
-		read -p "Enter version (press Enter for default): " version
+		read -r -p "Enter version (press Enter for default): " version
 		version=${version:-termux_local_version}
 	fi
 
 	# Get package details
-	read -p "Enter package name: " package_name
+	read -r -p "Enter package name: " package_name
 
 	if [ "$app_type" = "distro" ] && [ "$is_repo_pkg" = "no" ] && [[ ! "$download_url" =~ \.AppImage$ ]] && [[ ! "$download_url" =~ \.deb$ ]]; then
 		# For tar archives, set default run command
-		run_cmd="/opt/$package_name/$package_name"
+		run_cmd="/opt/$package_name/$package_name --no-sandbox"
 	else
-		read -p "Enter run command: " run_cmd
+		read -r -p "Enter run command: " run_cmd
 	fi
 
 	# Get description
@@ -447,13 +482,22 @@ main() {
 
 	selected_categories=()
 	while true; do
-		read -p $'\nSelect category number (press Enter when done): ' choice
+		read -r -p $'\nSelect category number (press Enter when done): ' choice
 
 		[ -z "$choice" ] && break
 
 		if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#CATEGORIES[@]}" ]; then
 			category="${CATEGORIES[$((choice - 1))]}"
-			if [[ ! " ${selected_categories[@]} " =~ " ${category} " ]]; then
+			# Check if category already exists
+			category_exists=false
+			for existing_cat in "${selected_categories[@]}"; do
+				if [ "$existing_cat" = "$category" ]; then
+					category_exists=true
+					break
+				fi
+			done
+
+			if [ "$category_exists" = false ]; then
 				selected_categories+=("$category")
 				echo "Added: $category"
 			fi
@@ -488,12 +532,14 @@ main() {
 	) >"$app_dir/category.txt"
 
 	# Create install and uninstall scripts
-	create_install_script "$app_dir" "$app_type" "$supported_distro" "$package_name" "$run_cmd" "$(echo $supported_archs | tr ' ' ',')" "$is_repo_pkg" "$download_url"
+	local archs_csv
+	archs_csv=$(echo "$supported_archs" | tr ' ' ',')
+	create_install_script "$app_dir" "$app_type" "$supported_distro" "$package_name" "$run_cmd" "$archs_csv" "$is_repo_pkg" "$download_url"
 	create_uninstall_script "$app_dir" "$package_name" "$is_repo_pkg" "$download_url"
 
 	# Handle logo
 	while true; do
-		read -p $'\nEnter path to logo (PNG or SVG): ' logo_path
+		read -r -p $'\nEnter path to logo (PNG or SVG): ' logo_path
 
 		# Remove quotes if present
 		logo_path="${logo_path//[\'\"]/}"
@@ -520,4 +566,3 @@ main() {
 }
 
 main "$@"
-

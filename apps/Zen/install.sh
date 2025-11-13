@@ -4,44 +4,55 @@ supported_arch="aarch64"
 package_name="zen-browser"
 run_cmd="/opt/zen-browser/zen-browser --no-sandbox"
 version="1.17.4b"
+pause_update=true
 app_type="distro"
+supported_distro="all"
 page_url="https://github.com/zen-browser/desktop"
 working_dir="${distro_path}/opt"
-supported_distro="all"
 
 # Check if a distro is selected
 if [ -z "$selected_distro" ]; then
-    print_failed "Error: No distro selected"
-    exit 1
+	print_failed "Error: No distro selected"
+	exit 1
 fi
+
+app_arch=$(uname -m)
+case "$app_arch" in
+aarch64) archtype="aarch64" ;;
+*) print_failed "Unsupported architectures" ;;
+esac
+
+filename="zen.linux-${archtype}.tar.xz"
+temp_download="$TMPDIR/${filename}"
+download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
 
 distro_run "
 check_and_delete '/opt/zen-browser'
+check_and_delete '/opt/zen'
 "
-cd $working_dir
-echo "$(pwd)"
 
-download_file "${page_url}/releases/download/${version}/zen.linux-${supported_arch}.tar.xz"
-distro_run '
+if [[ "$selected_distro_type" == "chroot" ]]; then
+	su -c "cp '$temp_download' '${working_dir}/${filename}'"
+else
+	cp "$temp_download" "${working_dir}/${filename}"
+fi
+
+distro_run "
 cd /opt
-extract "zen.linux-'${supported_arch}'.tar.xz"
-check_and_delete "zen.linux-'${supported_arch}'.tar.xz"
+extract '${filename}'
+check_and_delete '${filename}'
 mv -f zen zen-browser
-sleep 3
-check_and_create_directory "/opt/zen-browser/"
 cd /opt/zen-browser/
-echo "$(pwd)"
-ls
 mv zen zen-browser
-'
+"
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/zen-browser.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "${PREFIX}"/share/applications/pd_added/zen-browser.desktop >/dev/null
 [Desktop Entry]
 Name=Zen Browser
 Comment=Experience tranquillity while browsing the web without people tracking you!
 Exec=pdrun ${run_cmd}
-Icon=${HOME}/.appstore/logo/Zen/logo.png
+Icon=${HOME}/.appstore/logo/zen-browser/logo.png
 Type=Application
 MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;application/x-xpinstall;application/pdf;application/json;
 StartupWMClass=zen-beta

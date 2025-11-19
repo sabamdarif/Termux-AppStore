@@ -680,6 +680,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Linuxthemestore/logo.png"
   },
   {
+    "app_name": "Luanti",
+    "folder_name": "Luanti",
+    "description": "An open source voxel game engine",
+    "categories": [
+      "Games"
+    ],
+    "app_type": "native",
+    "run_cmd": "luanti",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "luanti",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Luanti/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Luanti/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Luanti/logo.png"
+  },
+  {
     "app_name": "Lximage qt",
     "folder_name": "Lximage-qt",
     "description": "LXQt Image Viewer",

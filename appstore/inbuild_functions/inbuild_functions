@@ -185,21 +185,57 @@ function download_file() {
 
 	while [[ $attempt -le $max_retries ]]; do
 		print_msg "Downloading $dest_file..."
+		echo "PROGRESS:DOWNLOAD:0:Starting download of $dest_file"
 		if [[ ! -s "$dest" ]]; then
 			check_and_delete "$dest"
 		fi
 
 		if command -v aria2c &>/dev/null; then
-			aria2c --summary-interval=10 -x16 -s16 --retry-wait=15 --max-tries=5 \
-				--dir="$dest_dir" -o "$dest_file" "$url"
+			# Use aria2c with progress parsing
+			aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 \
+				--dir="$dest_dir" -o "$dest_file" "$url" 2>&1 | while IFS= read -r line; do
+				echo "$line"
+				# Parse aria2c progress: looks for patterns like "(45%)" or "[#.... 45%]"
+				if [[ "$line" =~ \(([0-9]+)% ]]; then
+					percent="${BASH_REMATCH[1]}"
+					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
+				elif [[ "$line" =~ \[#.*[[:space:]]([0-9]+)% ]]; then
+					percent="${BASH_REMATCH[1]}"
+					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
+				fi
+			done
+			# Get exit code from aria2c
+			download_status=${PIPESTATUS[0]}
 		elif command -v wget &>/dev/null; then
-			wget --tries=5 --timeout=15 --retry-connrefused -O "$dest" "$url" 2>/dev/null
+			# Use wget with progress parsing
+			wget --tries=5 --timeout=15 --retry-connrefused --progress=bar:force \
+				-O "$dest" "$url" 2>&1 | while IFS= read -r line; do
+				echo "$line"
+				# Parse wget progress: looks for patterns like "45%" in progress bar
+				if [[ "$line" =~ [[:space:]]([0-9]+)%[[:space:]] ]]; then
+					percent="${BASH_REMATCH[1]}"
+					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
+				fi
+			done
+			download_status=${PIPESTATUS[0]}
 		else
-			curl -# -L "$url" -o "$dest" 2>/dev/null
+			# Use curl with progress parsing
+			curl -# -L "$url" -o "$dest" 2>&1 | while IFS= read -r line; do
+				echo "$line"
+				# Parse curl progress: looks for "#" characters in progress bar
+				# Curl shows progress as: ######## 50.0%
+				if [[ "$line" =~ ([0-9]+\.[0-9]+)% ]]; then
+					percent_float="${BASH_REMATCH[1]}"
+					percent="${percent_float%.*}"  # Remove decimal part
+					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
+				fi
+			done
+			download_status=${PIPESTATUS[0]}
 		fi
 
 		if [[ -f "$dest" && -s "$dest" ]]; then
 			successful_attempt=$attempt
+			echo "PROGRESS:DOWNLOAD:100:Download complete"
 			break
 		else
 			print_failed "Download failed. Retrying... ($attempt/$max_retries)"
@@ -244,99 +280,99 @@ function package_install_and_check {
 	# Properly splits on spaces
 	IFS=' ' read -r -a packs_list <<<"$*"
 
+	# Count total packages for progress tracking
+	local total_packages=0
+	local current_package=0
+	
 	# pacman part
 	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+		# First, expand wildcards and count total packages
+		local all_packages=()
 		for package_name in "${packs_list[@]}"; do
 			if [[ "$package_name" == *"*"* ]]; then
-				log_debug "Processing wildcard pattern: $package_name"
 				local packages
 				packages=$(pacman -Ssq 2>/dev/null | grep -E "^${package_name//\*/.*}$")
-				log_debug "matched packages: ${C}$packages"
 				for package in $packages; do
-					local retry_count=0
-					local max_retries=5
-					local install_success=false
-					while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
-						retry_count=$((retry_count + 1))
-						check_and_delete "$PREFIX/var/lib/pacman/db.lck"
-						print_msg "Installing Package : ${C}$package"
-						pacman -S --noconfirm "$package" 2>/dev/null
-						if pacman -Qi "$package" >/dev/null 2>&1; then
-							print_success "Successfully install package: ${C}$package"
-							install_success=true
-						else
-							print_warn "Failed to install package: ${C}${package}. ${Y}Trying again... ($retry_count)"
-						fi
-					done
+					all_packages+=("$package")
 				done
 			else
-				local retry_count=0
-				local max_retries=5
-				local install_success=false
-				while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
-					retry_count=$((retry_count + 1))
-					check_and_delete "$PREFIX/var/lib/pacman/db.lck"
-					print_msg "Installing Package : ${C}$package_name"
-					pacman -S --noconfirm "$package_name" 2>/dev/null
-					if pacman -Qi "$package_name" >/dev/null 2>&1; then
-						print_success "Successfully install package: ${C}$package_name"
-						install_success=true
-					else
-						print_warn "Failed to install package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
-					fi
-				done
+				all_packages+=("$package_name")
 			fi
+		done
+		total_packages=${#all_packages[@]}
+		echo "PROGRESS:PACKAGE:0/$total_packages:Preparing to install $total_packages package(s)..."
+		
+		# Install each package
+		for package in "${all_packages[@]}"; do
+			current_package=$((current_package + 1))
+			local retry_count=0
+			local max_retries=5
+			local install_success=false
+			
+			echo "PROGRESS:PACKAGE:$current_package/$total_packages:Installing $package ($current_package/$total_packages)..."
+			
+			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+				retry_count=$((retry_count + 1))
+				check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+				print_msg "Installing Package : ${C}$package"
+				pacman -S --noconfirm "$package" 2>/dev/null
+				if pacman -Qi "$package" >/dev/null 2>&1; then
+					print_success "Successfully install package: ${C}$package"
+					install_success=true
+					local percent=$((current_package * 100 / total_packages))
+					echo "PROGRESS:PACKAGE:$percent:Installed $package ($current_package/$total_packages)"
+				else
+					print_warn "Failed to install package: ${C}${package}. ${Y}Trying again... ($retry_count)"
+				fi
+			done
 		done
 	else
 		#apt part
+		# First, expand wildcards and count total packages
+		local all_packages=()
 		for package_name in "${packs_list[@]}"; do
 			if [[ "$package_name" == *"*"* ]]; then
-				log_debug "Processing wildcard pattern: $package_name"
 				local packages
 				packages=$(apt-cache pkgnames 2>/dev/null | grep -E "^${package_name//\*/.*}$" | sort -u)
-				log_debug "matched packages: $packages"
 				for package in $packages; do
-					local retry_count=0
-					local max_retries=5
-					local install_success=false
-					while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
-						retry_count=$((retry_count + 1))
-						print_msg "Installing package: ${C}$package"
-						apt install "$package" -y 2>/dev/null
-						if dpkg -s "$package" >/dev/null 2>&1; then
-							print_success "Successfully install package: ${C}$package"
-							install_success=true
-						else
-							print_warn "Failed to install package: ${C}${package}. ${Y}Trying again... ($retry_count)"
-							# Only run recovery commands on failure
-							dpkg --configure -a 2>/dev/null
-							apt --fix-broken install -y 2>/dev/null
-							apt install --fix-missing -y 2>/dev/null
-						fi
-					done
+					all_packages+=("$package")
 				done
 			else
-				local retry_count=0
-				local max_retries=5
-				local install_success=false
-				while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
-					retry_count=$((retry_count + 1))
-					print_msg "Installing package: ${C}$package_name"
-					apt install "$package_name" -y 2>/dev/null
-					if dpkg -s "$package_name" >/dev/null 2>&1; then
-						print_success "Successfully install package: ${C}$package_name"
-						install_success=true
-					else
-						print_warn "Failed to install package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
-						# Only run recovery commands on failure
-						dpkg --configure -a 2>/dev/null
-						apt --fix-broken install -y 2>/dev/null
-						apt install --fix-missing -y 2>/dev/null
-					fi
-				done
+				all_packages+=("$package_name")
 			fi
 		done
+		total_packages=${#all_packages[@]}
+		echo "PROGRESS:PACKAGE:0/$total_packages:Preparing to install $total_packages package(s)..."
+		
+		# Install each package
+		for package in "${all_packages[@]}"; do
+			current_package=$((current_package + 1))
+			local retry_count=0
+			local max_retries=5
+			local install_success=false
+			
+			echo "PROGRESS:PACKAGE:$current_package/$total_packages:Installing $package ($current_package/$total_packages)..."
+			
+			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+				retry_count=$((retry_count + 1))
+				print_msg "Installing package: ${C}$package"
+				apt install "$package" -y 2>/dev/null
+				if dpkg -s "$package" >/dev/null 2>&1; then
+					print_success "Successfully install package: ${C}$package"
+					install_success=true
+					local percent=$((current_package * 100 / total_packages))
+					echo "PROGRESS:PACKAGE:$percent:Installed $package ($current_package/$total_packages)"
+				else
+					print_warn "Failed to install package: ${C}${package}. ${Y}Trying again... ($retry_count)"
+					# Only run recovery commands on failure
+					dpkg --configure -a 2>/dev/null
+					apt --fix-broken install -y 2>/dev/null
+					apt install --fix-missing -y 2>/dev/null
+				fi
+			done
+		done
 	fi
+	echo "PROGRESS:PACKAGE:100:Package installation complete"
 }
 
 # will check the package is installed or not then remove it
@@ -468,9 +504,12 @@ function extract() {
 		return 1
 	fi
 
+	echo "PROGRESS:EXTRACT:0:Starting extraction of $archive..."
+	
 	case "$archive" in
 	*.tar.gz | *.tgz)
 		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting tar.gz archive..."
 		tar xzvf "$archive" 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -478,6 +517,7 @@ function extract() {
 		;;
 	*.tar.xz)
 		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting tar.xz archive..."
 		tar xJvf "$archive" 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -485,6 +525,7 @@ function extract() {
 		;;
 	*.tar.bz2 | *.tbz2)
 		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting tar.bz2 archive..."
 		tar xjvf "$archive" 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -492,6 +533,7 @@ function extract() {
 		;;
 	*.tar)
 		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting tar archive..."
 		tar xvf "$archive" 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -499,6 +541,7 @@ function extract() {
 		;;
 	*.bz2)
 		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting bz2 archive..."
 		bunzip2 -v "$archive" 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -506,6 +549,7 @@ function extract() {
 		;;
 	*.gz)
 		print_success "Extracting ${C}$archive${NC}"
+		echo "PROGRESS:EXTRACT:50:Extracting gz archive..."
 		gunzip -v "$archive" 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -513,6 +557,7 @@ function extract() {
 		;;
 	*.7z)
 		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting 7z archive..."
 		7z x "$archive" -y 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -520,6 +565,7 @@ function extract() {
 		;;
 	*.zip)
 		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting zip archive..."
 		unzip "${archive}" 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -527,6 +573,7 @@ function extract() {
 		;;
 	*.rar)
 		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting rar archive..."
 		unrar x "$archive" 2>/dev/null || {
 			print_failed "Failed to extract ${C}$archive"
 			return 1
@@ -537,6 +584,7 @@ function extract() {
 		return 1
 		;;
 	esac
+	echo "PROGRESS:EXTRACT:100:Extraction complete"
 	print_success "Successfully extracted ${C}$archive"
 	log_debug "Extracted: $archive"
 }

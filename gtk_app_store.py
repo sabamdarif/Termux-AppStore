@@ -2156,6 +2156,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 progress_bar.set_text(f"{int(fraction * 100)}%")
                 return False
 
+            def parse_progress_line(line):
+                """Parse progress protocol from script output
+                Returns dict with type, value, message or None
+                """
+                if line.startswith("PROGRESS:"):
+                    parts = line[9:].split(":", 2)
+                    if len(parts) >= 2:
+                        return {
+                            'type': parts[0],
+                            'value': parts[1],
+                            'message': parts[2] if len(parts) > 2 else ""
+                        }
+                return None
+
             def install_thread():
                 try:
                     # Ensure cancelled flag is synced
@@ -2233,6 +2247,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     current_line = 0
                     processed_heavyweight_ops = 0
                     processed_normal_ops = 0
+                    current_operation_progress = 0.0  # Track progress within current heavyweight operation
+                    in_heavyweight_operation = False
 
                     # Execute script with better progress tracking
                     GLib.idle_add(update_progress, base_progress, "Starting installation...")
@@ -2266,16 +2282,80 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Update current line
                         current_line += 1
 
+                        # Check for progress markers first
+                        progress_info = parse_progress_line(line)
+                        
+                        if progress_info:
+                            # Real-time progress from heavyweight operation
+                            operation_type = progress_info['type']
+                            
+                            if operation_type == 'DOWNLOAD':
+                                # Extract percentage (e.g., "45")
+                                try:
+                                    sub_percent = int(progress_info['value'])
+                                    current_operation_progress = sub_percent / 100.0
+                                except (ValueError, TypeError):
+                                    current_operation_progress = 0.5
+                                    
+                            elif operation_type == 'PACKAGE':
+                                # Extract current/total or percentage
+                                value = progress_info['value']
+                                if '/' in value:
+                                    try:
+                                        current, total = value.split('/')
+                                        current_operation_progress = int(current) / max(1, int(total))
+                                    except (ValueError, TypeError):
+                                        current_operation_progress = 0.5
+                                else:
+                                    try:
+                                        current_operation_progress = int(value) / 100.0
+                                    except (ValueError, TypeError):
+                                        current_operation_progress = 0.5
+                                        
+                            elif operation_type == 'EXTRACT':
+                                # Extract percentage
+                                try:
+                                    sub_percent = int(progress_info['value'])
+                                    current_operation_progress = sub_percent / 100.0
+                                except (ValueError, TypeError):
+                                    current_operation_progress = 0.5
+                            
+                            # Calculate overall progress with sub-operation granularity
+                            # Base progress for completed heavyweight ops
+                            completed_ops_progress = processed_heavyweight_ops * heavyweight_progress_per_op
+                            # Current op progress (weighted)
+                            current_op_progress = current_operation_progress * heavyweight_progress_per_op
+                            # Add normal ops progress
+                            normal_progress = processed_normal_ops * normal_progress_per_op
+                            
+                            current_progress = base_progress + completed_ops_progress + current_op_progress + normal_progress
+                            current_progress = min(0.8, current_progress)
+                            
+                            # Update with progress message
+                            GLib.idle_add(update_progress, current_progress, progress_info['message'])
+                            # Update terminal
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                            continue
+
                         # Determine if this output line indicates a heavyweight operation
                         is_heavyweight = False
                         for func in heavyweight_functions:
                             if func in line:
                                 is_heavyweight = True
-                                processed_heavyweight_ops += 1
+                                if not in_heavyweight_operation:
+                                    processed_heavyweight_ops += 1
+                                    in_heavyweight_operation = True
+                                    current_operation_progress = 0.0
                                 break
+                        
+                        # If not in a heavyweight operation and this isn't one, it's normal
+                        if not is_heavyweight and in_heavyweight_operation:
+                            # Just exited a heavyweight operation
+                            in_heavyweight_operation = False
+                            current_operation_progress = 0.0
 
                         # Update appropriate counter based on operation type
-                        if not is_heavyweight:
+                        if not is_heavyweight and not in_heavyweight_operation:
                             processed_normal_ops += 1
 
                         # Calculate current progress
@@ -2577,6 +2657,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 progress_bar.set_text(f"{int(fraction * 100)}%")
                 return False
 
+            def parse_progress_line(line):
+                """Parse progress protocol from script output
+                Returns dict with type, value, message or None
+                """
+                if line.startswith("PROGRESS:"):
+                    parts = line[9:].split(":", 2)
+                    if len(parts) >= 2:
+                        return {
+                            'type': parts[0],
+                            'value': parts[1],
+                            'message': parts[2] if len(parts) > 2 else ""
+                        }
+                return None
+
             def uninstall_thread():
                 nonlocal script_file, uninstall_process
                 try:
@@ -2665,6 +2759,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     current_line = 0
                     processed_heavyweight_ops = 0
                     processed_normal_ops = 0
+                    current_operation_progress = 0.0  # Track progress within current heavyweight operation
+                    in_heavyweight_operation = False
 
                     # Execute script with better progress tracking
                     status_msg = "Starting uninstallation..."
@@ -2693,16 +2789,70 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Update current line
                         current_line += 1
 
+                        # Check for progress markers first
+                        progress_info = parse_progress_line(line)
+                        
+                        if progress_info:
+                            # Real-time progress from heavyweight operation
+                            operation_type = progress_info['type']
+                            
+                            if operation_type == 'DOWNLOAD':
+                                try:
+                                    sub_percent = int(progress_info['value'])
+                                    current_operation_progress = sub_percent / 100.0
+                                except (ValueError, TypeError):
+                                    current_operation_progress = 0.5
+                                    
+                            elif operation_type == 'PACKAGE':
+                                value = progress_info['value']
+                                if '/' in value:
+                                    try:
+                                        current, total = value.split('/')
+                                        current_operation_progress = int(current) / max(1, int(total))
+                                    except (ValueError, TypeError):
+                                        current_operation_progress = 0.5
+                                else:
+                                    try:
+                                        current_operation_progress = int(value) / 100.0
+                                    except (ValueError, TypeError):
+                                        current_operation_progress = 0.5
+                                        
+                            elif operation_type == 'EXTRACT':
+                                try:
+                                    sub_percent = int(progress_info['value'])
+                                    current_operation_progress = sub_percent / 100.0
+                                except (ValueError, TypeError):
+                                    current_operation_progress = 0.5
+                            
+                            # Calculate overall progress with sub-operation granularity
+                            completed_ops_progress = processed_heavyweight_ops * heavyweight_progress_per_op
+                            current_op_progress = current_operation_progress * heavyweight_progress_per_op
+                            normal_progress = processed_normal_ops * normal_progress_per_op
+                            
+                            current_progress = base_progress + completed_ops_progress + current_op_progress + normal_progress
+                            current_progress = min(0.8, current_progress)
+                            
+                            GLib.idle_add(update_progress, current_progress, progress_info['message'])
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+                            continue
+
                         # Determine if this output line indicates a heavyweight operation
                         is_heavyweight = False
                         for func in heavyweight_functions:
                             if func in line:
                                 is_heavyweight = True
-                                processed_heavyweight_ops += 1
+                                if not in_heavyweight_operation:
+                                    processed_heavyweight_ops += 1
+                                    in_heavyweight_operation = True
+                                    current_operation_progress = 0.0
                                 break
+                        
+                        if not is_heavyweight and in_heavyweight_operation:
+                            in_heavyweight_operation = False
+                            current_operation_progress = 0.0
 
                         # Update appropriate counter based on operation type
-                        if not is_heavyweight:
+                        if not is_heavyweight and not in_heavyweight_operation:
                             processed_normal_ops += 1
 
                         # Calculate current progress

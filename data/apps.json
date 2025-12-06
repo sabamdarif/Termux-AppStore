@@ -32,6 +32,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Alacritty/logo.png"
   },
   {
+    "app_name": "Antigravity",
+    "folder_name": "Antigravity",
+    "description": "Antigravity is a fully-featured AI IDE from Google",
+    "categories": [
+      "Development"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/usr/share/antigravity/antigravity --no-sandbox",
+    "supported_arch": "aarch64,arm",
+    "version": "distro_local_version",
+    "supported_distro": "all",
+    "package_name": "code",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Antigravity/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Antigravity/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Antigravity/logo.png"
+  },
+  {
     "app_name": "Atril",
     "folder_name": "Atril",
     "description": "Atril is a simple multi-page document viewer. It can display and print PostScript (PS), Encapsulated PostScript (EPS), DJVU, DVI, XPS and Portable Document Format (PDF) files",

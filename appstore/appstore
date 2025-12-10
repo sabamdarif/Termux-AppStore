@@ -24,7 +24,7 @@ else
 	print_failed "common_functions missing. Install sabamdarif/termux-desktop"
 	exit 1
 fi
-detact_package_manager
+detect_package_manager
 
 install_appstore() {
 	local version="${1:-src}"

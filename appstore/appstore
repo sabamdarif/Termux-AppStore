@@ -2,13 +2,15 @@
 set -euo pipefail
 
 # Constants
-readonly PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-readonly APP_DIR="$PREFIX/opt/appstore"
+readonly REPO_OWNER="sabamdarif"
+readonly REPO_NAME="Termux-AppStore"
+readonly TERMUX_PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+readonly APP_DIR="$TERMUX_PREFIX/opt/appstore"
 readonly APP_SCRIPT="$APP_DIR/gtk_app_store.py"
 readonly REQUIREMENTS_FILE="$APP_DIR/requirements.txt"
 readonly DESKTOP_FILE="org.sabamdarif.termux.appstore.desktop"
-readonly REPO_URL="https://github.com/sabamdarif/Termux-AppStore"
-readonly COMMON_FUNCTIONS="/data/data/com.termux/files/usr/etc/termux-desktop/common_functions"
+readonly REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
+readonly COMMON_FUNCTIONS="$TERMUX_PREFIX/etc/termux-desktop/common_functions"
 
 show_notification() {
 	if command -v notify-send &>/dev/null; then
@@ -50,13 +52,13 @@ install_appstore() {
 	fi
 
 	print_msg "Creating launcher symlink..."
-	check_and_delete "$PREFIX/bin/appstore"
+	check_and_delete "$TERMUX_PREFIX/bin/appstore"
 	if [[ -f "$APP_DIR/appstore" ]]; then
 		ln -sf "$APP_DIR/appstore" "$PREFIX/bin/appstore" || {
 			print_failed "Failed to create symlink"
 			return 1
 		}
-		chmod +x "$PREFIX/bin/appstore"
+		chmod +x "$TERMUX_PREFIX/bin/appstore"
 	else
 		print_failed "Launcher script not found in repository"
 		return 1
@@ -64,8 +66,8 @@ install_appstore() {
 
 	print_msg "Installing desktop file..."
 	if [[ -f "$APP_DIR/$DESKTOP_FILE" ]]; then
-		check_and_create_directory "$PREFIX/share/applications"
-		cp "$APP_DIR/$DESKTOP_FILE" "$PREFIX/share/applications/" || {
+		check_and_create_directory "$TERMUX_PREFIX/share/applications"
+		cp "$APP_DIR/$DESKTOP_FILE" "$TERMUX_PREFIX/share/applications/" || {
 			print_failed "Failed to copy desktop file"
 			return 1
 		}
@@ -130,7 +132,7 @@ update_appstore() {
 		"$APP_DIR/requirements.txt|requirements.txt"
 		"$APP_DIR/style/style.css|style/style.css"
 		"$APP_DIR/appstore|appstore"
-		"$PREFIX/share/applications/$DESKTOP_FILE|$DESKTOP_FILE"
+		"$TERMUX_PREFIX/share/applications/$DESKTOP_FILE|$DESKTOP_FILE"
 	)
 
 	for entry in "${files_to_check[@]}"; do
@@ -139,7 +141,7 @@ update_appstore() {
 
 		# Get GitHub file hash
 		local github_hash
-		github_hash=$(curl -sL "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/${github_path}" | sha256sum | awk '{print $1}')
+		github_hash=$(curl -sL "https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/refs/heads/src/${github_path}" | sha256sum | awk '{print $1}')
 
 		# Get local file hash
 		if [[ -f "$local_path" ]]; then
@@ -178,7 +180,7 @@ update_appstore() {
 
 remove_appstore() {
 	print_msg "Removing Termux App Store..."
-	check_and_delete "$APP_DIR $PREFIX/share/applications/$DESKTOP_FILE $PREFIX/bin/appstore"
+	check_and_delete "$APP_DIR $TERMUX_PREFIX/share/applications/$DESKTOP_FILE $TERMUX_PREFIX/bin/appstore"
 	print_success "Termux App Store removed"
 }
 

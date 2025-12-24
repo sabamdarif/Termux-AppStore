@@ -615,6 +615,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Inkscape/icon-64.png"
   },
   {
+    "app_name": "Kate",
+    "folder_name": "Kate",
+    "description": "Kate is a fast multi-document, multi-view text editor for programmers by KDE",
+    "categories": [
+      "Development",
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "kate",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "kate",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kate/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kate/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kate/logo.png"
+  },
+  {
     "app_name": "Kdenlive",
     "folder_name": "Kdenlive",
     "description": "Kdenlive is a popular video editor compatible with PiOS Bookworm.",

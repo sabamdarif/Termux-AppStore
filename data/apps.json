@@ -98,6 +98,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audacity/icon-64.png"
   },
   {
+    "app_name": "Audiotube",
+    "folder_name": "Audiotube",
+    "description": "AudioTube can search YouTube Music, list albums and artists, play automatically generated playlists, albums and allows to put your own playlist together.",
+    "categories": [
+      "Multimedia"
+    ],
+    "app_type": "native",
+    "run_cmd": "audiotube",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "audiotube",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audiotube/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audiotube/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Audiotube/logo.png"
+  },
+  {
     "app_name": "Blender",
     "folder_name": "Blender",
     "description": "Free and open-source 3D computer graphics software",

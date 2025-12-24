@@ -649,6 +649,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/icon-64.png"
   },
   {
+    "app_name": "Konsole",
+    "folder_name": "Konsole",
+    "description": "Konsole is a terminal to run a command shell. It provides a command line interface for directly controlling your computer.",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "konsole",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "konsole",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Konsole/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Konsole/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Konsole/logo.png"
+  },
+  {
     "app_name": "Kvantum",
     "folder_name": "Kvantum",
     "description": "A Linux SVG-based theme engine for Qt and KDE",

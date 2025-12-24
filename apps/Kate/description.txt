@@ -1,0 +1,1 @@
+Kate is a fast multi-document, multi-view text editor for programmers by KDE

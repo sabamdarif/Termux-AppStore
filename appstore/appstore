@@ -1,23 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
-# Constants
-readonly REPO_OWNER="sabamdarif"
-readonly REPO_NAME="Termux-AppStore"
-readonly TERMUX_PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-readonly APP_DIR="$TERMUX_PREFIX/opt/appstore"
-readonly APP_SCRIPT="$APP_DIR/gtk_app_store.py"
-readonly REQUIREMENTS_FILE="$APP_DIR/requirements.txt"
-readonly DESKTOP_FILE="org.sabamdarif.termux.appstore.desktop"
-readonly REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME"
-readonly COMMON_FUNCTIONS="$TERMUX_PREFIX/etc/termux-desktop/common_functions"
-
-show_notification() {
-	if command -v notify-send &>/dev/null; then
-		notify-send "Termux App Store" "$1" --urgency=critical
-	fi
-	echo "$1"
-}
+readonly COMMON_FUNCTIONS="$PREFIX/etc/termux-desktop/common_functions"
 
 if [[ -f "$COMMON_FUNCTIONS" ]]; then
 	# shellcheck source=/dev/null
@@ -26,6 +10,21 @@ else
 	print_failed "common_functions missing. Install sabamdarif/termux-desktop"
 	exit 1
 fi
+
+readonly APPSTORE_REPO_NAME="Termux-AppStore"
+readonly APP_DIR="$TERMUX_PREFIX/opt/appstore"
+readonly APP_SCRIPT="$APP_DIR/gtk_app_store.py"
+readonly REQUIREMENTS_FILE="$APP_DIR/requirements.txt"
+readonly DESKTOP_FILE="org.sabamdarif.termux.appstore.desktop"
+readonly REPO_URL="https://github.com/$REPO_OWNER/$APPSTORE_REPO_NAME"
+
+show_notification() {
+	if command -v notify-send &>/dev/null; then
+		notify-send "Termux App Store" "$1" --urgency=critical
+	fi
+	echo "$1"
+}
+
 detect_package_manager
 
 install_appstore() {
@@ -141,7 +140,7 @@ update_appstore() {
 
 		# Get GitHub file hash
 		local github_hash
-		github_hash=$(curl -sL "https://raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/refs/heads/src/${github_path}" | sha256sum | awk '{print $1}')
+		github_hash=$(curl -sL "https://raw.githubusercontent.com/$REPO_OWNER/$APPSTORE_REPO_NAME/refs/heads/src/${github_path}" | sha256sum | awk '{print $1}')
 
 		# Get local file hash
 		if [[ -f "$local_path" ]]; then

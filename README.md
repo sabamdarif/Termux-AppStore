@@ -2,11 +2,11 @@
 
 A simple GTK3 based app store for Termux.
 
-## A part of [sabamdarif/termux-tesktop](https://github.com/sabamdarif/termux-desktop)
+## A part of [sabamdarif/termux-desktop](https://github.com/sabamdarif/termux-desktop)
 
 ## Installation
 
-### Pre installed in my [Termux-Desktop](https://github.com/sabamdarif/termux-desktop) setup
+### Pre-installed in my [Termux-Desktop](https://github.com/sabamdarif/termux-desktop) setup
 
 #### Or run,
 
@@ -23,7 +23,7 @@ chmod +x appstore
 ```
 
 > [!IMPORTANT]
-> only works with my termux-desktop setup
+> Only works with my Termux-Desktop setup
 
 ---
 

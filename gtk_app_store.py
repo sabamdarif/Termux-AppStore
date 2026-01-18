@@ -2503,10 +2503,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     while True:
                         if install_cancelled:
                             try:
-                                os.killpg(os.getpgid(install_process.pid), signal.SIGTERM)
-                                install_process.wait(timeout=2)
-                            except:
-                                pass
+                                pgid = os.getpgid(install_process.pid)
+                                os.killpg(pgid, signal.SIGTERM)
+                                try:
+                                    install_process.wait(timeout=3)
+                                except subprocess.TimeoutExpired:
+                                    print("Process refused to stop, forcing SIGKILL...")
+                                    os.killpg(pgid, signal.SIGKILL)
+                                    install_process.wait(timeout=1)
+                            except Exception as e:
+                                print(f"Error stopping process: {e}")
+                            
                             GLib.idle_add(progress_dialog.destroy)
                             return
 
@@ -2996,7 +3003,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if uninstall_process.stdout:
                         for line in uninstall_process.stdout:
                             if uninstall_cancelled:
-                                os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
+                                try:
+                                    pgid = os.getpgid(uninstall_process.pid)
+                                    os.killpg(pgid, signal.SIGTERM)
+                                    try:
+                                        uninstall_process.wait(timeout=3)
+                                    except subprocess.TimeoutExpired:
+                                        print("Process refused to stop, forcing SIGKILL...")
+                                        os.killpg(pgid, signal.SIGKILL)
+                                        uninstall_process.wait(timeout=1)
+                                except Exception as e:
+                                    print(f"Error stopping process: {e}")
+
                                 msg = "Uninstallation cancelled!"
                                 GLib.idle_add(update_progress, 1.0, msg)
                                 GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))

@@ -226,7 +226,7 @@ function download_file() {
 				# Curl shows progress as: ######## 50.0%
 				if [[ "$line" =~ ([0-9]+\.[0-9]+)% ]]; then
 					percent_float="${BASH_REMATCH[1]}"
-					percent="${percent_float%.*}"  # Remove decimal part
+					percent="${percent_float%.*}" # Remove decimal part
 					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
 				fi
 			done
@@ -283,7 +283,7 @@ function package_install_and_check {
 	# Count total packages for progress tracking
 	local total_packages=0
 	local current_package=0
-	
+
 	# pacman part
 	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
 		# First, expand wildcards and count total packages
@@ -301,21 +301,43 @@ function package_install_and_check {
 		done
 		total_packages=${#all_packages[@]}
 		echo "PROGRESS:PACKAGE:0/$total_packages:Preparing to install $total_packages package(s)..."
-		
+
 		# Install each package
 		for package in "${all_packages[@]}"; do
 			current_package=$((current_package + 1))
 			local retry_count=0
 			local max_retries=5
 			local install_success=false
-			
+
 			echo "PROGRESS:PACKAGE:$current_package/$total_packages:Installing $package ($current_package/$total_packages)..."
-			
+
 			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
 				retry_count=$((retry_count + 1))
 				check_and_delete "$PREFIX/var/lib/pacman/db.lck"
 				print_msg "Installing Package : ${C}$package"
-				pacman -S --noconfirm "$package" 2>/dev/null
+
+				# Use a pipe to capture and parse pacman output
+				# Note: pacman might strip progress bars when piped, so we look for text markers
+				pacman -S --noconfirm "$package" 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "$line" == *"downloading"* ]]; then
+						# Downloading phase (0-30%)
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 10 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Downloading $package..."
+					elif [[ "$line" == *"checking"* ]]; then
+						# Checking phase (30-50%)
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 40 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Checking $package..."
+					elif [[ "$line" == *"installing"* ]]; then
+						# Installing phase (50-90%)
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 70 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Installing $package..."
+					fi
+				done
+
+				# Check install status via return code of pipe (requires pipefail or check explicitly)
+				# Since we piped, we check status after.
+
 				if pacman -Qi "$package" >/dev/null 2>&1; then
 					print_success "Successfully install package: ${C}$package"
 					install_success=true
@@ -343,20 +365,38 @@ function package_install_and_check {
 		done
 		total_packages=${#all_packages[@]}
 		echo "PROGRESS:PACKAGE:0/$total_packages:Preparing to install $total_packages package(s)..."
-		
+
 		# Install each package
 		for package in "${all_packages[@]}"; do
 			current_package=$((current_package + 1))
 			local retry_count=0
 			local max_retries=5
 			local install_success=false
-			
+
 			echo "PROGRESS:PACKAGE:$current_package/$total_packages:Installing $package ($current_package/$total_packages)..."
-			
+
 			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
 				retry_count=$((retry_count + 1))
 				print_msg "Installing package: ${C}$package"
-				apt install "$package" -y 2>/dev/null
+
+				# Use a pipe to capture and parse apt output
+				apt install "$package" -y 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "$line" == *"Get:"* ]]; then
+						# Downloading markers
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 20 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Downloading $package..."
+					elif [[ "$line" == *"Unpacking"* ]]; then
+						# Unpacking markers
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 50 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Unpacking $package..."
+					elif [[ "$line" == *"Setting up"* ]]; then
+						# Setting up markers
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 80 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Setting up $package..."
+					fi
+				done
+
 				if dpkg -s "$package" >/dev/null 2>&1; then
 					print_success "Successfully install package: ${C}$package"
 					install_success=true
@@ -376,7 +416,7 @@ function package_install_and_check {
 }
 
 # will check the package is installed or not then remove it
-function package_remove_and_check() {
+function package_remove_and_check {
 	log_debug "Starting package removal for: $*"
 	local packs_list
 	# Properly splits on spaces
@@ -401,7 +441,12 @@ function package_remove_and_check() {
 						retry_count=$((retry_count + 1))
 						check_and_delete "$PREFIX/var/lib/pacman/db.lck"
 						print_msg "Removing Package : ${C}$package"
-						pacman -Rnds --noconfirm "$package" 2>/dev/null
+
+						pacman -Rnds --noconfirm "$package" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							echo "PROGRESS:PACKAGE:50:Removing $package..."
+						done
+
 						if ! pacman -Qi "$package" >/dev/null 2>&1; then
 							print_success "Successfully removed package: ${C}$package"
 							remove_success=true
@@ -419,7 +464,12 @@ function package_remove_and_check() {
 						retry_count=$((retry_count + 1))
 						check_and_delete "$PREFIX/var/lib/pacman/db.lck"
 						print_msg "Removing Package : ${C}$package_name"
-						pacman -Rnds --noconfirm "$package_name" 2>/dev/null
+
+						pacman -Rnds --noconfirm "$package_name" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							echo "PROGRESS:PACKAGE:50:Removing $package_name..."
+						done
+
 						if ! pacman -Qi "$package_name" >/dev/null 2>&1; then
 							print_success "Successfully removed package: ${C}$package_name"
 							remove_success=true
@@ -453,7 +503,12 @@ function package_remove_and_check() {
 						retry_count=$((retry_count + 1))
 						print_msg "Removing package: ${C}$package"
 						dpkg --configure -a >/dev/null 2>&1
-						apt autoremove "$package" -y 2>/dev/null
+
+						apt autoremove "$package" -y 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							echo "PROGRESS:PACKAGE:50:Removing $package..."
+						done
+
 						if ! dpkg -s "$package" >/dev/null 2>&1; then
 							print_success "Successfully removed package: ${C}$package"
 							remove_success=true
@@ -471,7 +526,12 @@ function package_remove_and_check() {
 						retry_count=$((retry_count + 1))
 						print_msg "Removing package: ${C}$package_name"
 						dpkg --configure -a >/dev/null 2>&1
-						apt autoremove "$package_name" -y 2>/dev/null
+
+						apt autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							echo "PROGRESS:PACKAGE:50:Removing $package_name..."
+						done
+
 						if ! dpkg -s "$package_name" >/dev/null 2>&1; then
 							print_success "Successfully removed package: ${C}$package_name"
 							remove_success=true
@@ -505,7 +565,7 @@ function extract() {
 	fi
 
 	echo "PROGRESS:EXTRACT:0:Starting extraction of $archive..."
-	
+
 	case "$archive" in
 	*.tar.gz | *.tgz)
 		print_success "Extracting ${C}$archive"

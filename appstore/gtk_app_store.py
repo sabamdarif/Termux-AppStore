@@ -400,6 +400,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         about_button.connect("clicked", self.on_about_clicked)
         box.pack_start(about_button, False, False, 0)
 
+        # Manage Repos item
+        repos_button = Gtk.ModelButton(label="Manage Repos")
+        repos_button.connect("clicked", self.on_manage_repos_clicked)
+        box.pack_start(repos_button, False, False, 0)
+
         # Add a separator
         separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         box.pack_start(separator, False, False, 6)
@@ -597,6 +602,202 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Show the dialog
         about_dialog.run()
         about_dialog.destroy()
+
+    def check_package_installed(self, package_name):
+        """Check if a package is installed using the system package manager"""
+        try:
+            # Determine package manager if not already known (though usually set in update_system_thread)
+            # For this check we can try both or check env var
+            pkg_manager = "apt"
+            if shutil.which("pacman"):
+                pkg_manager = "pacman"
+            
+            # Use raw subprocess for quick check
+            if pkg_manager == "apt":
+                cmd = f"dpkg -s {package_name}"
+                result = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return result.returncode == 0
+            elif pkg_manager == "pacman":
+                cmd = f"pacman -Qi {package_name}"
+                result = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return result.returncode == 0
+            return False
+        except Exception:
+            return False
+
+    def on_manage_repos_clicked(self, widget):
+        """Show dialog to manage Termux repositories"""
+        # Create dialog
+        repo_dialog = Gtk.Dialog(title="Manage Repositories", transient_for=self)
+        repo_dialog.set_default_size(400, 450)
+        repo_dialog.set_modal(True)
+
+        # Content area
+        content_box = repo_dialog.get_content_area()
+        content_box.set_margin_start(20)
+        content_box.set_margin_end(20)
+        content_box.set_margin_top(20)
+        content_box.set_margin_bottom(20)
+        content_box.set_spacing(15)
+
+        # Description
+        desc_label = Gtk.Label(label="Select repositories to enable or disable.")
+        desc_label.set_halign(Gtk.Align.START)
+        desc_label.get_style_context().add_class("dim-label")
+        content_box.pack_start(desc_label, False, False, 0)
+
+        # Repos list
+        repos = [
+            {"name": "x11-repo", "label": "X11 Repository", "desc": "Package repository containing X11 programs and libraries"},
+            {"name": "root-repo", "label": "Root Repository", "desc": "Package repository containing programs for rooted devices"},
+            {"name": "tur-repo", "label": "TUR Repository", "desc": "A single and trusted place for all unofficial/less popular termux packages"},
+            {"name": "glibc-repo", "label": "Glibc Repository", "desc": "A package repository containing glibc-based programs and libraries"},
+        ]
+
+        # Container for checkboxes
+        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        content_box.pack_start(list_box, True, True, 0)
+
+        self.repo_checkboxes = {}
+
+        # Function to handle repo toggling
+        def on_repo_toggled(button, repo_name, label_name):
+            is_active = button.get_active()
+            
+            # Determine command
+            pkg_manager = "apt"
+            if shutil.which("pacman"):
+                pkg_manager = "pacman"
+            
+            action = "install" if is_active else "remove"
+            action_display = "Installing" if is_active else "Removing"
+            
+            cmd = ""
+            if pkg_manager == "apt":
+                if is_active:
+                    cmd = f"apt install {repo_name} -y"
+                else:
+                    cmd = f"apt remove {repo_name} -y"
+            else:
+                if is_active:
+                    cmd = f"pacman -Syu {repo_name} --noconfirm"
+                else:
+                    cmd = f"pacman -R {repo_name} --noconfirm"
+
+            # Close repo dialog to show progress
+            repo_dialog.destroy()
+            
+            # Show progress dialog
+            progress_dialog, status_label, progress_bar, terminal_view = self.create_progress_dialog(
+                title=f"{action_display} {label_name}", 
+                allow_cancel=False
+            )
+            progress_dialog.show_all()
+
+            # Run in thread
+            def repo_action_thread():
+                try:
+                    GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Running: {cmd}\n\n"))
+                    
+                    process = subprocess.Popen(
+                        ['bash', '-c', cmd],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        universal_newlines=True,
+                        bufsize=1
+                    )
+
+                    if process.stdout:
+                        for line in process.stdout:
+                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+                            # Basic animation
+                            GLib.idle_add(progress_bar.pulse)
+                    
+                    process.wait()
+                    
+                    if process.returncode == 0:
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"\nSUCCESS: {label_name} {action}ed successfully.\n"))
+                        GLib.idle_add(status_label.set_text, f"{label_name} {action}ed successfully")
+                        GLib.idle_add(progress_bar.set_fraction, 1.0)
+                        
+                        # Auto-close after 1.5 seconds on success so user returns to repo list
+                        time.sleep(1.5)
+                        GLib.idle_add(progress_dialog.destroy)
+                    else:
+                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"\nERROR: Failed to {action} {label_name}.\n"))
+                        GLib.idle_add(status_label.set_text, f"Failed to {action} {label_name}")
+                        
+                except Exception as e:
+                    GLib.idle_add(lambda: self.update_terminal(terminal_view, f"\nError: {e}\n"))
+                
+                # Re-open repo manager when done (optional, or just let user close)
+                # For now let's just let user verify in terminal view
+                
+            threading.Thread(target=repo_action_thread, daemon=True).start()
+            progress_dialog.run()
+            
+            # Re-open dialog to refresh state
+            if not self.cancellation_in_progress:
+                GLib.idle_add(lambda: self.on_manage_repos_clicked(None))
+
+
+        # Helper to update dependencies
+
+
+        # Create checkboxes
+        for repo in repos:
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            
+            # Checkbox
+            check = Gtk.CheckButton()
+            check.set_active(self.check_package_installed(repo['name']))
+
+            
+            # Connect toggle action (except for dependency updates which happen instantly on UI, the action triggers on click)
+            # We need to be careful not to cycle endlessly. Ideally we want a button to apply, or trigger on click.
+            # The prompt implies "clicking on them will run", so immediate action.
+            # To avoid triggering immediately on creation, we connect 'toggled' but we need to block signal/handle carefully.
+            # Actually, `check.set_active` triggers "toggled" signal? No, set_active normally triggers it.
+            # We should block signal while setting initial state.
+            
+            # Labels
+            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            lbl = Gtk.Label(label=repo['label'])
+            lbl.set_halign(Gtk.Align.START)
+            lbl.get_style_context().add_class("bold-label")
+            
+            desc = Gtk.Label(label=repo['desc'])
+            desc.set_halign(Gtk.Align.START)
+            desc.get_style_context().add_class("dim-label")
+            desc.set_line_wrap(True)
+            
+            vbox.pack_start(lbl, False, False, 0)
+            vbox.pack_start(desc, False, False, 0)
+            
+            row.pack_start(check, False, False, 0)
+            row.pack_start(vbox, True, True, 0)
+            
+            list_box.pack_start(row, False, False, 0)
+            self.repo_checkboxes[repo['name']] = check
+
+            # Connect signal after setting state to avoid initial firing
+            check.connect("toggled", lambda b, r=repo['name'], l=repo['label']: on_repo_toggled(b, r, l))
+
+
+        # Initial dependency update
+
+
+        # Close button
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        button_box.set_halign(Gtk.Align.END)
+        close_btn = Gtk.Button(label="Close")
+        close_btn.connect("clicked", lambda x: repo_dialog.destroy())
+        button_box.pack_start(close_btn, False, False, 0)
+        content_box.pack_start(button_box, False, False, 0)
+
+        repo_dialog.show_all()
+        repo_dialog.run()
+        repo_dialog.destroy()
 
     def on_quit_clicked(self, widget):
         """Handle quit menu item click"""

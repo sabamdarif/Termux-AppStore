@@ -2,7 +2,7 @@
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Gio
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Gio  # type: ignore
 import os
 import json
 import subprocess
@@ -14,7 +14,7 @@ import threading
 import sys
 import queue
 import shutil
-from PIL import Image
+from PIL import Image  # type: ignore
 import platform
 from concurrent.futures import ThreadPoolExecutor
 import signal
@@ -26,23 +26,52 @@ import urllib.parse
 
 # Import terminal emulator components
 try:
-    from terminal_emulator import CommandOutputWindow, show_command_output, CommandRunner, create_terminal_widget, apply_terminal_css, AnsiColorParser as TerminalAnsiColorParser, TerminalEmulator
+    from terminal_emulator import CommandOutputWindow, show_command_output, CommandRunner, create_terminal_widget, apply_terminal_css, AnsiColorParser as TerminalAnsiColorParser, TerminalEmulator  # type: ignore
 except ImportError:
     print("WARNING: Could not import terminal_emulator.py! Fallback to local terminal implementation.")
-    CommandOutputWindow = None
-    show_command_output = None
+    print("WARNING: Could not import terminal_emulator.py! Fallback to local terminal implementation.")
+
     CommandRunner = None
-    create_terminal_widget = None
     apply_terminal_css = None
-    TerminalAnsiColorParser = None
-    TerminalEmulator = None
+    
+    # Fallback dummy implementations for type checking
+    import gi
+    from gi.repository import Gtk # type: ignore
+    
+    # Mock class factory for TerminalEmulator    
+    class _MockTerminalEmulator:
+        def __init__(self, *args): 
+            self.text_view = Gtk.TextView()
+            self.command_runner = None
+        def append_text(self, text): pass
+        def clear(self): pass
+        def save_terminal_output(self, *args): pass
+    TerminalEmulator = _MockTerminalEmulator
+
+    # Returns (scroll, emulator, runner) tuple as expected
+    def create_terminal_widget():
+        return Gtk.ScrolledWindow(), _MockTerminalEmulator(), None
+
+    # Mock class for CommandOutputWindow
+    class _MockCommandOutputWindow:
+        def __init__(self, *args, **kwargs): pass
+        def run_command(self, *args, **kwargs): return self
+    CommandOutputWindow = _MockCommandOutputWindow
+
+    # Simple dummy function to prevent "None cannot be called" errors
+    show_command_output = lambda *args, **kwargs: None
+    
+    # Mock class factory for TerminalAnsiColorParser
+    class _MockAnsiParser:
+        def strip_ansi(self, text): return text
+    TerminalAnsiColorParser = lambda: _MockAnsiParser()
 
 # Fuzzy search libraries
 try:
-    from fuzzywuzzy import fuzz, process
+    from fuzzywuzzy import fuzz, process  # type: ignore
 except ImportError:
     try:
-        from thefuzz import fuzz, process
+        from thefuzz import fuzz, process  # type: ignore
     except ImportError:
         print("Warning: Fuzzy search libraries not found. Falling back to regular search.")
         fuzz = None
@@ -781,8 +810,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Check Termux Desktop configuration first
             termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-            # distro_enabled = False
-            # selected_distro = None
+            distro_enabled = False
+            selected_distro = None
 
             if os.path.exists(termux_desktop_config):
                 try:
@@ -2171,6 +2200,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 return None
 
             def install_thread():
+                nonlocal script_file, install_process
+                script_file = None
+                install_process = None
                 try:
                     # Ensure cancelled flag is synced
                     self.installation_cancelled = install_cancelled
@@ -2271,7 +2303,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             GLib.idle_add(progress_dialog.destroy)
                             return
 
-                        line = install_process.stdout.readline()
+                        if install_process.stdout:
+                            line = install_process.stdout.readline()
+                        else:
+                            line = ""
                         if not line and install_process.poll() is not None:
                             break
 
@@ -2497,6 +2532,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def download_script(self, url):
         """Download a script from URL and return its local path"""
+        script_path = None
         try:
             # Create temp directory if it doesn't exist
             os.makedirs(TERMUX_TMP, exist_ok=True)
@@ -2767,6 +2803,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(update_progress, base_progress, status_msg)
                     GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
 
+                    line = "" # Initialize to prevent unbound variable error
                     uninstall_process = subprocess.Popen(
                         [script_file],
                         stdout=subprocess.PIPE,
@@ -2776,99 +2813,101 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         preexec_fn=os.setsid
                     )
 
-                    for line in uninstall_process.stdout:
-                        if uninstall_cancelled:
-                            os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
-                            msg = "Uninstallation cancelled!"
-                            GLib.idle_add(update_progress, 1.0, msg)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
-                            time.sleep(1)
-                            GLib.idle_add(progress_dialog.destroy)
-                            return
+                    if uninstall_process.stdout:
+                        for line in uninstall_process.stdout:
+                            if uninstall_cancelled:
+                                os.killpg(os.getpgid(uninstall_process.pid), signal.SIGTERM)
+                                msg = "Uninstallation cancelled!"
+                                GLib.idle_add(update_progress, 1.0, msg)
+                                GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                                time.sleep(1)
+                                GLib.idle_add(progress_dialog.destroy)
+                                return
 
-                        # Update current line
-                        current_line += 1
-
-                        # Check for progress markers first
-                        progress_info = parse_progress_line(line)
-                        
-                        if progress_info:
-                            # Real-time progress from heavyweight operation
-                            operation_type = progress_info['type']
                             
-                            if operation_type == 'DOWNLOAD':
-                                try:
-                                    sub_percent = int(progress_info['value'])
-                                    current_operation_progress = sub_percent / 100.0
-                                except (ValueError, TypeError):
-                                    current_operation_progress = 0.5
-                                    
-                            elif operation_type == 'PACKAGE':
-                                value = progress_info['value']
-                                if '/' in value:
+                            # Update current line
+                            current_line += 1
+
+                            # Check for progress markers first
+                            progress_info = parse_progress_line(line)
+                            
+                            if progress_info:
+                                # Real-time progress from heavyweight operation
+                                operation_type = progress_info['type']
+                                
+                                if operation_type == 'DOWNLOAD':
                                     try:
-                                        current, total = value.split('/')
-                                        current_operation_progress = int(current) / max(1, int(total))
-                                    except (ValueError, TypeError):
-                                        current_operation_progress = 0.5
-                                else:
-                                    try:
-                                        current_operation_progress = int(value) / 100.0
+                                        sub_percent = int(progress_info['value'])
+                                        current_operation_progress = sub_percent / 100.0
                                     except (ValueError, TypeError):
                                         current_operation_progress = 0.5
                                         
-                            elif operation_type == 'EXTRACT':
-                                try:
-                                    sub_percent = int(progress_info['value'])
-                                    current_operation_progress = sub_percent / 100.0
-                                except (ValueError, TypeError):
-                                    current_operation_progress = 0.5
+                                elif operation_type == 'PACKAGE':
+                                    value = progress_info['value']
+                                    if '/' in value:
+                                        try:
+                                            current, total = value.split('/')
+                                            current_operation_progress = int(current) / max(1, int(total))
+                                        except (ValueError, TypeError):
+                                            current_operation_progress = 0.5
+                                    else:
+                                        try:
+                                            current_operation_progress = int(value) / 100.0
+                                        except (ValueError, TypeError):
+                                            current_operation_progress = 0.5
+                                            
+                                elif operation_type == 'EXTRACT':
+                                    try:
+                                        sub_percent = int(progress_info['value'])
+                                        current_operation_progress = sub_percent / 100.0
+                                    except (ValueError, TypeError):
+                                        current_operation_progress = 0.5
+                                
+                                # Calculate overall progress with sub-operation granularity
+                                completed_ops_progress = processed_heavyweight_ops * heavyweight_progress_per_op
+                                current_op_progress = current_operation_progress * heavyweight_progress_per_op
+                                normal_progress = processed_normal_ops * normal_progress_per_op
+                                
+                                current_progress = base_progress + completed_ops_progress + current_op_progress + normal_progress
+                                current_progress = min(0.8, current_progress)
+                                
+                                GLib.idle_add(update_progress, current_progress, progress_info['message'])
+                                GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+                                continue
+
+                            # Determine if this output line indicates a heavyweight operation
+                            is_heavyweight = False
+                            for func in heavyweight_functions:
+                                if func in line:
+                                    is_heavyweight = True
+                                    if not in_heavyweight_operation:
+                                        processed_heavyweight_ops += 1
+                                        in_heavyweight_operation = True
+                                        current_operation_progress = 0.0
+                                    break
                             
-                            # Calculate overall progress with sub-operation granularity
-                            completed_ops_progress = processed_heavyweight_ops * heavyweight_progress_per_op
-                            current_op_progress = current_operation_progress * heavyweight_progress_per_op
+                            if not is_heavyweight and in_heavyweight_operation:
+                                in_heavyweight_operation = False
+                                current_operation_progress = 0.0
+
+                            # Update appropriate counter based on operation type
+                            if not is_heavyweight and not in_heavyweight_operation:
+                                processed_normal_ops += 1
+
+                            # Calculate current progress
+                            # Base progress + heavyweight progress + normal progress
+                            heavyweight_progress = processed_heavyweight_ops * heavyweight_progress_per_op
                             normal_progress = processed_normal_ops * normal_progress_per_op
-                            
-                            current_progress = base_progress + completed_ops_progress + current_op_progress + normal_progress
+                            current_progress = base_progress + heavyweight_progress + normal_progress
+
+                            # Cap progress at 80% - the final 20% is reserved for completion tasks
                             current_progress = min(0.8, current_progress)
-                            
-                            GLib.idle_add(update_progress, current_progress, progress_info['message'])
+
+                            # Update progress
+                            GLib.idle_add(update_progress, current_progress, line.strip())
+
+                            # Update terminal
                             GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
-                            continue
-
-                        # Determine if this output line indicates a heavyweight operation
-                        is_heavyweight = False
-                        for func in heavyweight_functions:
-                            if func in line:
-                                is_heavyweight = True
-                                if not in_heavyweight_operation:
-                                    processed_heavyweight_ops += 1
-                                    in_heavyweight_operation = True
-                                    current_operation_progress = 0.0
-                                break
-                        
-                        if not is_heavyweight and in_heavyweight_operation:
-                            in_heavyweight_operation = False
-                            current_operation_progress = 0.0
-
-                        # Update appropriate counter based on operation type
-                        if not is_heavyweight and not in_heavyweight_operation:
-                            processed_normal_ops += 1
-
-                        # Calculate current progress
-                        # Base progress + heavyweight progress + normal progress
-                        heavyweight_progress = processed_heavyweight_ops * heavyweight_progress_per_op
-                        normal_progress = processed_normal_ops * normal_progress_per_op
-                        current_progress = base_progress + heavyweight_progress + normal_progress
-
-                        # Cap progress at 80% - the final 20% is reserved for completion tasks
-                        current_progress = min(0.8, current_progress)
-
-                        # Update progress
-                        GLib.idle_add(update_progress, current_progress, line.strip())
-
-                        # Update terminal
-                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
 
                     uninstall_process.wait()
                     if uninstall_process.returncode == 0 and not uninstall_cancelled:
@@ -2878,8 +2917,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                         # Disable cancel button as uninstallation is almost complete
                         if cancel_button:
-                            GLib.idle_add(lambda: cancel_button.set_sensitive(False))
-                            GLib.idle_add(lambda: cancel_button.set_tooltip_text("Uninstallation is almost complete and cannot be cancelled"))
+                            GLib.idle_add(lambda b=cancel_button: b.set_sensitive(False) if b else None)
+                            GLib.idle_add(lambda b=cancel_button: b.set_tooltip_text("Uninstallation is almost complete and cannot be cancelled") if b else None)
                             GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUninstallation is almost complete and cannot be cancelled\n"))
 
                         self.installed_apps.remove(app['folder_name'])
@@ -3875,7 +3914,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                     # Disable cancel button if installation is near completion (80% or more)
                     if fraction >= 0.8 and cancel_button:
-                        GLib.idle_add(lambda: cancel_button.set_sensitive(False))
+                        GLib.idle_add(lambda b=cancel_button: b.set_sensitive(False) if b else None)
                         if not hasattr(cancel_button, 'tooltip_set'):
                             cancel_button.set_tooltip_text("Update is almost complete and cannot be cancelled")
                             setattr(cancel_button, 'tooltip_set', True)
@@ -3983,7 +4022,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 GLib.idle_add(update_dialog.destroy)
                                 return
 
-                            line = update_process.stdout.readline()
+                            if update_process.stdout:
+                                line = update_process.stdout.readline()
+                            else:
+                                line = ""
                             if not line and update_process.poll() is not None:
                                 break
 
@@ -4215,6 +4257,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             GLib.idle_add(update)
 
         def update_system_thread():
+            process = None
             try:
                 # Log the start of the update process
                 if self.logging_active and self.log_file:
@@ -4250,7 +4293,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         output, _ = process.communicate(timeout=30)  # 30 seconds timeout
                         print(output.strip())
                     except subprocess.TimeoutExpired:
-                        process.kill()
+                        if process:
+                            process.kill()
                         print("Error: apt update command timed out.")
                     except Exception as e:
                         print(f"Error running apt update: {e}")
@@ -4263,8 +4307,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                             stderr=subprocess.STDOUT,
                                             universal_newlines=True)
 
-                    for line in process.stdout:
-                        print(line.strip())
+                    if process.stdout:
+                        for line in process.stdout:
+                            print(line.strip())
                     process.wait()
 
                 # Check and update distro repositories if available
@@ -4319,15 +4364,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                                                 universal_newlines=True)
 
                                             # Read and display the output from the distro update command
-                                            for line in update_process.stdout:
-                                                print(line.strip())
-                                                # Log update output if logging is active
-                                                if self.logging_active and self.log_file:
-                                                    try:
-                                                        self.log_file.write(f"[{selected_distro} update] {line}")
-                                                        self.log_file.flush()
-                                                    except Exception:
-                                                        pass
+                                            if update_process.stdout:
+                                                for line in update_process.stdout:
+                                                    print(line.strip())
+                                                    # Log update output if logging is active
+                                                    if self.logging_active and self.log_file:
+                                                        try:
+                                                            self.log_file.write(f"[{selected_distro} update] {line}")
+                                                            self.log_file.flush()
+                                                        except Exception:
+                                                            pass
 
                                             update_process.wait()
                                             print(f"{selected_distro} repository update completed with return code: {update_process.returncode}")
@@ -5072,16 +5118,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Create a terminal emulator for the text view if it doesn't exist yet
         if not hasattr(terminal_view, 'terminal_emulator'):
             # Initialize the terminal emulator
-            terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
-
-        # Process and append the text
-        terminal_view.terminal_emulator.append_text(text)
+            if TerminalEmulator:
+                terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
+            else:
+                terminal_view.terminal_emulator = None
+                
+        # Handle case where terminal_emulator might theoretically be None
+        if hasattr(terminal_view, 'terminal_emulator') and terminal_view.terminal_emulator:
+             # Process and append the text
+            terminal_view.terminal_emulator.append_text(text)
+        else:
+            pass # Or fallback logging
 
         # Append to log file if continuous logging is active
         if self.logging_active and self.log_file:
             try:
                 # Strip ANSI codes when writing to log file
-                clean_text = TerminalAnsiColorParser().strip_ansi(text)
+                if TerminalAnsiColorParser:
+                    clean_text = TerminalAnsiColorParser().strip_ansi(text)
+                else:
+                    clean_text = text
 
                 # Write to log file, ensuring a newline is added if needed
                 if self.log_file.tell() > 0:
@@ -5101,7 +5157,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 # If there's an error writing to the log file, disable logging
                 try:
                     error_msg = f"\nError writing to log file: {str(e)}\nLogging disabled.\n"
-                    terminal_view.terminal_emulator.append_text(error_msg)
+                    if hasattr(terminal_view, 'terminal_emulator') and terminal_view.terminal_emulator:
+                        terminal_view.terminal_emulator.append_text(error_msg)
                     self.log_file.close()
                 except Exception:
                     pass
@@ -5323,7 +5380,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 try:
                     with open(filename, 'w') as f:
                         # Strip ANSI codes when saving to file
-                        clean_text = TerminalAnsiColorParser().strip_ansi(text)
+                        if TerminalAnsiColorParser:
+                            clean_text = TerminalAnsiColorParser().strip_ansi(text)
+                        else:
+                            clean_text = text
                         f.write(clean_text)
 
                     # Update status label with success message
@@ -5711,10 +5771,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 def show_command_output(command, app_name=None, parent=None):
     """Wrapper for the imported show_command_output function"""
     # Use the imported function
-    return CommandOutputWindow(
-        title=f"Running {app_name}" if app_name else "Command Output",
-        parent=parent
-    ).run_command(command, app_name)
+    if CommandOutputWindow:
+        return CommandOutputWindow(
+            title=f"Running {app_name}" if app_name else "Command Output",
+            parent=parent
+        ).run_command(command, app_name)
+    return None
 
 def main():
     """Main application entry point with improved error handling"""

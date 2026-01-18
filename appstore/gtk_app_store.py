@@ -2421,20 +2421,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(update_progress, 0.3, "Preparing installation...")
                     os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
 
-                    # Count the number of significant lines in the script to track progress
-                    total_lines = 0
-                    significant_lines = []
-                    heavyweight_functions = [
-                        "download_file",
-                        "extract",
-                        "package_install_and_check",
-                        "package_remove_and_check",
-                        "install_appimage",
-                        "distro_run"
-                    ]
-                    # Track heavyweight operations for weighting
-                    heavyweight_ops_count = 0
-                    total_ops_count = 0
+                    # Weights for different operations
+                    # Total progress available for script execution is 0.15 -> 0.95 (80%)
+                    function_weights = {
+                        "package_install_and_check": 50,  # Highest priority
+                        "package_remove_and_check": 30,
+                        "install_appimage": 30,
+                        "download_file": 20,              # Medium priority
+                        "extract": 15,
+                        "distro_run": 25,
+                        "check_and_create_directory": 2,  # Low priority
+                        "check_and_delete": 2,
+                        "check_and_backup": 2,
+                        "check_and_restore": 2,
+                        "echo": 1
+                    }
+                    default_weight = 5
+
+                    total_script_weight = 0
+                    script_ops = []  # List of (line_content, weight)
 
                     try:
                         with open(script_file, 'r') as f:
@@ -2442,49 +2447,50 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                 # Skip empty lines and comments
                                 line = line.strip()
                                 if line and not line.startswith('#'):
-                                    total_lines += 1
-                                    significant_lines.append(line)
-                                    total_ops_count += 1
-
-                                    # Check if the line contains any heavyweight function
-                                    for func in heavyweight_functions:
+                                    # Determine weight
+                                    weight = default_weight
+                                    matched = False
+                                    for func, w in function_weights.items():
                                         if func in line:
-                                            heavyweight_ops_count += 1
+                                            weight = w
+                                            matched = True
                                             break
+                                    
+                                    # If not matched, check if it looks like a function call or command
+                                    if not matched:
+                                        # Give slightly more weight to apt/pacman if called directly
+                                        if "apt install" in line or "pacman -" in line:
+                                            weight = 40
+                                    
+                                    script_ops.append({'line': line, 'weight': weight})
+                                    total_script_weight += weight
 
-                        # Ensure we have at least one line
-                        total_lines = max(1, total_lines)
+                        # Ensure we have at least some weight
+                        total_script_weight = max(1, total_script_weight)
+                         
                         GLib.idle_add(lambda: self.update_terminal(terminal_view,
-                              f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
+                              f"Script analysis: {len(script_ops)} steps, total weight: {total_script_weight}\n"))
+
                     except Exception as e:
-                        print(f"Error counting script lines: {e}")
-                        # Default to a reasonable number if counting fails
-                        total_lines = 100
-                        heavyweight_ops_count = 0
-                        total_ops_count = total_lines
+                        print(f"Error analyzing script: {e}")
+                        total_script_weight = 100
+                        script_ops = [{'line': "unknown", 'weight': 100}]
 
-                    # Calculate base progress (downloading and preparation = 30%)
-                    base_progress = 0.3
-
-                    # Distribute progress weights:
-                    # - 40% for heavyweight operations
-                    # - 20% for other operations
-                    heavyweight_weight = 0.4 if heavyweight_ops_count > 0 else 0
-                    normal_ops_weight = 0.6 - heavyweight_weight if total_ops_count - heavyweight_ops_count > 0 else 0.6
-
-                    # Calculate progress weights for each type of line
-                    heavyweight_progress_per_op = heavyweight_weight / max(1, heavyweight_ops_count)
-                    normal_progress_per_op = normal_ops_weight / max(1, total_ops_count - heavyweight_ops_count)
-
+                    # Calculate progress range
+                    start_progress = 0.15
+                    end_progress = 0.95
+                    progress_range = end_progress - start_progress
+                    
                     # Process state tracking
-                    current_line = 0
-                    processed_heavyweight_ops = 0
-                    processed_normal_ops = 0
-                    current_operation_progress = 0.0  # Track progress within current heavyweight operation
-                    in_heavyweight_operation = False
+                    current_op_index = 0
+                    completed_weight = 0
+                    current_operation_progress = 0.0
+                    
+                    # Track which heavyweight op we are currently in
+                    current_op_weight = 0
 
                     # Execute script with better progress tracking
-                    GLib.idle_add(update_progress, base_progress, "Starting installation...")
+                    GLib.idle_add(update_progress, start_progress, "Starting installation...")
                     install_process = subprocess.Popen(
                         ['bash', script_file],
                         stdout=subprocess.PIPE,
@@ -2515,98 +2521,71 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if not line:
                             continue
 
-                        # Update current line
-                        current_line += 1
 
-                        # Check for progress markers first
+
+                        # Check for progress info first
                         progress_info = parse_progress_line(line)
-                        
                         if progress_info:
-                            # Real-time progress from heavyweight operation
+                            # Granular progress update
                             operation_type = progress_info['type']
                             
-                            if operation_type == 'DOWNLOAD':
-                                # Extract percentage (e.g., "45")
-                                try:
-                                    sub_percent = int(progress_info['value'])
-                                    current_operation_progress = sub_percent / 100.0
-                                except (ValueError, TypeError):
-                                    current_operation_progress = 0.5
-                                    
-                            elif operation_type == 'PACKAGE':
-                                # Extract current/total or percentage
-                                value = progress_info['value']
-                                if '/' in value:
-                                    try:
-                                        current, total = value.split('/')
-                                        current_operation_progress = int(current) / max(1, int(total))
-                                    except (ValueError, TypeError):
-                                        current_operation_progress = 0.5
+                            # Parse value
+                            try:
+                                val_str = progress_info['value']
+                                if '/' in val_str:
+                                    curr, tot = val_str.split('/')
+                                    sub_progress = float(curr) / max(1, float(tot))
                                 else:
-                                    try:
-                                        current_operation_progress = int(value) / 100.0
-                                    except (ValueError, TypeError):
-                                        current_operation_progress = 0.5
-                                        
-                            elif operation_type == 'EXTRACT':
-                                # Extract percentage
-                                try:
-                                    sub_percent = int(progress_info['value'])
-                                    current_operation_progress = sub_percent / 100.0
-                                except (ValueError, TypeError):
-                                    current_operation_progress = 0.5
+                                    sub_progress = float(val_str) / 100.0
+                            except (ValueError, TypeError):
+                                sub_progress = 0.5
+
+                            # If we are inside an operation, update its internal progress
+                            current_operation_progress = sub_progress
                             
-                            # Calculate overall progress with sub-operation granularity
-                            # Base progress for completed heavyweight ops
-                            completed_ops_progress = processed_heavyweight_ops * heavyweight_progress_per_op
-                            # Current op progress (weighted)
-                            current_op_progress = current_operation_progress * heavyweight_progress_per_op
-                            # Add normal ops progress
-                            normal_progress = processed_normal_ops * normal_progress_per_op
+                            # Recalculate global progress
+                            # We assume current_op_weight is set when we entered the op (via text match below)
+                            # If not set (unlikely if script structured well), use default
+                            eff_weight = current_op_weight if current_op_weight > 0 else default_weight
+
+                            weighted_progress = (completed_weight + (eff_weight * current_operation_progress)) / total_script_weight
+                            current_progress = start_progress + (weighted_progress * progress_range)
+                            current_progress = min(end_progress, current_progress)
                             
-                            current_progress = base_progress + completed_ops_progress + current_op_progress + normal_progress
-                            current_progress = min(0.8, current_progress)
-                            
-                            # Update with progress message
                             GLib.idle_add(update_progress, current_progress, progress_info['message'])
-                            # Update terminal
                             GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
                             continue
 
-                        # Determine if this output line indicates a heavyweight operation
-                        is_heavyweight = False
-                        for func in heavyweight_functions:
+                        # Check if this line indicates start of a known operation
+                        # We use this to advance the "completed" pointer
+                        is_heavyweight_start = False
+                        for func, w in function_weights.items():
                             if func in line:
-                                is_heavyweight = True
-                                if not in_heavyweight_operation:
-                                    processed_heavyweight_ops += 1
-                                    in_heavyweight_operation = True
-                                    current_operation_progress = 0.0
+                                is_heavyweight_start = True
+                                
+                                # Finish previous op fully
+                                # Note: This assumes linear execution matching our analysis
+                                if current_op_weight > 0:
+                                     completed_weight += current_op_weight
+                                
+                                # Start new op
+                                current_op_weight = w
+                                current_operation_progress = 0.0
                                 break
                         
-                        # If not in a heavyweight operation and this isn't one, it's normal
-                        if not is_heavyweight and in_heavyweight_operation:
-                            # Just exited a heavyweight operation
-                            in_heavyweight_operation = False
-                            current_operation_progress = 0.0
-
-                        # Update appropriate counter based on operation type
-                        if not is_heavyweight and not in_heavyweight_operation:
-                            processed_normal_ops += 1
-
-                        # Calculate current progress
-                        # Base progress + heavyweight progress + normal progress
-                        heavyweight_progress = processed_heavyweight_ops * heavyweight_progress_per_op
-                        normal_progress = processed_normal_ops * normal_progress_per_op
-                        current_progress = base_progress + heavyweight_progress + normal_progress
-
-                        # Cap progress at 80% - the final 20% is reserved for completion tasks
-                        current_progress = min(0.8, current_progress)
-
-                        # Update progress
+                        if not is_heavyweight_start:
+                             # For normal lines, we could increment a small amount, 
+                             # but it's safer to just rely on major steps to move the bar significantly.
+                             # If we are not in a heavy op, maybe just add default weight to completed?
+                             pass
+                        
+                        # Calculate progress
+                        eff_weight = current_op_weight if current_op_weight > 0 else default_weight
+                        weighted_progress = (completed_weight + (eff_weight * current_operation_progress)) / total_script_weight
+                        current_progress = start_progress + (weighted_progress * progress_range)
+                        current_progress = min(end_progress, current_progress)
+                        
                         GLib.idle_add(update_progress, current_progress, line)
-
-                        # Update terminal
                         GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
 
                     if install_process.wait() == 0 and not install_cancelled:

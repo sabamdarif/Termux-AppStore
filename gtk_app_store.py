@@ -5139,18 +5139,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 else:
                     clean_text = text
 
-                # Write to log file, ensuring a newline is added if needed
-                if self.log_file.tell() > 0:
-                    # Move to the position before the last character
-                    self.log_file.seek(self.log_file.tell() - 1, 0)
-                    last_char = self.log_file.read(1)
-                    self.log_file.seek(0, 2)  # Move back to the end
-
-                    # If the last character isn't a newline and the new text doesn't start with one,
-                    # add a newline before writing
-                    if last_char != '\n' and not clean_text.startswith('\n'):
-                        self.log_file.write('\n')
-
+                # Write to log file
                 self.log_file.write(clean_text)
                 self.log_file.flush()  # Ensure it's written immediately
             except Exception as e:

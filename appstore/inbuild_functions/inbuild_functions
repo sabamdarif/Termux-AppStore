@@ -379,6 +379,12 @@ function package_install_and_check {
 				retry_count=$((retry_count + 1))
 				print_msg "Installing package: ${C}$package"
 
+				# Clean up locks before attempting install
+				rm -f "$PREFIX/var/lib/dpkg/lock"
+				rm -f "$PREFIX/var/lib/dpkg/lock-frontend"
+				rm -f "$PREFIX/var/cache/apt/archives/lock"
+				dpkg --configure -a >/dev/null 2>&1
+
 				# Use a pipe to capture and parse apt output
 				apt install "$package" -y 2>&1 | while IFS= read -r line; do
 					echo "$line"

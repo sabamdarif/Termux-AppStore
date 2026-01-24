@@ -39,11 +39,11 @@
       "Development"
     ],
     "app_type": "distro",
-    "run_cmd": "/usr/share/antigravity/antigravity --no-sandbox",
+    "run_cmd": "antigravity --no-sandbox",
     "supported_arch": "aarch64,arm",
     "version": "distro_local_version",
     "supported_distro": "all",
-    "package_name": "code",
+    "package_name": "antigravity",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Antigravity/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Antigravity/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Antigravity/logo.png"

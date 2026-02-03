@@ -165,6 +165,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Brave-browser/logo.png"
   },
   {
+    "app_name": "Calligra",
+    "folder_name": "Calligra",
+    "description": "Office and graphic art suite by KDE",
+    "categories": [
+      "Office"
+    ],
+    "app_type": "native",
+    "run_cmd": "calligra",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "calligra",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Calligra/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Calligra/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Calligra/logo.png"
+  },
+  {
     "app_name": "Chromium",
     "folder_name": "Chromium",
     "description": "Open-source version of Google Chrome.",

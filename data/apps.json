@@ -567,6 +567,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gnome-font-viewer/logo.png"
   },
   {
+    "app_name": "Gwenview",
+    "folder_name": "Gwenview",
+    "description": "Fast and easy to use image viewer by KDE",
+    "categories": [
+      "Multimedia",
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "gwenview",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "gwenview",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gwenview/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gwenview/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Gwenview/logo.png"
+  },
+  {
     "app_name": "Handbrake",
     "folder_name": "Handbrake",
     "description": "Handbrake is an open-source tool for compressing and converting video files",

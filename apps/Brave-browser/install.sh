@@ -3,7 +3,7 @@
 supported_arch="aarch64"
 package_name="brave-browser"
 run_cmd="/opt/brave-browser/brave-browser --no-sandbox"
-version="v1.87.188"
+version="v1.87.190"
 app_type="distro"
 page_url="https://github.com/brave/brave-browser"
 working_dir="${distro_path}/opt"

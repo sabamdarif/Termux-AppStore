@@ -220,9 +220,9 @@
       "Development"
     ],
     "app_type": "distro",
-    "run_cmd": "/opt/AppImageLauncher/cursor/AppRun --no-sandbox",
+    "run_cmd": "cursor --no-sandbox",
     "supported_arch": "aarch64",
-    "version": "1.7.52",
+    "version": "distro_local_version",
     "supported_distro": "all",
     "package_name": "cursor",
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Cursor/install.sh",

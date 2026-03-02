@@ -2,42 +2,37 @@
 
 supported_arch="aarch64"
 package_name="cursor"
-version="1.7.52"
+version=distro_local_version
 app_type="distro"
 supported_distro="all"
-page_url="https://downloads.cursor.com/production/9675251a06b1314d50ff34b0cbe5109b78f848cd/linux/arm64"
-pause_update=true
-run_cmd="/opt/AppImageLauncher/cursor/AppRun --no-sandbox"
+run_cmd="cursor --no-sandbox"
 
-cd "${TMPDIR}" || exit 1
+if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]]; then
 
-appimage_filename="Cursor-${version}-${supported_arch}.AppImage"
+	distro_run '
+mkdir -p /etc/apt/keyrings
+apt update
+apt install gpg -y
+curl -fsSL https://downloads.cursor.com/keys/anysphere.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/cursor.gpg > /dev/null
+echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/cursor.gpg] https://downloads.cursor.com/aptrepo stable main" | sudo tee /etc/apt/sources.list.d/cursor.list > /dev/null
+apt update
+'
 
-check_and_delete "${TMPDIR}/${appimage_filename} ${PREFIX}/share/applications/pd_added/cursor.desktop"
-
-print_success "Downloading cursor AppImage..."
-download_file "${page_url}/$appimage_filename"
-install_appimage "$appimage_filename" "cursor"
-
-# Determine which logo file to use
-if [ -f "${HOME}/.appstore/logo/Cursor/logo.png" ]; then
-    icon_path="${HOME}/.appstore/logo/Cursor/logo.png"
-elif [ -f "${HOME}/.appstore/logo/Cursor/logo.svg" ]; then
-    icon_path="${HOME}/.appstore/logo/Cursor/logo.svg"
-else
-    icon_path="${HOME}/.appstore/logo/Cursor/logo"
+elif [[ "$selected_distro" == "fedora" ]]; then
+	distro_run '
+tee /etc/yum.repos.d/antigravity.repo << EOL
+[cursor]
+name=Cursor
+baseurl=https://downloads.cursor.com/yumrepo
+enabled=1
+gpgcheck=1
+gpgkey=https://downloads.cursor.com/keys/anysphere.asc
+EOL
+dnf makecache
+'
 fi
 
-print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/cursor.desktop >/dev/null
-[Desktop Entry]
-Name=Cursor
-Exec=pdrun "${run_cmd}"
-Terminal=false
-Type=Application
-Icon=${icon_path}
-StartupWMClass=cursor
-Comment=cursor
-MimeType=x-scheme-handler/cursor;
-Categories=Development;
-DESKTOP_EOF
+$selected_distro install $package_name -y
+
+fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
+fix_exec "pd_added/$package_name-url-handler.desktop" "--no-sandbox" 2>/dev/null || true

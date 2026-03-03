@@ -1,0 +1,1397 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+#===============================================================================
+#
+#   yt-dlp GUI
+#   Version: 3.5
+#
+#===============================================================================
+
+APP_TITLE="YtDLP GUI"
+APP_VERSION="3.5"
+
+CONFIG_DIR="$HOME/.config/ytdlp-gui"
+ICON_PATH="$CONFIG_DIR/logo.png"
+CONFIG_FILE="$CONFIG_DIR/settings.conf"
+HISTORY_FILE="$CONFIG_DIR/history.txt"
+ARCHIVE_FILE="$CONFIG_DIR/download_archive.txt"
+LOG_DIR="$CONFIG_DIR/logs"
+PRESETS_DIR="$CONFIG_DIR/presets"
+
+mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$PRESETS_DIR"
+
+#===============================================================================
+# SCREEN GEOMETRY — cap dialog height to 85% of display
+#===============================================================================
+
+get_max_height() {
+	local screen_h=0
+	if command -v xdpyinfo &>/dev/null 2>&1; then
+		screen_h=$(xdpyinfo 2>/dev/null | awk '/dimensions:/{split($2,a,"x"); print a[2]; exit}')
+	fi
+	if [ "$screen_h" -le 0 ] 2>/dev/null && command -v xrandr &>/dev/null 2>&1; then
+		screen_h=$(xrandr 2>/dev/null | awk '/\*/{split($1,a,"x"); print a[2]; exit}')
+	fi
+	if [ "$screen_h" -le 0 ] 2>/dev/null && command -v wmctrl &>/dev/null 2>&1; then
+		screen_h=$(wmctrl -d 2>/dev/null | awk 'NR==1{split($4,a,"x"); print a[2]}')
+	fi
+	if [ "$screen_h" -le 0 ] 2>/dev/null; then
+		screen_h=768
+	fi
+	echo $((screen_h * 85 / 100))
+}
+
+MAX_HEIGHT=$(get_max_height)
+
+cap_height() {
+	local requested="$1"
+	if [ "$requested" -gt "$MAX_HEIGHT" ] 2>/dev/null; then
+		echo "$MAX_HEIGHT"
+	else
+		echo "$requested"
+	fi
+}
+
+#===============================================================================
+# YAD WRAPPER — ensures all dialogs are centered
+#===============================================================================
+
+yad() {
+	command yad --center "$@"
+}
+
+#===============================================================================
+# ENVIRONMENT DETECTION
+#===============================================================================
+
+is_termux() {
+	[ -n "$TERMUX_VERSION" ] || [ -d "/data/data/com.termux" ]
+}
+
+get_install_cmd() {
+	if is_termux; then
+		echo "pkg install"
+	elif command -v apt &>/dev/null; then
+		echo "sudo apt install"
+	elif command -v dnf &>/dev/null; then
+		echo "sudo dnf install"
+	elif command -v pacman &>/dev/null; then
+		echo "sudo pacman -S"
+	elif command -v zypper &>/dev/null; then
+		echo "sudo zypper install"
+	elif command -v emerge &>/dev/null; then
+		echo "sudo emerge"
+	elif command -v xbps-install &>/dev/null; then
+		echo "sudo xbps-install"
+	elif command -v apk &>/dev/null; then
+		echo "sudo apk add"
+	elif command -v nix-env &>/dev/null; then
+		echo "nix-env -iA"
+	else
+		echo "pkg install"
+	fi
+}
+
+#===============================================================================
+# CLIPBOARD HELPER
+#===============================================================================
+
+copy_to_clipboard() {
+	local text="$1"
+	if [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy &>/dev/null; then
+		printf '%s' "$text" | wl-copy
+		return 0
+	fi
+	if [ -n "$DISPLAY" ]; then
+		if command -v xclip &>/dev/null; then
+			printf '%s' "$text" | xclip -selection clipboard
+			return 0
+		elif command -v xsel &>/dev/null; then
+			printf '%s' "$text" | xsel --clipboard --input
+			return 0
+		fi
+	fi
+	if command -v termux-clipboard-set &>/dev/null; then
+		printf '%s' "$text" | termux-clipboard-set
+		return 0
+	fi
+	return 1
+}
+
+#===============================================================================
+# DESKTOP ENVIRONMENT DETECTION & FILE OPENING
+#===============================================================================
+
+detect_de() {
+	local de=""
+	if [ -n "$XDG_CURRENT_DESKTOP" ]; then
+		de="$XDG_CURRENT_DESKTOP"
+	elif [ -n "$DESKTOP_SESSION" ]; then
+		de="$DESKTOP_SESSION"
+	elif [ -n "$XDG_SESSION_DESKTOP" ]; then
+		de="$XDG_SESSION_DESKTOP"
+	elif [ -n "$GDMSESSION" ]; then
+		de="$GDMSESSION"
+	elif [ -n "$KDE_FULL_SESSION" ]; then
+		de="kde"
+	elif [ -n "$GNOME_DESKTOP_SESSION_ID" ]; then
+		de="gnome"
+	elif [ -n "$MATE_DESKTOP_SESSION_ID" ]; then
+		de="mate"
+	else
+		local -A de_procs=(
+			[xfce]="xfce4-session xfdesktop"
+			[gnome]="gnome-session gnome-shell"
+			[cinnamon]="cinnamon-session cinnamon"
+			[mate]="mate-session mate-panel"
+			[kde]="plasmashell kded5 kded6"
+			[lxqt]="lxqt-session lxqt-panel"
+			[lxde]="lxsession lxpanel"
+			[budgie]="budgie-wm budgie-panel"
+			[deepin]="deepin-wm dde-desktop"
+		)
+		for name in "${!de_procs[@]}"; do
+			for proc in ${de_procs[$name]}; do
+				pgrep -x "$proc" >/dev/null 2>&1 && de="$name" && break 2
+			done
+		done
+	fi
+	echo "$de" | tr '[:upper:]' '[:lower:]'
+}
+
+smart_open() {
+	local target="$1"
+	local opener=""
+	local de
+	de=$(detect_de)
+
+	case "$de" in
+	*xfce*)
+		for c in exo-open thunar; do command -v "$c" &>/dev/null && opener="$c" && break; done
+		;;
+	*gnome* | *ubuntu* | *unity* | *pop*)
+		for c in gio nautilus gnome-open; do
+			if command -v "$c" &>/dev/null; then
+				[ "$c" = "gio" ] && opener="gio open" || opener="$c"
+				break
+			fi
+		done
+		;;
+	*cinnamon*)
+		for c in nemo nautilus; do command -v "$c" &>/dev/null && opener="$c" && break; done
+		;;
+	*kde* | *plasma*)
+		for c in dolphin kde-open5 kde-open; do command -v "$c" &>/dev/null && opener="$c" && break; done
+		[ -z "$opener" ] && command -v kioclient5 &>/dev/null && opener="kioclient5 exec"
+		;;
+	*mate*)
+		command -v caja &>/dev/null && opener="caja"
+		;;
+	*lxqt*)
+		command -v pcmanfm-qt &>/dev/null && opener="pcmanfm-qt"
+		;;
+	*lxde*)
+		command -v pcmanfm &>/dev/null && opener="pcmanfm"
+		;;
+	*budgie*)
+		for c in nautilus nemo; do command -v "$c" &>/dev/null && opener="$c" && break; done
+		;;
+	*deepin*)
+		command -v dde-file-manager &>/dev/null && opener="dde-file-manager"
+		;;
+	esac
+
+	if [ -n "$opener" ]; then
+		$opener "$target" &>/dev/null &
+		return 0
+	fi
+
+	if command -v xdg-open &>/dev/null; then
+		xdg-open "$target" &>/dev/null &
+		return 0
+	fi
+
+	if command -v exo-open &>/dev/null; then
+		exo-open "$target" &>/dev/null &
+		return 0
+	fi
+
+	if [ -f "$target" ]; then
+		for mp in mpv vlc celluloid totem parole smplayer mplayer; do
+			if command -v "$mp" &>/dev/null; then
+				$mp "$target" &>/dev/null &
+				return 0
+			fi
+		done
+	fi
+
+	local install_cmd
+	install_cmd=$(get_install_cmd)
+
+	yad --error \
+		--title="$APP_TITLE - No File Manager" \
+		--window-icon="$ICON_PATH" \
+		--width=500 \
+		--text="<b>No file manager found!</b>\n\nInstall one:\n<tt>$install_cmd thunar</tt>\n<tt>$install_cmd pcmanfm</tt>\n<tt>$install_cmd mpv</tt>\n\n<b>Your files are at:</b>\n<tt>$target</tt>" \
+		--button="Copy Path:2" \
+		--button="OK:0"
+
+	if [ $? -eq 2 ]; then
+		copy_to_clipboard "$target"
+	fi
+	return 1
+}
+
+#===============================================================================
+# DEPENDENCIES
+#===============================================================================
+
+check_dependencies() {
+	local missing=()
+	for cmd in yad yt-dlp ffmpeg; do
+		command -v "$cmd" &>/dev/null || missing+=("$cmd")
+	done
+
+	if [ ${#missing[@]} -gt 0 ]; then
+		local install_cmd
+		install_cmd=$(get_install_cmd)
+
+		if command -v yad &>/dev/null; then
+			yad --error \
+				--title="$APP_TITLE - Missing" \
+				--width=450 \
+				--text="<b>Required programs not found:</b>\n\n$(printf '  • %s\n' "${missing[@]}")\n\n<tt>$install_cmd ${missing[*]}</tt>" \
+				--button="OK:0"
+		else
+			echo "Missing: ${missing[*]}"
+			echo "Run: $install_cmd ${missing[*]}"
+		fi
+		exit 1
+	fi
+}
+
+#===============================================================================
+# CONFIGURATION
+#===============================================================================
+
+declare -A CFG=(
+	[download_path]="$HOME/Downloads"
+	[output_template]='%(title)s.%(ext)s'
+	[concurrent_fragments]="4"
+	[retries]="10"
+	[embed_metadata]="TRUE"
+	[embed_thumbnail]="FALSE"
+	[embed_chapters]="TRUE"
+	[restrict_filenames]="FALSE"
+	[no_overwrites]="FALSE"
+	[use_archive]="FALSE"
+	[cookies_browser]="none"
+	[proxy]=""
+	[impersonate]="none"
+	[force_ipv4]="FALSE"
+	[force_ipv6]="FALSE"
+	[use_aria2c]="FALSE"
+	[aria2c_connections]="16"
+	[aria2c_extra_args]="-k 1M"
+	[verbose]="TRUE"
+	[extra_args]=""
+	[sb_action]="none"
+	[sb_categories]="sponsor,intro,outro,selfpromo"
+)
+
+load_config() {
+	[ ! -f "$CONFIG_FILE" ] && return
+	while IFS='=' read -r key value; do
+		[[ "$key" =~ ^[[:space:]]*# ]] && continue
+		[[ -z "$key" ]] && continue
+		value="${value#\"}"
+		value="${value%\"}"
+		CFG["$key"]="$value"
+	done <"$CONFIG_FILE"
+
+	if [ -z "${CFG[aria2c_connections]}" ] && [ -n "${CFG[aria2c_args]}" ]; then
+		local old_args="${CFG[aria2c_args]}"
+		local conn=""
+		if [[ "$old_args" =~ -x[[:space:]]*([0-9]+) ]]; then
+			conn="${BASH_REMATCH[1]}"
+		fi
+		[ -n "$conn" ] && CFG[aria2c_connections]="$conn" || CFG[aria2c_connections]="16"
+		local remaining
+		remaining=$(echo "$old_args" | sed -E 's/-x[[:space:]]*[0-9]+//g; s/-s[[:space:]]*[0-9]+//g' | xargs)
+		CFG[aria2c_extra_args]="$remaining"
+		unset 'CFG[aria2c_args]'
+		save_config
+	fi
+
+	[ -z "${CFG[aria2c_connections]}" ] && CFG[aria2c_connections]="16"
+	[ -z "${CFG[aria2c_extra_args]+x}" ] && CFG[aria2c_extra_args]="-k 1M"
+
+	mkdir -p "${CFG[download_path]}" 2>/dev/null
+}
+
+save_config() {
+	{
+		echo "# yt-dlp GUI — $(date)"
+		for key in $(echo "${!CFG[@]}" | tr ' ' '\n' | sort); do
+			echo "${key}=\"${CFG[$key]}\""
+		done
+	} >"$CONFIG_FILE"
+}
+
+#===============================================================================
+# HISTORY
+#===============================================================================
+
+add_to_history() {
+	echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >>"$HISTORY_FILE"
+	if [ -f "$HISTORY_FILE" ] && [ "$(wc -l <"$HISTORY_FILE")" -gt 500 ]; then
+		tail -500 "$HISTORY_FILE" >"${HISTORY_FILE}.tmp"
+		mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
+	fi
+}
+
+show_history() {
+	if [ ! -s "$HISTORY_FILE" ]; then
+		yad --info --title="$APP_TITLE" --window-icon="$ICON_PATH" \
+			--text="No download history yet." --button="OK:0"
+		return
+	fi
+
+	local h
+	h=$(cap_height 500)
+	yad --text-info \
+		--title="$APP_TITLE - Download History" \
+		--window-icon="$ICON_PATH" \
+		--width=850 --height="$h" \
+		--fontname="Monospace 9" \
+		--filename="$HISTORY_FILE" \
+		--button="Clear History:2" \
+		--button="Close:0"
+
+	if [ $? -eq 2 ]; then
+		true >"$HISTORY_FILE"
+		yad --info --title="$APP_TITLE" --text="History cleared." --timeout=2
+	fi
+}
+
+#===============================================================================
+# LIST FORMATS
+#===============================================================================
+
+show_formats() {
+	local url="$1"
+	if [ -z "$url" ]; then
+		if ! url=$(yad --entry \
+			--title="$APP_TITLE - List Formats" \
+			--window-icon="$ICON_PATH" \
+			--width=650 \
+			--text="Enter URL to list available formats:" \
+			--button="List:0" --button="Cancel:1"); then
+			return
+		fi
+		[ -z "$url" ] && return
+	fi
+
+	local h
+	h=$(cap_height 650)
+	(
+		echo "Fetching formats for:"
+		echo "$url"
+		echo ""
+		yt-dlp -F --no-warnings "$url" 2>&1
+		echo ""
+		echo "════════════════════════════════════════════════════════════════"
+		echo "Subtitles:"
+		yt-dlp --list-subs --no-warnings "$url" 2>&1
+	) | yad --text-info \
+		--title="$APP_TITLE - Available Formats" \
+		--window-icon="$ICON_PATH" \
+		--width=1050 --height="$h" \
+		--tail --fontname="Monospace 9" \
+		--button="Close:0"
+}
+
+#===============================================================================
+# SETTINGS
+#===============================================================================
+
+show_settings() {
+	local aria2c_status="(not installed  )"
+	command -v aria2c &>/dev/null && aria2c_status="(installed  )"
+
+	local h
+	h=$(cap_height 800)
+	local result
+	result=$(yad --form \
+		--title="$APP_TITLE - Settings" \
+		--window-icon="$ICON_PATH" \
+		--width=720 --height="$h" \
+		--scroll \
+		--separator="|" \
+		--text="<b>Default Settings</b>\nThese are used as defaults across all download modes.\n" \
+		--field="<b>───────────────── Paths ─────────────────</b>:LBL" "" \
+		--field="Download Path:DIR" "${CFG[download_path]}" \
+		--field="Output Template:" "${CFG[output_template]}" \
+		--field="<b>──────────────── Performance ────────────────</b>:LBL" "" \
+		--field="Concurrent Fragments:NUM" "${CFG[concurrent_fragments]}!1..32!1" \
+		--field="Retries:NUM" "${CFG[retries]}!1..100!1" \
+		--field="<b>──────────────── aria2c Downloader $aria2c_status ────────────────</b>:LBL" "" \
+		--field="Use aria2c by Default:CHK" "${CFG[use_aria2c]}" \
+		--field="Default Connections per Server:NUM" "${CFG[aria2c_connections]}!1..64!1" \
+		--field="Extra aria2c Arguments:" "${CFG[aria2c_extra_args]}" \
+		--field="<b>──────────────── Post-Processing ────────────────</b>:LBL" "" \
+		--field="Embed Metadata:CHK" "${CFG[embed_metadata]}" \
+		--field="Embed Thumbnail:CHK" "${CFG[embed_thumbnail]}" \
+		--field="Embed Chapters:CHK" "${CFG[embed_chapters]}" \
+		--field="<b>──────────────── Files ────────────────</b>:LBL" "" \
+		--field="Restrict Filenames (ASCII only):CHK" "${CFG[restrict_filenames]}" \
+		--field="No Overwrites:CHK" "${CFG[no_overwrites]}" \
+		--field="Use Download Archive:CHK" "${CFG[use_archive]}" \
+		--field="<b>──────────────── SponsorBlock (YouTube) ────────────────</b>:LBL" "" \
+		--field="Default SponsorBlock Action:CB" "${CFG[sb_action]}!none!mark as chapters!remove segments!both (mark + remove)" \
+		--field="Default Categories:" "${CFG[sb_categories]}" \
+		--field="<b>──────────────── Network ────────────────</b>:LBL" "" \
+		--field="Cookies from Browser:CB" "${CFG[cookies_browser]}!none!chrome!chromium!firefox!edge!brave!opera!safari!vivaldi!whale" \
+		--field="Proxy:" "${CFG[proxy]}" \
+		--field="Impersonate Client:CB" "${CFG[impersonate]}!none!chrome!chrome-120!firefox!safari!edge" \
+		--field="Force IPv4:CHK" "${CFG[force_ipv4]}" \
+		--field="Force IPv6:CHK" "${CFG[force_ipv6]}" \
+		--field="<b>──────────────── Other ────────────────</b>:LBL" "" \
+		--field="Verbose Output:CHK" "${CFG[verbose]}" \
+		--field="Extra Arguments:" "${CFG[extra_args]}" \
+		--button="Save:0" --button="Reset Defaults:2" --button="Cancel:1")
+
+	local ret=$?
+	if [ $ret -eq 2 ]; then
+		rm -f "$CONFIG_FILE"
+		CFG[download_path]="$HOME/Downloads"
+		CFG[output_template]='%(title)s.%(ext)s'
+		CFG[concurrent_fragments]="4"
+		CFG[retries]="10"
+		CFG[embed_metadata]="TRUE"
+		CFG[embed_thumbnail]="FALSE"
+		CFG[embed_chapters]="TRUE"
+		CFG[restrict_filenames]="FALSE"
+		CFG[no_overwrites]="FALSE"
+		CFG[use_archive]="FALSE"
+		CFG[cookies_browser]="none"
+		CFG[proxy]=""
+		CFG[impersonate]="none"
+		CFG[force_ipv4]="FALSE"
+		CFG[force_ipv6]="FALSE"
+		CFG[use_aria2c]="FALSE"
+		CFG[aria2c_connections]="16"
+		CFG[aria2c_extra_args]="-k 1M"
+		CFG[verbose]="TRUE"
+		CFG[extra_args]=""
+		CFG[sb_action]="none"
+		CFG[sb_categories]="sponsor,intro,outro,selfpromo"
+		save_config
+		yad --info --title="$APP_TITLE" --text="Settings reset." --timeout=2
+		return
+	fi
+	[ $ret -ne 0 ] && return
+
+	IFS='|' read -r _l1 s_path s_template \
+		_l2 s_conc s_retries \
+		_l3 s_aria2c s_aria2c_conn s_aria2c_extra \
+		_l4 s_meta s_thumb s_chap \
+		_l5 s_restrict s_noover s_archive \
+		_l6 s_sb_action s_sb_cats \
+		_l7 s_cookies s_proxy s_impers s_ipv4 s_ipv6 \
+		_l8 s_verbose s_extra <<<"$result"
+
+	CFG[download_path]="$s_path"
+	CFG[output_template]="$s_template"
+	CFG[concurrent_fragments]="${s_conc%%.*}"
+	CFG[retries]="${s_retries%%.*}"
+	CFG[use_aria2c]="$s_aria2c"
+	CFG[aria2c_connections]="${s_aria2c_conn%%.*}"
+	CFG[aria2c_extra_args]="$s_aria2c_extra"
+	CFG[embed_metadata]="$s_meta"
+	CFG[embed_thumbnail]="$s_thumb"
+	CFG[embed_chapters]="$s_chap"
+	CFG[restrict_filenames]="$s_restrict"
+	CFG[no_overwrites]="$s_noover"
+	CFG[use_archive]="$s_archive"
+	CFG[sb_action]="$s_sb_action"
+	CFG[sb_categories]="$s_sb_cats"
+	CFG[cookies_browser]="$s_cookies"
+	CFG[proxy]="$s_proxy"
+	CFG[impersonate]="$s_impers"
+	CFG[force_ipv4]="$s_ipv4"
+	CFG[force_ipv6]="$s_ipv6"
+	CFG[verbose]="$s_verbose"
+	CFG[extra_args]="$s_extra"
+	save_config
+	yad --info --title="$APP_TITLE" --text="Settings saved." --timeout=2
+}
+
+#===============================================================================
+# ABOUT
+#===============================================================================
+
+show_about() {
+	local ytdlp_ver ffmpeg_ver de_name
+	ytdlp_ver=$(yt-dlp --version 2>/dev/null || echo "?")
+	ffmpeg_ver=$(ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}' || echo "?")
+	de_name=$(detect_de)
+	[ -z "$de_name" ] && de_name="Not detected"
+
+	local env_type="Linux"
+	is_termux && env_type="Termux"
+
+	local extras=""
+	for tool in aria2c AtomicParsley xdg-open xclip xsel; do
+		if command -v "$tool" &>/dev/null; then
+			extras+="    $tool\n"
+		else
+			extras+="    $tool\n"
+		fi
+	done
+	if ! is_termux; then
+		for tool in wl-copy wl-paste; do
+			if command -v "$tool" &>/dev/null; then
+				extras+="    $tool\n"
+			else
+				extras+="    $tool\n"
+			fi
+		done
+	fi
+
+	local h
+	h=$(cap_height 420)
+	yad --info \
+		--title="$APP_TITLE - About" \
+		--window-icon="$ICON_PATH" \
+		--width=500 --height="$h" \
+		--text="<b><big>$APP_TITLE v$APP_VERSION</big></b>\n\n<b>Components:</b>\n  yt-dlp: $ytdlp_ver\n  ffmpeg: $ffmpeg_ver\n  DE: $de_name\n  Environment: $env_type\n\n<b>Optional tools:</b>\n$extras\n<b>Config:</b>\n<tt>$CONFIG_DIR</tt>" \
+		--button="Close:0"
+}
+
+#===============================================================================
+# SHARED: append settings-based common options
+#===============================================================================
+
+append_common_opts() {
+	[ "${CFG[restrict_filenames]}" = "TRUE" ] && CMD="$CMD --restrict-filenames"
+	[ "${CFG[no_overwrites]}" = "TRUE" ] && CMD="$CMD --no-overwrites"
+	[ "${CFG[use_archive]}" = "TRUE" ] && CMD="$CMD --download-archive \"$ARCHIVE_FILE\""
+
+	CMD="$CMD --no-keep-fragments"
+
+	local conc="${CFG[concurrent_fragments]}"
+	[ "$conc" -gt 1 ] 2>/dev/null && CMD="$CMD -N $conc"
+
+	local ret="${CFG[retries]}"
+	[ "$ret" != "10" ] && [ -n "$ret" ] && CMD="$CMD --retries $ret"
+
+	[ "${CFG[cookies_browser]}" != "none" ] && [ -n "${CFG[cookies_browser]}" ] &&
+		CMD="$CMD --cookies-from-browser ${CFG[cookies_browser]}"
+	[ -n "${CFG[proxy]}" ] && CMD="$CMD --proxy \"${CFG[proxy]}\""
+	[ "${CFG[impersonate]}" != "none" ] && [ -n "${CFG[impersonate]}" ] &&
+		CMD="$CMD --impersonate ${CFG[impersonate]}"
+	[ "${CFG[force_ipv4]}" = "TRUE" ] && CMD="$CMD -4"
+	[ "${CFG[force_ipv6]}" = "TRUE" ] && CMD="$CMD -6"
+	[ "${CFG[verbose]}" = "TRUE" ] && CMD="$CMD --verbose"
+	CMD="$CMD --newline --progress"
+	[ -n "${CFG[extra_args]}" ] && CMD="$CMD ${CFG[extra_args]}"
+}
+
+#===============================================================================
+# SHARED: apply aria2c options (per-download override or from settings)
+#===============================================================================
+
+apply_aria2c() {
+	local use_aria2c="$1"
+	local connections="$2"
+
+	[ -z "$use_aria2c" ] && use_aria2c="${CFG[use_aria2c]}"
+	[ -z "$connections" ] && connections="${CFG[aria2c_connections]}"
+	connections="${connections%%.*}"
+	[ -z "$connections" ] && connections="16"
+
+	if [ "$use_aria2c" = "TRUE" ]; then
+		if command -v aria2c &>/dev/null; then
+			# Build aria2c arguments:
+			#   -x N          = max connections per server
+			#   -s N          = split file into N parts
+			#   --summary-interval=0  = disable periodic summary (reduces noise)
+			#   --console-log-level=notice = show download progress
+			#   --download-result=hide = hide redundant result table
+			#   -l ""         = disable aria2c's own log file
+			local aria2c_full_args="-x $connections -s $connections"
+			aria2c_full_args="$aria2c_full_args --summary-interval=0"
+			aria2c_full_args="$aria2c_full_args --console-log-level=notice"
+			aria2c_full_args="$aria2c_full_args --download-result=hide"
+			[ -n "${CFG[aria2c_extra_args]}" ] && aria2c_full_args="$aria2c_full_args ${CFG[aria2c_extra_args]}"
+			CMD="$CMD --downloader aria2c"
+			CMD="$CMD --downloader-args \"aria2c:$aria2c_full_args\""
+		else
+			echo "WARNING: aria2c requested but not installed — falling back to built-in downloader" >&2
+		fi
+	fi
+}
+
+#===============================================================================
+# SHARED: apply SponsorBlock arguments
+#===============================================================================
+
+apply_sponsorblock() {
+	local action="$1"
+	local mark_cats="$2"
+	local remove_cats="$3"
+	local custom_mark="$4"
+	local custom_remove="$5"
+	local chapter_title="$6"
+
+	local final_mark=""
+	if [ -n "$custom_mark" ]; then
+		final_mark="$custom_mark"
+	elif [ "$mark_cats" != "none" ] && [ -n "$mark_cats" ]; then
+		final_mark="$mark_cats"
+	fi
+
+	local final_remove=""
+	if [ -n "$custom_remove" ]; then
+		final_remove="$custom_remove"
+	elif [ "$remove_cats" != "none" ] && [ -n "$remove_cats" ]; then
+		final_remove="$remove_cats"
+	fi
+
+	case "$action" in
+	"Mark as chapters")
+		[ -n "$final_mark" ] && CMD="$CMD --sponsorblock-mark \"$final_mark\""
+		;;
+	"Remove segments")
+		[ -n "$final_remove" ] && CMD="$CMD --sponsorblock-remove \"$final_remove\""
+		;;
+	"Both (mark + remove)")
+		[ -n "$final_mark" ] && CMD="$CMD --sponsorblock-mark \"$final_mark\""
+		[ -n "$final_remove" ] && CMD="$CMD --sponsorblock-remove \"$final_remove\""
+		;;
+	"Disable")
+		CMD="$CMD --no-sponsorblock"
+		;;
+	esac
+
+	if [ -n "$chapter_title" ] && [ "$action" != "none" ] && [ "$action" != "Disable" ]; then
+		if [ "$action" = "Mark as chapters" ] || [ "$action" = "Both (mark + remove)" ]; then
+			CMD="$CMD --sponsorblock-chapter-title \"$chapter_title\""
+		fi
+	fi
+}
+
+#===============================================================================
+# CLEANUP TEMP FILES
+#===============================================================================
+
+cleanup_temp_files() {
+	local dir="$1"
+	[ -z "$dir" ] || [ ! -d "$dir" ] && return
+
+	find "$dir" -maxdepth 1 -name "*.part" -mmin -5 -delete 2>/dev/null
+	find "$dir" -maxdepth 1 -name "*.vtt" -mmin -5 -delete 2>/dev/null
+	find "$dir" -maxdepth 1 -name "*.webp" -mmin -5 -delete 2>/dev/null
+	find "$dir" -maxdepth 1 -name "*.part-Frag*" -mmin -5 -delete 2>/dev/null
+	find "$dir" -maxdepth 1 -regex '.*\.f[0-9]+\.[a-zA-Z0-9]+$' -mmin -5 -delete 2>/dev/null
+	find "$dir" -maxdepth 1 -regex '.*\.f[0-9]+\.[a-zA-Z0-9]+\.part$' -mmin -5 -delete 2>/dev/null
+	find "$dir" -maxdepth 1 -name "*.temp" -mmin -5 -delete 2>/dev/null
+	find "$dir" -maxdepth 1 -name "*.ytdl" -mmin -5 -delete 2>/dev/null
+	# aria2c control files
+	find "$dir" -maxdepth 1 -name "*.aria2" -mmin -5 -delete 2>/dev/null
+}
+
+#===============================================================================
+# SHARED: execute download and show result
+#===============================================================================
+
+run_download() {
+	local cmd="$1"
+	local path="$2"
+	local label="$3"
+
+	local log_file
+	log_file="$LOG_DIR/download_$(date +%Y%m%d_%H%M%S).log"
+
+	local status_file
+	status_file=$(mktemp "${TMPDIR:-/tmp}/ytdlp_status_XXXXXX")
+
+	local h
+	h=$(cap_height 650)
+
+	local fifo
+	fifo=$(mktemp -u "${TMPDIR:-/tmp}/ytdlp_fifo_XXXXXX")
+	mkfifo "$fifo"
+
+	yad --text-info \
+		--title="$APP_TITLE - Downloading..." \
+		--window-icon="$ICON_PATH" \
+		--width=1000 --height="$h" \
+		--tail --fontname="Monospace 9" \
+		--button="Close:0" \
+		<"$fifo" &
+	local yad_pid=$!
+
+	(
+		echo "╔══════════════════════════════════════════════════════════════════════════╗"
+		echo "║  $label"
+		echo "║  $(date '+%Y-%m-%d %H:%M:%S')"
+		echo "╚══════════════════════════════════════════════════════════════════════════╝"
+		echo ""
+		echo "Command:"
+		echo "$cmd" | fold -s -w 90
+		echo ""
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+		echo ""
+
+		if command -v stdbuf &>/dev/null; then
+			stdbuf -oL -eL bash -c "$cmd" 2>&1
+		else
+			eval "$cmd" 2>&1
+		fi
+
+		local dl_status=$?
+		echo "$dl_status" >"$status_file"
+		echo ""
+		echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+		if [ "$dl_status" -eq 0 ]; then
+			echo "  Completed successfully!"
+		else
+			echo "  Failed (exit code: $dl_status)"
+			echo ""
+			echo "Tips:"
+			echo "  • Try 'Best' format"
+			echo "  • Enable 'Impersonate' in Settings"
+			echo "  • Use cookies from your browser"
+			echo "  • Check if video is available in your region"
+		fi
+		echo ""
+		echo "Log: $log_file"
+	) 2>&1 | while IFS= read -r line; do
+		printf '%s\n' "$line"
+	done | tee "$log_file" >"$fifo"
+
+	exec 3>&-
+
+	wait $yad_pid 2>/dev/null
+
+	rm -f "$fifo"
+
+	local dl_status=1
+	if [ -f "$status_file" ]; then
+		dl_status=$(cat "$status_file")
+		rm -f "$status_file"
+	fi
+
+	local h2
+	h2=$(cap_height 550)
+	if [ "$dl_status" -eq 0 ]; then
+		cleanup_temp_files "$path"
+
+		yad --info \
+			--title="$APP_TITLE" \
+			--window-icon="$ICON_PATH" \
+			--width=480 \
+			--text="<b>  Download Complete!</b>\n\nSaved to:\n<tt>$path</tt>" \
+			--button="Open Folder:2" \
+			--button="View Log:4" \
+			--button="OK:0"
+		case $? in
+		2) smart_open "$path" ;;
+		4) yad --text-info --title="Log" --window-icon="$ICON_PATH" \
+			--width=900 --height="$h2" --fontname="Monospace 9" \
+			--filename="$log_file" --button="Close:0" ;;
+		esac
+	else
+		yad --error \
+			--title="$APP_TITLE" \
+			--window-icon="$ICON_PATH" \
+			--width=480 \
+			--text="<b>❌ Download Failed</b>\n\nCheck the log for details." \
+			--button="View Log:4" \
+			--button="OK:0"
+		if [ $? -eq 4 ]; then
+			yad --text-info --title="Log" --window-icon="$ICON_PATH" \
+				--width=900 --height="$h2" --fontname="Monospace 9" \
+				--filename="$log_file" --button="Close:0"
+		fi
+	fi
+}
+
+#===============================================================================
+# VIDEO DOWNLOAD
+#===============================================================================
+
+show_video_download() {
+	local h
+	h=$(cap_height 900)
+	local result
+	if ! result=$(yad --form \
+		--title="$APP_TITLE - Download Video" \
+		--window-icon="$ICON_PATH" \
+		--width=820 --height="$h" \
+		--scroll \
+		--separator="|" \
+		--text="<b><big>  Download Video</big></b>\n" \
+		--field="<b>───────────────────── Source ─────────────────────</b>:LBL" "" \
+		--field="URL(s) — one per line:TXT" "" \
+		--field="Download Path:DIR" "${CFG[download_path]}" \
+		--field="Output Template:" "${CFG[output_template]}" \
+		--field="<b>───────────────────── Quality ─────────────────────</b>:LBL" "" \
+		--field="Video Quality:CB" "Best Available!2160p (4K)!1440p (2K)!1080p (Full HD)!720p (HD)!480p!360p!240p!144p!Worst" \
+		--field="Container Format:CB" "Auto (mkv)!mp4!mkv!webm!mov!avi" \
+		--field="Video Codec Preference:CB" "Any!h264 (most compatible)!h265 (HEVC)!vp9!av01 (AV1)" \
+		--field="Prefer Free Formats:CHK" "FALSE" \
+		--field="<b>───────────────────── Playlist ─────────────────────</b>:LBL" "" \
+		--field="Playlist Handling:CB" "Download all!Single video only!Specific items!Reverse order!Random order" \
+		--field="Items (e.g., 1,3,5-10):" "" \
+		--field="Max Downloads (0 = unlimited):NUM" "0!0..999!1" \
+		--field="<b>───────────────────── Subtitles ─────────────────────</b>:LBL" "" \
+		--field="Write Subtitles:CHK" "FALSE" \
+		--field="Include Auto-generated:CHK" "FALSE" \
+		--field="Embed Subtitles in Video:CHK" "FALSE" \
+		--field="Languages (e.g., en,es,ja,all):" "en" \
+		--field="Convert Subtitles to:CB" "none!srt!ass!vtt!lrc" \
+		--field="<b>───────────────────── Post-Processing ─────────────────────</b>:LBL" "" \
+		--field="Embed Thumbnail:CHK" "${CFG[embed_thumbnail]}" \
+		--field="Embed Metadata:CHK" "${CFG[embed_metadata]}" \
+		--field="Embed Chapters:CHK" "${CFG[embed_chapters]}" \
+		--field="Write Thumbnail to Disk:CHK" "FALSE" \
+		--field="Write Description File:CHK" "FALSE" \
+		--field="Write Info JSON:CHK" "FALSE" \
+		--field="Convert Thumbnails to:CB" "none!jpg!png!webp" \
+		--field="Split Video by Chapters:CHK" "FALSE" \
+		--field="<b>──────────────── aria2c Downloader ────────────────</b>:LBL" "" \
+		--field="Use aria2c for this download:CHK" "${CFG[use_aria2c]}" \
+		--field="Connections per Server:NUM" "${CFG[aria2c_connections]}!1..64!1" \
+		--field="<b>──────────────── SponsorBlock (YouTube) ────────────────</b>:LBL" "" \
+		--field="SponsorBlock Action:CB" "none!Mark as chapters!Remove segments!Both (mark + remove)!Disable" \
+		--field="Mark Categories:CB" "none!all!sponsor!intro!outro!selfpromo!preview!filler!interaction!music_offtopic!hook!poi_highlight!chapter!all,-preview!all,-filler!sponsor,intro,outro!sponsor,intro,outro,selfpromo" \
+		--field="Remove Categories:CB" "none!all!all,-filler!sponsor!intro!outro!selfpromo!preview!filler!interaction!music_offtopic!hook!sponsor,intro,outro!sponsor,intro,outro,selfpromo" \
+		--field="Custom Mark (comma-separated):" "" \
+		--field="Custom Remove (comma-separated):" "" \
+		--field="Chapter Title Template:" "[SponsorBlock]: %(category_names)l" \
+		--field="<b>───────────────────── Advanced ─────────────────────</b>:LBL" "" \
+		--field="Rate Limit (e.g., 1M, 500K):" "" \
+		--field="Download Section (e.g., *10:15-inf):" "" \
+		--field="Sleep Interval (seconds):NUM" "0!0..60!1" \
+		--field="Cookies File:FL" "" \
+		--field="Username:" "" \
+		--field="Password:H" "" \
+		--field="Geo-bypass Country (2-letter code):" "" \
+		--field="Extra yt-dlp Arguments:" "" \
+		--button="Download:0" --button="Cancel:1"); then
+		return
+	fi
+
+	IFS='|' read -r \
+		_l1 urls path template \
+		_l2 quality container vcodec free_fmt \
+		_l3 playlist pl_items max_dl \
+		_l4 w_subs w_autosubs e_subs sub_langs convert_subs \
+		_l5 e_thumb e_meta e_chap w_thumb w_desc w_json convert_thumb split_chap \
+		_l6 v_use_aria2c v_aria2c_conn \
+		_l7 sb_action sb_mark_cats sb_remove_cats sb_custom_mark sb_custom_remove sb_chapter_title \
+		_l8 rate_limit dl_section sleep_int cookies_file \
+		v_user v_pass geo_bypass extra \
+		<<<"$result"
+
+	urls=$(echo "$urls" | xargs)
+	if [ -z "$urls" ]; then
+		yad --error --title="$APP_TITLE" --text="Please enter a URL." --button="OK:0"
+		show_video_download
+		return
+	fi
+
+	CFG[download_path]="$path"
+	save_config
+
+	CMD="yt-dlp"
+	[ -n "$path" ] && CMD="$CMD -P \"$path\""
+	[ -n "$template" ] && CMD="$CMD -o \"$template\""
+
+	case "$quality" in
+	"Best Available") CMD="$CMD -f \"bv*+ba/b\"" ;;
+	"Worst") CMD="$CMD -f \"wv*+wa/w\"" ;;
+	*)
+		local h_val="${quality%%p*}"
+		CMD="$CMD -f \"bv*[height<=${h_val}]+ba/b[height<=${h_val}]/b\""
+		;;
+	esac
+
+	case "$container" in
+	"Auto (mkv)") ;;
+	*) CMD="$CMD --merge-output-format $container" ;;
+	esac
+
+	if [ "$vcodec" != "Any" ]; then
+		local vc="${vcodec%% *}"
+		CMD="$CMD -S \"vcodec:$vc\""
+	fi
+
+	[ "$free_fmt" = "TRUE" ] && CMD="$CMD --prefer-free-formats"
+
+	case "$playlist" in
+	"Single video only") CMD="$CMD --no-playlist" ;;
+	"Specific items") [ -n "$pl_items" ] && CMD="$CMD --playlist-items \"$pl_items\"" ;;
+	"Reverse order") CMD="$CMD --playlist-reverse" ;;
+	"Random order") CMD="$CMD --playlist-random" ;;
+	esac
+
+	local md="${max_dl%%.*}"
+	[ "$md" -gt 0 ] 2>/dev/null && CMD="$CMD --max-downloads $md"
+
+	[ "$w_subs" = "TRUE" ] && CMD="$CMD --write-subs"
+	[ "$w_autosubs" = "TRUE" ] && CMD="$CMD --write-auto-subs"
+	if [ "$w_subs" = "TRUE" ] || [ "$w_autosubs" = "TRUE" ]; then
+		[ -n "$sub_langs" ] && CMD="$CMD --sub-langs \"$sub_langs\""
+	fi
+	[ "$e_subs" = "TRUE" ] && CMD="$CMD --embed-subs"
+	[ "$convert_subs" != "none" ] && CMD="$CMD --convert-subs $convert_subs"
+
+	if [ "$e_thumb" = "TRUE" ]; then
+		CMD="$CMD --embed-thumbnail --convert-thumbnails jpg"
+	fi
+	[ "$e_meta" = "TRUE" ] && CMD="$CMD --embed-metadata"
+	[ "$e_chap" = "TRUE" ] && CMD="$CMD --embed-chapters"
+	[ "$w_thumb" = "TRUE" ] && CMD="$CMD --write-thumbnail"
+	[ "$w_desc" = "TRUE" ] && CMD="$CMD --write-description"
+	[ "$w_json" = "TRUE" ] && CMD="$CMD --write-info-json"
+	if [ "$convert_thumb" != "none" ] && [ "$e_thumb" != "TRUE" ]; then
+		CMD="$CMD --convert-thumbnails $convert_thumb"
+	fi
+	[ "$split_chap" = "TRUE" ] && CMD="$CMD --split-chapters"
+
+	apply_aria2c "$v_use_aria2c" "$v_aria2c_conn"
+
+	apply_sponsorblock "$sb_action" "$sb_mark_cats" "$sb_remove_cats" \
+		"$sb_custom_mark" "$sb_custom_remove" "$sb_chapter_title"
+
+	[ -n "$rate_limit" ] && CMD="$CMD --limit-rate $rate_limit"
+	[ -n "$dl_section" ] && CMD="$CMD --download-sections \"$dl_section\""
+
+	local si="${sleep_int%%.*}"
+	[ "$si" -gt 0 ] 2>/dev/null && CMD="$CMD --sleep-interval $si"
+
+	[ -n "$cookies_file" ] && [ -f "$cookies_file" ] && CMD="$CMD --cookies \"$cookies_file\""
+	[ -n "$v_user" ] && CMD="$CMD -u \"$v_user\""
+	[ -n "$v_pass" ] && CMD="$CMD -p \"$v_pass\""
+	[ -n "$geo_bypass" ] && CMD="$CMD --xff $geo_bypass"
+	[ -n "$extra" ] && CMD="$CMD $extra"
+
+	append_common_opts
+
+	while IFS= read -r u; do
+		u=$(echo "$u" | xargs)
+		[ -n "$u" ] && [[ ! "$u" =~ ^# ]] && CMD="$CMD \"$u\"" && add_to_history "$u"
+	done <<<"$urls"
+
+	run_download "$CMD" "$path" "Video Download"
+}
+
+#===============================================================================
+# AUDIO DOWNLOAD
+#===============================================================================
+
+show_audio_download() {
+	local h
+	h=$(cap_height 700)
+	local result
+	if ! result=$(yad --form \
+		--title="$APP_TITLE - Download Audio" \
+		--window-icon="$ICON_PATH" \
+		--width=720 --height="$h" \
+		--scroll \
+		--separator="|" \
+		--text="<b><big>🎵 Download Audio</big></b>\nExtract audio from any supported site.\n" \
+		--field="<b>───────────────────── Source ─────────────────────</b>:LBL" "" \
+		--field="URL(s) — one per line:TXT" "" \
+		--field="Download Path:DIR" "${CFG[download_path]}" \
+		--field="Output Template:" "${CFG[output_template]}" \
+		--field="<b>───────────────────── Audio Format ─────────────────────</b>:LBL" "" \
+		--field="Format:CB" "mp3!m4a!opus!flac!aac!wav!vorbis!alac!ogg!best (no conversion)" \
+		--field="Quality:CB" "Best (VBR 0)!320 kbps!256 kbps!192 kbps!160 kbps!128 kbps!96 kbps!64 kbps!32 kbps!Worst (VBR 10)" \
+		--field="<b>───────────────────── Metadata ─────────────────────</b>:LBL" "" \
+		--field="Embed Thumbnail (cover art):CHK" "TRUE" \
+		--field="Embed Metadata (title, artist, etc.):CHK" "TRUE" \
+		--field="Write Thumbnail to Disk:CHK" "FALSE" \
+		--field="<b>───────────────────── Playlist ─────────────────────</b>:LBL" "" \
+		--field="Playlist Handling:CB" "Download all!Single track only!Specific items!Reverse order!Random order" \
+		--field="Items (e.g., 1,3,5-10):" "" \
+		--field="Max Downloads (0 = unlimited):NUM" "0!0..999!1" \
+		--field="<b>──────────────── aria2c Downloader ────────────────</b>:LBL" "" \
+		--field="Use aria2c for this download:CHK" "${CFG[use_aria2c]}" \
+		--field="Connections per Server:NUM" "${CFG[aria2c_connections]}!1..64!1" \
+		--field="<b>──────────────── SponsorBlock (YouTube) ────────────────</b>:LBL" "" \
+		--field="Remove Sponsor Segments:CHK" "FALSE" \
+		--field="Categories to Remove:CB" "all!all,-filler!sponsor!sponsor,intro,outro!sponsor,intro,outro,selfpromo!intro!outro!filler!music_offtopic" \
+		--field="<b>───────────────────── Advanced ─────────────────────</b>:LBL" "" \
+		--field="Rate Limit (e.g., 1M, 500K):" "" \
+		--field="Sleep Interval (seconds):NUM" "0!0..60!1" \
+		--field="Cookies File:FL" "" \
+		--field="Extra yt-dlp Arguments:" "" \
+		--button="Download:0" --button="Cancel:1"); then
+		return
+	fi
+
+	IFS='|' read -r \
+		_l1 urls path template \
+		_l2 audio_fmt audio_qual \
+		_l3 e_thumb e_meta w_thumb \
+		_l4 playlist pl_items max_dl \
+		_l5 a_use_aria2c a_aria2c_conn \
+		_l6 sb_remove sb_cats \
+		_l7 rate_limit sleep_int cookies_file extra \
+		<<<"$result"
+
+	urls=$(echo "$urls" | xargs)
+	if [ -z "$urls" ]; then
+		yad --error --title="$APP_TITLE" --text="Please enter a URL." --button="OK:0"
+		show_audio_download
+		return
+	fi
+
+	CFG[download_path]="$path"
+	save_config
+
+	CMD="yt-dlp"
+	[ -n "$path" ] && CMD="$CMD -P \"$path\""
+	[ -n "$template" ] && CMD="$CMD -o \"$template\""
+
+	CMD="$CMD -f bestaudio -x"
+
+	if [ "$audio_fmt" != "best (no conversion)" ]; then
+		CMD="$CMD --audio-format $audio_fmt"
+	fi
+
+	case "$audio_qual" in
+	"Best (VBR 0)") CMD="$CMD --audio-quality 0" ;;
+	"Worst (VBR 10)") CMD="$CMD --audio-quality 10" ;;
+	*kbps)
+		local bitrate="${audio_qual%% *}"
+		CMD="$CMD --audio-quality ${bitrate}k"
+		;;
+	esac
+
+	if [ "$e_thumb" = "TRUE" ]; then
+		CMD="$CMD --embed-thumbnail --convert-thumbnails jpg"
+	fi
+	[ "$e_meta" = "TRUE" ] && CMD="$CMD --embed-metadata"
+	[ "$w_thumb" = "TRUE" ] && CMD="$CMD --write-thumbnail"
+
+	case "$playlist" in
+	"Single track only") CMD="$CMD --no-playlist" ;;
+	"Specific items") [ -n "$pl_items" ] && CMD="$CMD --playlist-items \"$pl_items\"" ;;
+	"Reverse order") CMD="$CMD --playlist-reverse" ;;
+	"Random order") CMD="$CMD --playlist-random" ;;
+	esac
+
+	local md="${max_dl%%.*}"
+	[ "$md" -gt 0 ] 2>/dev/null && CMD="$CMD --max-downloads $md"
+
+	apply_aria2c "$a_use_aria2c" "$a_aria2c_conn"
+
+	[ "$sb_remove" = "TRUE" ] && CMD="$CMD --sponsorblock-remove \"$sb_cats\""
+
+	[ -n "$rate_limit" ] && CMD="$CMD --limit-rate $rate_limit"
+	local si="${sleep_int%%.*}"
+	[ "$si" -gt 0 ] 2>/dev/null && CMD="$CMD --sleep-interval $si"
+	[ -n "$cookies_file" ] && [ -f "$cookies_file" ] && CMD="$CMD --cookies \"$cookies_file\""
+	[ -n "$extra" ] && CMD="$CMD $extra"
+
+	append_common_opts
+
+	while IFS= read -r u; do
+		u=$(echo "$u" | xargs)
+		[ -n "$u" ] && [[ ! "$u" =~ ^# ]] && CMD="$CMD \"$u\"" && add_to_history "$u"
+	done <<<"$urls"
+
+	run_download "$CMD" "$path" "Audio Download"
+}
+
+#===============================================================================
+# BATCH DOWNLOAD
+#===============================================================================
+
+show_batch_download() {
+	local h
+	h=$(cap_height 730)
+	local result
+	if ! result=$(yad --form \
+		--title="$APP_TITLE - Batch Download" \
+		--window-icon="$ICON_PATH" \
+		--width=750 --height="$h" \
+		--scroll \
+		--separator="|" \
+		--text="<b><big>  Batch Download</big></b>\nDownload multiple URLs at once.\n" \
+		--field="<b>───────────────────── Source ─────────────────────</b>:LBL" "" \
+		--field="URL List File:FL" "" \
+		--field="Or paste URLs (one per line):TXT" "" \
+		--field="Download Path:DIR" "${CFG[download_path]}" \
+		--field="<b>───────────────────── What to Download ─────────────────────</b>:LBL" "" \
+		--field="Type:CB" "Video — Best Quality!Video — 1080p!Video — 720p!Video — 480p!Audio — Best Quality!Audio — MP3 320 kbps!Audio — MP3 192 kbps!Audio — MP3 128 kbps!Audio — M4A (Best)!Audio — OPUS (Best)!Audio — FLAC (Lossless)!Audio — AAC (Best)!Audio — WAV (Lossless)" \
+		--field="Container (video only):CB" "Auto!mp4!mkv!webm" \
+		--field="<b>───────────────────── Options ─────────────────────</b>:LBL" "" \
+		--field="Embed Metadata:CHK" "${CFG[embed_metadata]}" \
+		--field="Embed Thumbnail:CHK" "${CFG[embed_thumbnail]}" \
+		--field="Ignore Errors (continue on failure):CHK" "TRUE" \
+		--field="Use Download Archive (skip duplicates):CHK" "${CFG[use_archive]}" \
+		--field="<b>──────────────── aria2c Downloader ────────────────</b>:LBL" "" \
+		--field="Use aria2c for this download:CHK" "${CFG[use_aria2c]}" \
+		--field="Connections per Server:NUM" "${CFG[aria2c_connections]}!1..64!1" \
+		--field="<b>──────────────── SponsorBlock (YouTube) ────────────────</b>:LBL" "" \
+		--field="Remove Sponsor Segments:CHK" "FALSE" \
+		--field="Categories:CB" "all!all,-filler!sponsor!sponsor,intro,outro!sponsor,intro,outro,selfpromo" \
+		--field="<b>───────────────────── Network ─────────────────────</b>:LBL" "" \
+		--field="Sleep Between Downloads (seconds):NUM" "0!0..60!1" \
+		--field="Rate Limit (e.g., 1M, 500K):" "" \
+		--field="Extra yt-dlp Arguments:" "" \
+		--button="Download All:0" --button="Cancel:1"); then
+		return
+	fi
+
+	IFS='|' read -r \
+		_l1 b_file b_urls b_path \
+		_l2 b_type b_container \
+		_l3 b_meta b_thumb b_ignore b_archive \
+		_l4 b_use_aria2c b_aria2c_conn \
+		_l5 b_sb_remove b_sb_cats \
+		_l6 b_sleep b_rate b_extra \
+		<<<"$result"
+
+	if [ -z "$b_file" ] && [ -z "$b_urls" ]; then
+		yad --error --title="$APP_TITLE" --text="No URLs provided." --button="OK:0"
+		return
+	fi
+	[ -n "$b_file" ] && [ ! -f "$b_file" ] && {
+		yad --error --title="$APP_TITLE" --text="File not found:\n<tt>$b_file</tt>" --button="OK:0"
+		return
+	}
+
+	CFG[download_path]="$b_path"
+	save_config
+
+	CMD="yt-dlp"
+	[ -n "$b_path" ] && CMD="$CMD -P \"$b_path\""
+
+	case "$b_type" in
+	"Video — Best Quality") CMD="$CMD -f \"bv*+ba/b\"" ;;
+	"Video — 1080p") CMD="$CMD -f \"bv*[height<=1080]+ba/b[height<=1080]/b\"" ;;
+	"Video — 720p") CMD="$CMD -f \"bv*[height<=720]+ba/b[height<=720]/b\"" ;;
+	"Video — 480p") CMD="$CMD -f \"bv*[height<=480]+ba/b[height<=480]/b\"" ;;
+	"Audio — Best Quality") CMD="$CMD -f bestaudio -x --audio-quality 0" ;;
+	"Audio — MP3 320 kbps") CMD="$CMD -f bestaudio -x --audio-format mp3 --audio-quality 320k" ;;
+	"Audio — MP3 192 kbps") CMD="$CMD -f bestaudio -x --audio-format mp3 --audio-quality 192k" ;;
+	"Audio — MP3 128 kbps") CMD="$CMD -f bestaudio -x --audio-format mp3 --audio-quality 128k" ;;
+	"Audio — M4A (Best)") CMD="$CMD -f bestaudio -x --audio-format m4a --audio-quality 0" ;;
+	"Audio — OPUS (Best)") CMD="$CMD -f bestaudio -x --audio-format opus --audio-quality 0" ;;
+	"Audio — FLAC (Lossless)") CMD="$CMD -f bestaudio -x --audio-format flac --audio-quality 0" ;;
+	"Audio — AAC (Best)") CMD="$CMD -f bestaudio -x --audio-format aac --audio-quality 0" ;;
+	"Audio — WAV (Lossless)") CMD="$CMD -f bestaudio -x --audio-format wav --audio-quality 0" ;;
+	esac
+
+	if [[ "$b_type" == Video* ]] && [ "$b_container" != "Auto" ]; then
+		CMD="$CMD --merge-output-format $b_container"
+	fi
+
+	[ "$b_meta" = "TRUE" ] && CMD="$CMD --embed-metadata"
+	if [ "$b_thumb" = "TRUE" ]; then
+		CMD="$CMD --embed-thumbnail --convert-thumbnails jpg"
+	fi
+	[ "$b_ignore" = "TRUE" ] && CMD="$CMD -i"
+	[ "$b_archive" = "TRUE" ] && CMD="$CMD --download-archive \"$ARCHIVE_FILE\""
+
+	apply_aria2c "$b_use_aria2c" "$b_aria2c_conn"
+
+	[ "$b_sb_remove" = "TRUE" ] && CMD="$CMD --sponsorblock-remove \"$b_sb_cats\""
+
+	local bs="${b_sleep%%.*}"
+	[ "$bs" -gt 0 ] 2>/dev/null && CMD="$CMD --sleep-interval $bs"
+	[ -n "$b_rate" ] && CMD="$CMD --limit-rate $b_rate"
+	[ -n "$b_extra" ] && CMD="$CMD $b_extra"
+
+	append_common_opts
+
+	local tmpfile=""
+	if [ -n "$b_file" ] && [ -f "$b_file" ]; then
+		CMD="$CMD -a \"$b_file\""
+		while IFS= read -r line; do
+			line=$(echo "$line" | xargs)
+			[ -n "$line" ] && [[ ! "$line" =~ ^[#\;\]] ]] && add_to_history "$line"
+		done <"$b_file"
+	elif [ -n "$b_urls" ]; then
+		tmpfile=$(mktemp "${TMPDIR:-/tmp}/ytdlp_batch_XXXXXX.txt")
+		echo "$b_urls" >"$tmpfile"
+		CMD="$CMD -a \"$tmpfile\""
+		while IFS= read -r line; do
+			line=$(echo "$line" | xargs)
+			[ -n "$line" ] && [[ ! "$line" =~ ^[#\;\]] ]] && add_to_history "$line"
+		done <<<"$b_urls"
+	fi
+
+	run_download "$CMD" "$b_path" "Batch Download"
+
+	[ -n "$tmpfile" ] && rm -f "$tmpfile"
+}
+
+#===============================================================================
+# QUICK DOWNLOAD
+#===============================================================================
+
+show_quick_download() {
+	local h
+	h=$(cap_height 430)
+	local result
+	if ! result=$(yad --form \
+		--title="$APP_TITLE - Quick Download" \
+		--window-icon="$ICON_PATH" \
+		--width=620 --height="$h" \
+		--separator="|" \
+		--text="<b><big>  Quick Download</big></b>\nPaste a URL and go.\n" \
+		--field="URL:" "" \
+		--field="Save to:DIR" "${CFG[download_path]}" \
+		--field="What to download:CB" "Best Video!1080p Video!720p Video!480p Video!Best Audio!MP3 (320 kbps)!MP3 (192 kbps)!MP3 (128 kbps)!M4A!OPUS!FLAC!AAC!WAV" \
+		--field="Use aria2c:CHK" "${CFG[use_aria2c]}" \
+		--field="aria2c Connections:NUM" "${CFG[aria2c_connections]}!1..64!1" \
+		--field="Remove Sponsors (YouTube):CHK" "FALSE" \
+		--button="Download:0" --button="Cancel:1"); then
+		return
+	fi
+
+	IFS='|' read -r q_url q_path q_what q_use_aria2c q_aria2c_conn q_sponsor <<<"$result"
+	q_url=$(echo "$q_url" | xargs)
+
+	if [ -z "$q_url" ]; then
+		yad --error --title="$APP_TITLE" --text="Please enter a URL." --button="OK:0"
+		show_quick_download
+		return
+	fi
+
+	CFG[download_path]="$q_path"
+	save_config
+
+	CMD="yt-dlp -P \"$q_path\""
+
+	case "$q_what" in
+	"Best Video") CMD="$CMD -f \"bv*+ba/b\"" ;;
+	"1080p Video") CMD="$CMD -f \"bv*[height<=1080]+ba/b[height<=1080]/b\"" ;;
+	"720p Video") CMD="$CMD -f \"bv*[height<=720]+ba/b[height<=720]/b\"" ;;
+	"480p Video") CMD="$CMD -f \"bv*[height<=480]+ba/b[height<=480]/b\"" ;;
+	"Best Audio") CMD="$CMD -f bestaudio -x --audio-quality 0" ;;
+	"MP3 (320 kbps)") CMD="$CMD -f bestaudio -x --audio-format mp3 --audio-quality 320k" ;;
+	"MP3 (192 kbps)") CMD="$CMD -f bestaudio -x --audio-format mp3 --audio-quality 192k" ;;
+	"MP3 (128 kbps)") CMD="$CMD -f bestaudio -x --audio-format mp3 --audio-quality 128k" ;;
+	"M4A") CMD="$CMD -f bestaudio -x --audio-format m4a --audio-quality 0" ;;
+	"OPUS") CMD="$CMD -f bestaudio -x --audio-format opus --audio-quality 0" ;;
+	"FLAC") CMD="$CMD -f bestaudio -x --audio-format flac --audio-quality 0" ;;
+	"AAC") CMD="$CMD -f bestaudio -x --audio-format aac --audio-quality 0" ;;
+	"WAV") CMD="$CMD -f bestaudio -x --audio-format wav --audio-quality 0" ;;
+	esac
+
+	CMD="$CMD --embed-metadata --embed-thumbnail --convert-thumbnails jpg"
+	[ "$q_sponsor" = "TRUE" ] && CMD="$CMD --sponsorblock-remove all"
+
+	apply_aria2c "$q_use_aria2c" "$q_aria2c_conn"
+
+	append_common_opts
+
+	CMD="$CMD \"$q_url\""
+	add_to_history "$q_url"
+
+	run_download "$CMD" "$q_path" "Quick Download"
+}
+
+#===============================================================================
+# MAIN MENU
+#===============================================================================
+
+show_main_menu() {
+	local choice
+	choice=$(yad --list \
+		--title="$APP_TITLE v$APP_VERSION" \
+		--window-icon="$ICON_PATH" \
+		--width=620 --height=390 \
+		--no-click \
+		--text="<b><big>$APP_TITLE</big></b>\nDownload from YouTube, Twitter, and 1000+ sites\n" \
+		--column="Action" --column="Description" \
+		--no-headers \
+		--print-column=1 \
+		"  Quick" "Paste URL, pick quality, download instantly" \
+		"  Video" "Download video with full options" \
+		"󰎆  Audio" "Extract audio (MP3, FLAC, OPUS, etc.)" \
+		"  Batch" "Download from a URL list or file" \
+		"  Formats" "List available formats for a URL" \
+		"  History" "View download history" \
+		"  Settings" "Configure default settings" \
+		"  About" "Version info and updates" \
+		--button="Go:0" --button="Exit:1")
+
+	local ret=$?
+	[ $ret -ne 0 ] && exit 0
+
+	choice=$(echo "$choice" | tr -d '|' | xargs)
+
+	case "$choice" in
+	*Quick*) show_quick_download ;;
+	*Video*) show_video_download ;;
+	*Audio*) show_audio_download ;;
+	*Batch*) show_batch_download ;;
+	*Formats*) show_formats ;;
+	*History*) show_history ;;
+	*Settings*) show_settings ;;
+	*About*) show_about ;;
+	*) show_quick_download ;;
+	esac
+
+	show_main_menu
+}
+
+#===============================================================================
+# ENTRY POINT
+#===============================================================================
+
+main() {
+	check_dependencies
+	load_config
+
+	case "${1:-}" in
+	--quick | -q) show_quick_download ;;
+	--video | -v) show_video_download ;;
+	--audio | -a) show_audio_download ;;
+	--batch | -b) show_batch_download ;;
+	--settings | -s) show_settings ;;
+	--formats) show_formats "${2:-}" ;;
+	--history) show_history ;;
+	--help | -h)
+		cat <<EOF
+$APP_TITLE v$APP_VERSION
+
+Usage: $(basename "$0") [OPTION] [URL]
+
+  --quick,    -q    Quick download (simple interface)
+  --video,    -v    Video download (full options)
+  --audio,    -a    Audio download
+  --batch,    -b    Batch download from file/list
+  --settings, -s    Open settings
+  --formats   URL   List formats for a URL
+  --history         View download history
+  --help,     -h    Show this help
+
+Config directory: $CONFIG_DIR
+EOF
+		exit 0
+		;;
+	"") show_main_menu ;;
+	*)
+		if [[ "$1" =~ ^https?:// ]]; then
+			show_quick_download
+		else
+			echo "Unknown option: $1 (use --help)"
+			exit 1
+		fi
+		;;
+	esac
+}
+
+main "$@"

@@ -3,7 +3,7 @@
 supported_arch="aarch64"
 package_name="vesktop"
 run_cmd="vesktop --no-sandbox"
-version="v1.6.1"
+version="v1.6.5"
 pause_update=true
 app_type="distro"
 supported_distro="all"

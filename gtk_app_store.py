@@ -1,70 +1,102 @@
 #!/data/data/com.termux/files/usr/bin/python3
 
 import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, Gio  # type: ignore
-import os
-import json
-import subprocess
-from pathlib import Path
-import stat
-import time
-from datetime import datetime
-import threading
-import sys
-import queue
-import shutil
-from PIL import Image  # type: ignore
-import platform
-from concurrent.futures import ThreadPoolExecutor
-import signal
-import re
-import traceback
-import urllib.request
-import socket
-import urllib.parse
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+import json  # noqa: E402
+import os  # noqa: E402
+import platform  # noqa: E402
+import queue  # noqa: E402
+import re  # noqa: E402
+import shutil  # noqa: E402
+import signal  # noqa: E402
+import socket  # noqa: E402
+import stat  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+import traceback  # noqa: E402
+import urllib.parse  # noqa: E402
+import urllib.request  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+from datetime import datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # type: ignore  # noqa: E402
+from PIL import Image  # type: ignore  # noqa: E402
 
 # Import terminal emulator components
 try:
-    from terminal_emulator import CommandOutputWindow, show_command_output, CommandRunner, create_terminal_widget, apply_terminal_css, AnsiColorParser as TerminalAnsiColorParser, TerminalEmulator  # type: ignore
+    from terminal_emulator import (
+        AnsiColorParser as TerminalAnsiColorParser,
+    )
+    from terminal_emulator import (
+        CommandOutputWindow,
+        CommandRunner,
+        TerminalEmulator,
+        apply_terminal_css,
+        create_terminal_widget,  # type: ignore
+        show_command_output,
+    )
+
 except ImportError:
-    print("WARNING: Could not import terminal_emulator.py! Fallback to local terminal implementation.")
-    print("WARNING: Could not import terminal_emulator.py! Fallback to local terminal implementation.")
+    print(
+        "WARNING: Could not import terminal_emulator.py! Fallback to local terminal implementation."
+    )
+    print(
+        "WARNING: Could not import terminal_emulator.py! Fallback to local terminal implementation."
+    )
 
     CommandRunner = None
     apply_terminal_css = None
-    
+
     # Fallback dummy implementations for type checking
     import gi
-    from gi.repository import Gtk # type: ignore
-    
-    # Mock class factory for TerminalEmulator    
+    from gi.repository import Gtk  # type: ignore
+
+    # Mock class factory for TerminalEmulator
     class _MockTerminalEmulator:
-        def __init__(self, *args): 
+        def __init__(self, *args):
             self.text_view = Gtk.TextView()
             self.command_runner = None
-        def append_text(self, text): pass
-        def clear(self): pass
-        def save_terminal_output(self, *args): pass
-    TerminalEmulator = _MockTerminalEmulator
 
-    # Returns (scroll, emulator, runner) tuple as expected
+        def append_text(self, text):
+            pass
+
+        def clear(self):
+            pass
+
+        def save_terminal_output(self, *args):
+            pass
+
+    TerminalEmulator = _MockTerminalEmulator  # type: ignore
+
     def create_terminal_widget():
         return Gtk.ScrolledWindow(), _MockTerminalEmulator(), None
 
     # Mock class for CommandOutputWindow
     class _MockCommandOutputWindow:
-        def __init__(self, *args, **kwargs): pass
-        def run_command(self, *args, **kwargs): return self
-    CommandOutputWindow = _MockCommandOutputWindow
+        def __init__(self, *args, **kwargs):
+            pass
 
-    # Simple dummy function to prevent "None cannot be called" errors
-    show_command_output = lambda *args, **kwargs: None
-    
+        def run_command(self, *args, **kwargs):
+            return self
+
+    CommandOutputWindow = _MockCommandOutputWindow  # type: ignore
+
+    def _mock_show_command_output(*args, **kwargs):
+        return None
+
+    show_command_output = _mock_show_command_output
+
     # Mock class factory for TerminalAnsiColorParser
     class _MockAnsiParser:
-        def strip_ansi(self, text): return text
-    TerminalAnsiColorParser = lambda: _MockAnsiParser()
+        def strip_ansi(self, text):
+            return text
+
+    TerminalAnsiColorParser = _MockAnsiParser  # type: ignore
 
 # Fuzzy search libraries
 try:
@@ -73,7 +105,9 @@ except ImportError:
     try:
         from thefuzz import fuzz, process  # type: ignore
     except ImportError:
-        print("Warning: Fuzzy search libraries not found. Falling back to regular search.")
+        print(
+            "Warning: Fuzzy search libraries not found. Falling back to regular search."
+        )
         fuzz = None
         process = None
 
@@ -88,12 +122,18 @@ APPSTORE_JSON = os.path.join(APPSTORE_DIR, "apps.json")
 LAST_REFRESH_FILE = os.path.join(APPSTORE_DIR, "last_refresh")
 GITHUB_APPS_JSON = "https://github.com/sabamdarif/Termux-AppStore/releases/download/apps_data/apps.json"
 
-# Add these constants after the existing path definitions
-APPSTORE_OLD_JSON_DIR = os.path.join(APPSTORE_DIR, 'old_json')
-UPDATES_TRACKING_FILE = os.path.join(APPSTORE_DIR, "updates.json")  # Changed from .termux_appstore
-INSTALLED_APPS_FILE = os.path.join(APPSTORE_DIR, "installed_apps.json")  # Changed from .termux_appstore
-LAST_VERSION_CHECK_FILE = os.path.join(APPSTORE_DIR, "last_version_check")  # Changed from .termux_appstore
+APPSTORE_OLD_JSON_DIR = os.path.join(APPSTORE_DIR, "old_json")
+UPDATES_TRACKING_FILE = os.path.join(
+    APPSTORE_DIR, "updates.json"
+)  # Changed from .termux_appstore
+INSTALLED_APPS_FILE = os.path.join(
+    APPSTORE_DIR, "installed_apps.json"
+)  # Changed from .termux_appstore
+LAST_VERSION_CHECK_FILE = os.path.join(
+    APPSTORE_DIR, "last_version_check"
+)  # Changed from .termux_appstore
 SETTINGS_FILE = os.path.join(APPSTORE_DIR, "settings.json")  # User settings file
+
 
 # Function to validate logo size
 def validate_logo_size(logo_path):
@@ -104,7 +144,9 @@ def validate_logo_size(logo_path):
             if 20 <= width <= 180 and 20 <= height <= 180:
                 return True
             else:
-                print(f"Logo for {os.path.basename(logo_path)} is not within the required size range (20x20 to 180x180).")
+                print(
+                    f"Logo for {os.path.basename(logo_path)} is not within the required size range (20x20 to 180x180)."
+                )
                 return False
     except Exception as e:
         print(f"Error validating logo size for {logo_path}: {e}")
@@ -116,18 +158,17 @@ class AppStoreApplication(Gtk.Application):
         Gtk.Application.__init__(
             self,
             application_id="org.sabamdarif.termux.appstore",
-            flags=Gio.ApplicationFlags.FLAGS_NONE
+            flags=Gio.ApplicationFlags.FLAGS_NONE,
         )
         self.window = None
         # Connect the activate signal
-        self.connect('activate', self.on_activate)
+        self.connect("activate", self.on_activate)
 
     def do_startup(self):
         """Application startup"""
         Gtk.Application.do_startup(self)
-        # Set application name
+
         GLib.set_application_name("Termux AppStore")
-        # Set the application icon
         icon_theme = Gtk.IconTheme.get_default()
         try:
             icon = icon_theme.load_icon("org.gnome.Software", 128, 0)
@@ -137,61 +178,48 @@ class AppStoreApplication(Gtk.Application):
 
     def on_activate(self, app):
         """Called when the application is activated"""
-        # Check if window exists already and just present it
         if self.window:
             self.window.present()
             return
 
-        # Create a new window if one doesn't exist
         self.window = AppStoreWindow(self)
         self.window.present()
+
 
 class AppStoreWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         """Initialize window"""
         Gtk.ApplicationWindow.__init__(self, application=app, title="Termux App Store")
 
-        # Load settings
         self.load_settings()
         self.selected_distro = None
         self.distro_enabled = False
-        self.is_refreshing = False  # Add a flag to track refresh state
-        self.connectivity_dialog_active = False  # Add flag to prevent multiple connectivity dialogs
-        self.cancellation_in_progress = False  # Add flag to track dialog cancellation
-
-        # Initialize search variables
+        self.is_refreshing = False
+        self.connectivity_dialog_active = False
+        self.cancellation_in_progress = False
         self.search_timeout_id = None
         self.search_delay = 100  # milliseconds
-
-        # Initialize logging variables
         self.logging_active = False
         self.log_file = None
         self.log_file_path = None
 
-        # Set up keyboard accelerators
         accel_group = Gtk.AccelGroup()
         self.add_accel_group(accel_group)
 
-        # Add Ctrl+F for search
         key, mod = Gtk.accelerator_parse("<Control>f")
-        accel_group.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_search_accelerator)
+        accel_group.connect(
+            key, mod, Gtk.AccelFlags.VISIBLE, self.on_search_accelerator
+        )
 
-        # Add Ctrl+Q for quit
         key, mod = Gtk.accelerator_parse("<Control>q")
         accel_group.connect(key, mod, Gtk.AccelFlags.VISIBLE, self.on_quit_accelerator)
-
-        # Set up scaling for hi-dpi screens
         self.set_default_size(1000, 650)
-        # Set window position to center
         self.set_position(Gtk.WindowPosition.CENTER)
-
-        # Set window icon
         icon_name = "system-software-install"
         icon_theme = Gtk.IconTheme.get_default()
         if icon_theme.has_icon(icon_name):
             self.set_icon_name(icon_name)
 
-        # Set window class
         self.set_wmclass("termux-appstore", "Termux AppStore")
 
         # Identify system architecture
@@ -204,62 +232,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             "armv8l": ["arm", "armv7", "armhf", "all", "any"],
             "armv7l": ["arm", "armv7", "armhf", "all", "any"],
             "x86_64": ["x86_64", "amd64", "x86", "all", "any"],
-            "i686": ["x86", "i686", "i386", "all", "any"]
+            "i686": ["x86", "i686", "i386", "all", "any"],
         }
 
-        # Initialize task queue and current task first
         self.task_queue = queue.Queue()
         self.current_task = None
         self.stop_background_tasks = False
-
-        # Initialize thread pool
         self.thread_pool = ThreadPoolExecutor(max_workers=4)
-
-        # Initialize all state flags
         self.installation_cancelled = False
         self.uninstallation_cancelled = False
         self.current_installation = None
-
-        # Initialize update state
         self.update_in_progress = False
-
-        # Initialize thread pool and queues
         self.ui_update_queue = queue.Queue()
         self.pending_ui_updates = []
-
-        # Initialize updates tracking
         self.updates_tracking_file = UPDATES_TRACKING_FILE
         self.pending_updates = {}
-
-        # Initialize installed apps tracking
         self.installed_apps_file = Path(INSTALLED_APPS_FILE)
         self.installed_apps_file.parent.mkdir(parents=True, exist_ok=True)
         self.load_installed_apps()
-
-        # Load pending updates from disk
         self.pending_updates = self.load_pending_updates()
-
-        # Initialize categories and apps data
         self.categories = []
         self.apps_data = []
 
         try:
-            # Create main UI layout first
             self.create_ui()
-
-            # Start task processor after UI creation
             self.start_task_processor()
-
             # Connect the delete-event to handle window closing
             self.connect("delete-event", self.on_delete_event)
-
-            # Show all widgets
             self.show_all()
-
-            # Initialize paths and create directories (after UI is ready)
             self.setup_directories()
-
-            # Start the initial data load
             self.check_for_updates()
         except Exception as e:
             print(f"Error during initialization: {e}")
@@ -268,95 +269,95 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def create_ui(self):
         """Create the main UI for the application"""
-        # Set up CSS
         screen = Gdk.Screen.get_default()
         css_provider = Gtk.CssProvider()
         # Try to load CSS, but don't fail if there are errors
-        css_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "style.css")
+        css_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "style", "style.css"
+        )
         print(f"Loading CSS from: {css_file}")
         try:
             css_provider.load_from_path(str(css_file))
             Gtk.StyleContext.add_provider_for_screen(
-                screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+                screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
         except Exception as e:
             print(f"Warning: CSS error occurred: {e}")
             print("Continuing without custom styles")
 
         try:
-            # Create header bar first (so it's always visible)
             header = Gtk.HeaderBar()
             header.set_show_close_button(True)
             header.props.title = "Termux AppStore"
             self.set_titlebar(header)
-
-            # Create box for tabs
-            self.header_tabs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-            self.header_tabs_box.get_style_context().add_class('header-tabs-box')
+            self.header_tabs_box = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL, spacing=2
+            )
+            self.header_tabs_box.get_style_context().add_class("header-tabs-box")
             header.set_custom_title(self.header_tabs_box)
-
-            # Create tab buttons with icons
-            self.explore_button = self.create_tab_button("Explore", "system-search-symbolic")
-            self.installed_button = self.create_tab_button("Installed", "system-software-install-symbolic")
-            self.updates_button = self.create_tab_button("Updates", "software-update-available-symbolic")
-
+            self.explore_button = self.create_tab_button(
+                "Explore", "system-search-symbolic"
+            )
+            self.installed_button = self.create_tab_button(
+                "Installed", "system-software-install-symbolic"
+            )
+            self.updates_button = self.create_tab_button(
+                "Updates", "software-update-available-symbolic"
+            )
             # Connect click handlers
             self.explore_button.connect("clicked", self.on_section_clicked, "explore")
-            self.installed_button.connect("clicked", self.on_section_clicked, "installed")
+            self.installed_button.connect(
+                "clicked", self.on_section_clicked, "installed"
+            )
             self.updates_button.connect("clicked", self.on_section_clicked, "updates")
-
-            # Set initial active state - use both classes for compatibility
-            self.explore_button.get_style_context().add_class('active')
-            self.explore_button.get_style_context().add_class('selected')
-
+            self.explore_button.get_style_context().add_class("active")
+            self.explore_button.get_style_context().add_class("selected")
             self.header_tabs_box.pack_start(self.explore_button, False, False, 0)
             self.header_tabs_box.pack_start(self.installed_button, False, False, 0)
             self.header_tabs_box.pack_start(self.updates_button, False, False, 0)
 
-            # Create menu button
             menu_button = Gtk.Button()
-            menu_button.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON))
-            menu_button.get_style_context().add_class('menu-button')
+            menu_button.set_image(
+                Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON)
+            )
+            menu_button.get_style_context().add_class("menu-button")
             menu_button.connect("clicked", self.on_menu_clicked)
             header.pack_end(menu_button)
 
-            # Create search button to toggle search bar visibility
             self.search_button = Gtk.Button()
-            self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
-            self.search_button.get_style_context().add_class('menu-button')
+            self.search_button.set_image(
+                Gtk.Image.new_from_icon_name(
+                    "system-search-symbolic", Gtk.IconSize.BUTTON
+                )
+            )
+            self.search_button.get_style_context().add_class("menu-button")
             self.search_button.set_tooltip_text("Show Search")
             self.search_button.connect("clicked", self.on_search_button_clicked)
             header.pack_end(self.search_button)
 
-            # Create main container as a stack (for showing content or spinner)
             self.main_stack = Gtk.Stack()
             self.main_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
             self.main_stack.set_transition_duration(150)
             self.add(self.main_stack)
-
-            # Create main content box
             self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             self.main_stack.add_named(self.main_box, "content")
-
-            # Create content box for app list
             self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             self.main_box.pack_start(self.content_box, True, True, 0)
 
-            # Create spinner page (separate from content)
             spinner_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             spinner_page.set_valign(Gtk.Align.CENTER)
             spinner_page.set_halign(Gtk.Align.CENTER)
             self.main_stack.add_named(spinner_page, "spinner")
 
-            # Add spinner and loading text to spinner page
             self.spinner = Gtk.Spinner()
             self.spinner.set_size_request(64, 64)
             spinner_page.pack_start(self.spinner, False, False, 0)
 
-            self.loading_label = Gtk.Label(label="This process will take some time. Please wait...")
+            self.loading_label = Gtk.Label(
+                label="This process will take some time. Please wait..."
+            )
             self.loading_label.set_margin_top(10)
             spinner_page.pack_start(self.loading_label, False, False, 0)
-
-            # Show content by default
             self.main_stack.set_visible_child_name("content")
 
         except Exception as e:
@@ -368,14 +369,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         button = Gtk.Button()
         button.set_relief(Gtk.ReliefStyle.NONE)
         button.get_style_context().add_class("header-tab-button")
-
-        # Set fixed size to prevent the button from changing size when text becomes bold
         button.set_size_request(120, 36)
-
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         icon = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.MENU)
         label = Gtk.Label(label=label_text)
-
         hbox.pack_start(icon, False, False, 0)
         hbox.pack_start(label, False, False, 0)
         button.add(hbox)
@@ -386,35 +383,27 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Show the application menu"""
         popover = Gtk.Popover(relative_to=button)
         popover.set_position(Gtk.PositionType.BOTTOM)
-
-        # Create main box
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.set_margin_top(6)
         box.set_margin_bottom(6)
         box.set_margin_start(6)
         box.set_margin_end(6)
         box.set_spacing(2)  # Minimal spacing between items
-
         # About item
         about_button = Gtk.ModelButton(label="About")
         about_button.connect("clicked", self.on_about_clicked)
         box.pack_start(about_button, False, False, 0)
-
         # Manage Repos item
         repos_button = Gtk.ModelButton(label="Manage Repos")
         repos_button.connect("clicked", self.on_manage_repos_clicked)
         box.pack_start(repos_button, False, False, 0)
-
-        # Add a separator
         separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         box.pack_start(separator, False, False, 6)
 
-        # Settings item
         settings_button = Gtk.ModelButton(label="Settings")
         settings_button.connect("clicked", self.on_settings_clicked)
         box.pack_start(settings_button, False, False, 0)
 
-        # Add another separator
         separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         box.pack_start(separator2, False, False, 6)
 
@@ -423,28 +412,31 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         quit_button.connect("clicked", self.on_quit_clicked)
         box.pack_start(quit_button, False, False, 0)
 
-        # Show the box in the popover
         box.show_all()
         popover.add(box)
         popover.popup()
 
     def on_search_button_clicked(self, button):
         """Toggle the visibility of the search bar"""
-        if hasattr(self, 'search_box'):
+        if hasattr(self, "search_box"):
             if self.search_box.get_visible():
-                # Hide search bar
                 self.search_box.hide()
-                # Update button icon to indicate search is hidden
-                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_image(
+                    Gtk.Image.new_from_icon_name(
+                        "system-search-symbolic", Gtk.IconSize.BUTTON
+                    )
+                )
                 self.search_button.set_tooltip_text("Show Search")
             else:
-                # Show search bar
                 self.search_box.show()
-                # Update button icon to indicate search is visible
-                self.search_button.set_image(Gtk.Image.new_from_icon_name("window-close-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_image(
+                    Gtk.Image.new_from_icon_name(
+                        "window-close-symbolic", Gtk.IconSize.BUTTON
+                    )
+                )
                 self.search_button.set_tooltip_text("Hide Search")
                 # Give focus to the search entry
-                if hasattr(self, 'search_entry'):
+                if hasattr(self, "search_entry"):
                     self.search_entry.grab_focus()
 
     def on_settings_clicked(self, widget):
@@ -452,7 +444,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         settings_dialog = Gtk.Dialog(title="Settings", transient_for=self)
         settings_dialog.set_default_size(450, 350)
 
-        # Create main content box
         content_box = settings_dialog.get_content_area()
         content_box.set_margin_start(20)
         content_box.set_margin_end(20)
@@ -460,10 +451,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         content_box.set_margin_bottom(20)
         content_box.set_spacing(16)
 
-        # Create settings box
         settings_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
 
-        # Add header title
         title_label = Gtk.Label(label="<b>Application Settings</b>")
         title_label.set_use_markup(True)
         title_label.set_halign(Gtk.Align.START)
@@ -512,7 +501,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         refresh_frame.add(refresh_box)
         settings_box.pack_start(refresh_frame, False, False, 0)
 
-        # Show command output setting
         output_frame = Gtk.Frame()
         output_frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
         output_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -554,10 +542,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         fuzzy_frame.add(fuzzy_box)
         settings_box.pack_start(fuzzy_frame, False, False, 0)
 
-        # Add settings box to content
         content_box.pack_start(settings_box, True, True, 0)
 
-        # Add close button
         settings_dialog.add_button("Close", Gtk.ResponseType.CLOSE)
         settings_dialog.connect("response", lambda dialog, response: dialog.destroy())
 
@@ -589,7 +575,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Show about dialog"""
         about_dialog = Gtk.AboutDialog(transient_for=self)
 
-        # Set dialog properties
         about_dialog.set_program_name("Termux App Store")
         about_dialog.set_version("0.5.4.1")
         about_dialog.set_comments("A modern graphical package manager for Termux")
@@ -599,7 +584,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         about_dialog.set_website_label("Website (GITHUB)")
         about_dialog.set_logo_icon_name("system-software-install")
 
-        # Show the dialog
         about_dialog.run()
         about_dialog.destroy()
 
@@ -611,15 +595,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             pkg_manager = "apt"
             if shutil.which("pacman"):
                 pkg_manager = "pacman"
-            
+
             # Use raw subprocess for quick check
             if pkg_manager == "apt":
                 cmd = f"dpkg -s {package_name}"
-                result = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                result = subprocess.run(
+                    cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
                 return result.returncode == 0
             elif pkg_manager == "pacman":
                 cmd = f"pacman -Qi {package_name}"
-                result = subprocess.run(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                result = subprocess.run(
+                    cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
                 return result.returncode == 0
             return False
         except Exception:
@@ -627,7 +615,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def on_manage_repos_clicked(self, widget):
         """Show dialog to manage Termux repositories"""
-        # Create dialog
         repo_dialog = Gtk.Dialog(title="Manage Repositories", transient_for=self)
         repo_dialog.set_default_size(400, 450)
         repo_dialog.set_modal(True)
@@ -648,10 +635,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Repos list
         repos = [
-            {"name": "x11-repo", "label": "X11 Repository", "desc": "Package repository containing X11 programs and libraries"},
-            {"name": "root-repo", "label": "Root Repository", "desc": "Package repository containing programs for rooted devices"},
-            {"name": "tur-repo", "label": "TUR Repository", "desc": "A single and trusted place for all unofficial/less popular termux packages"},
-            {"name": "glibc-repo", "label": "Glibc Repository", "desc": "A package repository containing glibc-based programs and libraries"},
+            {
+                "name": "x11-repo",
+                "label": "X11 Repository",
+                "desc": "Package repository containing X11 programs and libraries",
+            },
+            {
+                "name": "root-repo",
+                "label": "Root Repository",
+                "desc": "Package repository containing programs for rooted devices",
+            },
+            {
+                "name": "tur-repo",
+                "label": "TUR Repository",
+                "desc": "A single and trusted place for all unofficial/less popular termux packages",
+            },
+            {
+                "name": "glibc-repo",
+                "label": "Glibc Repository",
+                "desc": "A package repository containing glibc-based programs and libraries",
+            },
         ]
 
         # Container for checkboxes
@@ -663,15 +666,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Function to handle repo toggling
         def on_repo_toggled(button, repo_name, label_name):
             is_active = button.get_active()
-            
+
             # Determine command
             pkg_manager = "apt"
             if shutil.which("pacman"):
                 pkg_manager = "pacman"
-            
+
             action = "install" if is_active else "remove"
             action_display = "Installing" if is_active else "Removing"
-            
+
             cmd = ""
             if pkg_manager == "apt":
                 if is_active:
@@ -686,106 +689,119 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Close repo dialog to show progress
             repo_dialog.destroy()
-            
-            # Show progress dialog
-            progress_dialog, status_label, progress_bar, terminal_view = self.create_progress_dialog(
-                title=f"{action_display} {label_name}", 
-                allow_cancel=False
+
+            progress_dialog, status_label, progress_bar, terminal_view = (
+                self.create_progress_dialog(
+                    title=f"{action_display} {label_name}", allow_cancel=False
+                )
             )
             progress_dialog.show_all()
 
-            # Run in thread
             def repo_action_thread():
                 try:
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Running: {cmd}\n\n"))
-                    
+                    GLib.idle_add(
+                        lambda: self.update_terminal(
+                            terminal_view, f"Running: {cmd}\n\n"
+                        )
+                    )
+
                     process = subprocess.Popen(
-                        ['bash', '-c', cmd],
+                        ["bash", "-c", cmd],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         universal_newlines=True,
-                        bufsize=1
+                        bufsize=1,
                     )
 
                     if process.stdout:
                         for line in process.stdout:
-                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+                            GLib.idle_add(
+                                lambda log_line=line: self.update_terminal(
+                                    terminal_view, log_line
+                                )
+                            )
                             # Basic animation
                             GLib.idle_add(progress_bar.pulse)
-                    
+
                     process.wait()
-                    
+
                     if process.returncode == 0:
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"\nSUCCESS: {label_name} {action}ed successfully.\n"))
-                        GLib.idle_add(status_label.set_text, f"{label_name} {action}ed successfully")
+                        GLib.idle_add(
+                            lambda: self.update_terminal(
+                                terminal_view,
+                                f"\nSUCCESS: {label_name} {action}ed successfully.\n",
+                            )
+                        )
+                        GLib.idle_add(
+                            status_label.set_text,
+                            f"{label_name} {action}ed successfully",
+                        )
                         GLib.idle_add(progress_bar.set_fraction, 1.0)
-                        
+
                         # Auto-close after 1.5 seconds on success so user returns to repo list
                         time.sleep(1.5)
                         GLib.idle_add(progress_dialog.destroy)
                     else:
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"\nERROR: Failed to {action} {label_name}.\n"))
-                        GLib.idle_add(status_label.set_text, f"Failed to {action} {label_name}")
-                        
-                except Exception as e:
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, f"\nError: {e}\n"))
-                
+                        GLib.idle_add(
+                            lambda: self.update_terminal(
+                                terminal_view,
+                                f"\nERROR: Failed to {action} {label_name}.\n",
+                            )
+                        )
+                        GLib.idle_add(
+                            status_label.set_text, f"Failed to {action} {label_name}"
+                        )
+
+                except Exception as err:
+                    GLib.idle_add(
+                        lambda e=err: self.update_terminal(
+                            terminal_view, f"\nError: {e}\n"
+                        )
+                    )
+
                 # Re-open repo manager when done (optional, or just let user close)
                 # For now let's just let user verify in terminal view
-                
+
             threading.Thread(target=repo_action_thread, daemon=True).start()
             progress_dialog.run()
-            
+
             # Re-open dialog to refresh state
             if not self.cancellation_in_progress:
                 GLib.idle_add(lambda: self.on_manage_repos_clicked(None))
 
-
         # Helper to update dependencies
-
-
-        # Create checkboxes
         for repo in repos:
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            
-            # Checkbox
-            check = Gtk.CheckButton()
-            check.set_active(self.check_package_installed(repo['name']))
 
-            
-            # Connect toggle action (except for dependency updates which happen instantly on UI, the action triggers on click)
-            # We need to be careful not to cycle endlessly. Ideally we want a button to apply, or trigger on click.
-            # The prompt implies "clicking on them will run", so immediate action.
-            # To avoid triggering immediately on creation, we connect 'toggled' but we need to block signal/handle carefully.
-            # Actually, `check.set_active` triggers "toggled" signal? No, set_active normally triggers it.
-            # We should block signal while setting initial state.
-            
-            # Labels
+            check = Gtk.CheckButton()
+            check.set_active(self.check_package_installed(repo["name"]))
+
             vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            lbl = Gtk.Label(label=repo['label'])
+            lbl = Gtk.Label(label=repo["label"])
             lbl.set_halign(Gtk.Align.START)
             lbl.get_style_context().add_class("bold-label")
-            
-            desc = Gtk.Label(label=repo['desc'])
+
+            desc = Gtk.Label(label=repo["desc"])
             desc.set_halign(Gtk.Align.START)
             desc.get_style_context().add_class("dim-label")
             desc.set_line_wrap(True)
-            
+
             vbox.pack_start(lbl, False, False, 0)
             vbox.pack_start(desc, False, False, 0)
-            
+
             row.pack_start(check, False, False, 0)
             row.pack_start(vbox, True, True, 0)
-            
+
             list_box.pack_start(row, False, False, 0)
-            self.repo_checkboxes[repo['name']] = check
+            self.repo_checkboxes[repo["name"]] = check
 
             # Connect signal after setting state to avoid initial firing
-            check.connect("toggled", lambda b, r=repo['name'], l=repo['label']: on_repo_toggled(b, r, l))
-
-
-        # Initial dependency update
-
+            check.connect(
+                "toggled",
+                lambda btn, repo_name=repo["name"], label=repo["label"]: (
+                    on_repo_toggled(btn, repo_name, label)
+                ),
+            )
 
         # Close button
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -802,7 +818,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_quit_clicked(self, widget):
         """Handle quit menu item click"""
         # Close any open log files
-        if hasattr(self, 'log_file') and self.log_file:
+        if hasattr(self, "log_file") and self.log_file:
             try:
                 self.log_file.write("\n--- Application closed by user ---\n")
                 self.log_file.close()
@@ -817,13 +833,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def setup_directories(self):
         """Create necessary directories for the app store"""
         try:
-            # Set up partial setup detection
             needs_setup = False
 
-            # Create main directories
             os.makedirs(APPSTORE_DIR, exist_ok=True)
 
-            # Check if other required directories exist
             if not os.path.exists(APPSTORE_LOGO_DIR):
                 needs_setup = True
                 os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
@@ -835,28 +848,27 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Migrate data from old directory structure if needed
             self.migrate_old_data()
 
-            # Check for distro configuration
             self.check_distro_configuration()
 
-            # Initialize apps.json if it doesn't exist
             if not os.path.exists(APPSTORE_JSON):
                 print("First time setup: Initializing app store...")
                 needs_setup = True
 
-            # Initialize updates tracking file if it doesn't exist
             if not os.path.exists(self.updates_tracking_file):
-                with open(self.updates_tracking_file, 'w') as f:
+                with open(self.updates_tracking_file, "w") as f:
                     json.dump({}, f)
 
-            # Initialize settings file if it doesn't exist
             if not os.path.exists(SETTINGS_FILE):
-                with open(SETTINGS_FILE, 'w') as f:
-                    json.dump({
-                        "use_terminal_for_progress": False,
-                        "last_category": "All Apps"
-                    }, f, indent=2)
+                with open(SETTINGS_FILE, "w") as f:
+                    json.dump(
+                        {
+                            "use_terminal_for_progress": False,
+                            "last_category": "All Apps",
+                        },
+                        f,
+                        indent=2,
+                    )
 
-            # Start the refresh process if this is first time or partial setup
             if needs_setup:
                 # Make sure the spinner is visible before starting
                 self.ensure_spinner_visible()
@@ -867,44 +879,53 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         except Exception as e:
             print(f"Error setting up directories: {e}")
-            self.show_error_dialog(f"Failed to initialize app store directories: {str(e)}")
+            self.show_error_dialog(
+                f"Failed to initialize app store directories: {str(e)}"
+            )
 
     def check_distro_configuration(self):
         """Check and load distro configuration"""
         try:
-            # Check for selected_distro file first
             distro_file = os.path.join(APPSTORE_DIR, "selected_distro")
             if os.path.exists(distro_file):
-                with open(distro_file, 'r') as f:
+                with open(distro_file, "r") as f:
                     self.selected_distro = f.read().strip()
                     if self.selected_distro:
                         print(f"Found selected_distro: {self.selected_distro}")
 
-            # Check for distro_add_answer file
             answer_file = os.path.join(APPSTORE_DIR, "distro_add_answer")
             if os.path.exists(answer_file):
-                with open(answer_file, 'r') as f:
+                with open(answer_file, "r") as f:
                     answer = f.read().strip()
-                    self.distro_enabled = answer.lower() == 'y'
+                    self.distro_enabled = answer.lower() == "y"
                     if self.distro_enabled:
                         print(f"Found distro_add_answer: {answer} -> enabled: True")
             else:
                 # Silently create default file if it doesn't exist
-                with open(answer_file, 'w') as f:
-                    f.write('n')
+                with open(answer_file, "w") as f:
+                    f.write("n")
                 self.distro_enabled = False
 
-            # Check for distro type (proot or chroot)
             self.selected_distro_type = "proot"  # Default to proot
-            termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            termux_desktop_config = (
+                "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            )
             if os.path.exists(termux_desktop_config):
                 try:
-                    with open(termux_desktop_config, 'r') as f:
+                    with open(termux_desktop_config, "r") as f:
                         for line in f:
                             line = line.strip()
-                            if line.startswith('selected_distro_type='):
-                                self.selected_distro_type = line.split('=')[1].strip().strip('"').strip("'").lower()
-                                print(f"Found selected_distro_type: {self.selected_distro_type}")
+                            if line.startswith("selected_distro_type="):
+                                self.selected_distro_type = (
+                                    line.split("=")[1]
+                                    .strip()
+                                    .strip('"')
+                                    .strip("'")
+                                    .lower()
+                                )
+                                print(
+                                    f"Found selected_distro_type: {self.selected_distro_type}"
+                                )
                                 break
                 except Exception as e:
                     print(f"Error reading distro type from config: {e}")
@@ -920,9 +941,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         if selected_distro is None:
             selected_distro = self.selected_distro
 
-        distro_type = getattr(self, 'selected_distro_type', 'proot')
+        distro_type = getattr(self, "selected_distro_type", "proot")
 
-        if distro_type == 'chroot':
+        if distro_type == "chroot":
             return f"chroot-distro login {selected_distro} --shared-tmp -- /bin/bash -c"
         else:  # Default to proot
             return f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c"
@@ -931,37 +952,37 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Check for app updates when the application starts"""
         # Make sure we have connectivity (but don't show the dialog)
         if not self.check_internet_connection():
-            print("No internet connection detected during initial check, skipping auto-refresh")
+            print(
+                "No internet connection detected during initial check, skipping auto-refresh"
+            )
             # Still need to load existing data
             self.load_app_metadata_and_setup_ui()
             return
 
         try:
-            # Load installed apps first to have them available
             self.load_installed_apps()
 
-            # Check if auto-refresh is enabled
             auto_refresh = self.get_setting("enable_auto_refresh", True)
             if not auto_refresh:
                 print("Auto-refresh is disabled, skipping")
-                # Add this line to load existing data when auto-refresh is disabled
                 self.load_app_metadata_and_setup_ui()
                 # Make sure search box stays hidden
                 GLib.timeout_add(500, self._ensure_search_box_hidden)
                 return
 
-            # Check when the last refresh was performed
             refresh_interval = 24 * 60 * 60  # 24 hours in seconds
             if os.path.exists(LAST_VERSION_CHECK_FILE):
                 try:
-                    with open(LAST_VERSION_CHECK_FILE, 'r') as f:
+                    with open(LAST_VERSION_CHECK_FILE, "r") as f:
                         last_check = float(f.read().strip())
 
                     now = datetime.now().timestamp()
                     time_since_last_check = now - last_check
 
                     if time_since_last_check < refresh_interval:
-                        print(f"Last check was {time_since_last_check:.2f} seconds ago, skipping auto-refresh")
+                        print(
+                            f"Last check was {time_since_last_check:.2f} seconds ago, skipping auto-refresh"
+                        )
 
                         # Just load metadata and set up UI
                         self.load_app_metadata_and_setup_ui()
@@ -970,9 +991,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         GLib.timeout_add(500, self._ensure_search_box_hidden)
                         return
                     else:
-                        print(f"Last check was {time_since_last_check:.2f} seconds ago, performing auto-refresh")
+                        print(
+                            f"Last check was {time_since_last_check:.2f} seconds ago, performing auto-refresh"
+                        )
                 except Exception as e:
-                    print(f"Error reading last check time: {e}, performing auto-refresh")
+                    print(
+                        f"Error reading last check time: {e}, performing auto-refresh"
+                    )
             else:
                 print("No last check time found, performing initial auto-refresh")
 
@@ -995,46 +1020,64 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Update versions for all apps in the background"""
         try:
             # Step 1: Load old apps.json data before backing up
-            old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
+            old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, "apps.json")
             old_apps_data = []
             if os.path.exists(old_json_path):
-                with open(old_json_path, 'r') as f:
+                with open(old_json_path, "r") as f:
                     old_apps_data = json.load(f)
                     print("Loaded old apps data")
 
             # Step 2: Load current apps.json data
             current_apps_data = []
             if os.path.exists(APPSTORE_JSON):
-                with open(APPSTORE_JSON, 'r') as f:
+                with open(APPSTORE_JSON, "r") as f:
                     current_apps_data = json.load(f)
                     print("Loaded current apps data")
 
-            # Check Termux Desktop configuration first
-            termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            termux_desktop_config = (
+                "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            )
             distro_enabled = False
             selected_distro = None
 
             if os.path.exists(termux_desktop_config):
                 try:
-                    with open(termux_desktop_config, 'r') as f:
+                    with open(termux_desktop_config, "r") as f:
                         for line in f:
-                            print(f"Raw line: '{line.strip()}'")  # Debugging output
-                            if line.startswith('distro_add_answer='):
-                                # Handle both quoted and unquoted values
-                                value = line.strip().split('=')[1].strip().strip('"').strip("'")
-                                print(f"Parsed distro_add_answer: '{value}'")  # Debugging output
-                                # Set distro_enabled based on the value
-                                if value.lower() in ['y', 'yes']:
+                            print(f"Raw line: '{line.strip()}'")
+
+                            if line.startswith("distro_add_answer="):
+                                value = (
+                                    line.strip()
+                                    .split("=")[1]
+                                    .strip()
+                                    .strip('"')
+                                    .strip("'")
+                                )
+                                print(f"Parsed distro_add_answer: '{value}'")
+
+                                if value.lower() in ["y", "yes"]:
                                     distro_enabled = True
-                                elif value.lower() in ['n', 'no']:
+                                elif value.lower() in ["n", "no"]:
                                     distro_enabled = False
                                 else:
-                                    print(f"Warning: Unrecognized value for distro_add_answer: '{value}'")
-                                    distro_enabled = False  # Default to False if unrecognized
-                            elif line.startswith('selected_distro='):
-                                # Handle both quoted and unquoted values
-                                selected_distro = line.strip().split('=')[1].strip().strip('"').strip("'").lower()
-                                print(f"Parsed selected_distro: '{selected_distro}'")  # Debugging output
+                                    print(
+                                        f"Warning: Unrecognized value for distro_add_answer: '{value}'"
+                                    )
+                                    distro_enabled = (
+                                        False  # Default to False if unrecognized
+                                    )
+                            elif line.startswith("selected_distro="):
+                                selected_distro = (
+                                    line.strip()
+                                    .split("=")[1]
+                                    .strip()
+                                    .strip('"')
+                                    .strip("'")
+                                    .lower()
+                                )
+                                print(f"Parsed selected_distro: '{selected_distro}'")
+
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
                     return  # Exit the method if there's an error
@@ -1043,23 +1086,29 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Step 3: Get actual versions for native apps
             for app in current_apps_data:
-                if (app['app_type'] == 'native' and
-                    app.get('version') == 'termux_local_version' and
-                    app.get('package_name')):
+                if (
+                    app["app_type"] == "native"
+                    and app.get("version") == "termux_local_version"
+                    and app.get("package_name")
+                ):
                     cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
-                    cmd += "if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                    cmd += 'if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then '
                     cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
-                    cmd += "elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                    cmd += 'elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then '
                     cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
 
                     try:
-                        result = subprocess.run(['bash', '-c', cmd],
-                                             capture_output=True,
-                                             text=True,
-                                             timeout=10)
+                        result = subprocess.run(
+                            ["bash", "-c", cmd],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        )
                         if result.returncode == 0 and result.stdout.strip():
-                            app['version'] = result.stdout.strip()
-                            print(f"Got version for {app['app_name']}: {app['version']}")
+                            app["version"] = result.stdout.strip()
+                            print(
+                                f"Got version for {app['app_name']}: {app['version']}"
+                            )
                     except Exception as e:
                         print(f"Error getting version for {app['app_name']}: {e}")
 
@@ -1068,10 +1117,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 # First check if distro is working correctly
                 test_cmd = f"{self.get_distro_command(selected_distro)} 'echo test'"
                 try:
-                    test_result = subprocess.run(['bash', '-c', test_cmd],
-                                              capture_output=True,
-                                              text=True,
-                                              timeout=10)
+                    test_result = subprocess.run(
+                        ["bash", "-c", test_cmd],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
                     if test_result.returncode != 0:
                         print(f"Error: distro test failed for {selected_distro}")
                         print(f"Stderr: {test_result.stderr}")
@@ -1080,121 +1131,143 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     print(f"Error testing distro: {e}")
                     return
 
-                # Process all distro apps
                 for app in current_apps_data:
-                    if (app.get('app_type') == 'distro' and
-                        app.get('version') == 'distro_local_version'):
-
-                        supported_distro = app.get('supported_distro')
-                        if supported_distro and supported_distro != 'all':
-                            supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                    if (
+                        app.get("app_type") == "distro"
+                        and app.get("version") == "distro_local_version"
+                    ):
+                        supported_distro = app.get("supported_distro")
+                        if supported_distro and supported_distro != "all":
+                            supported_distros = [
+                                d.strip().lower() for d in supported_distro.split(",")
+                            ]
                             if selected_distro not in supported_distros:
-                                print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
+                                print(
+                                    f"Skipping {app['app_name']}: not compatible with {selected_distro}"
+                                )
                                 continue
 
                         package_name = app.get(f"{selected_distro}_run_cmd")
                         if not package_name:
-                            package_name = app.get('run_cmd')
+                            package_name = app.get("run_cmd")
                             if package_name:
                                 package_name = package_name.split()[0]
 
                         if not package_name:
-                            package_name = app.get('package_name')
+                            package_name = app.get("package_name")
 
                         if not package_name:
-                            print(f"Skipping {app['app_name']}: no package name or run command found")
+                            print(
+                                f"Skipping {app['app_name']}: no package name or run command found"
+                            )
                             continue
 
-                        print(f"Checking version for {app['app_name']} using package name: {package_name}...")
+                        print(
+                            f"Checking version for {app['app_name']} using package name: {package_name}..."
+                        )
                         cmd = self.get_distro_command(selected_distro)
 
-                        if selected_distro in ['ubuntu', 'debian']:
-                            cmd += f" 'latest_version=$(apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\") && echo \"$latest_version\"'"
-                        elif selected_distro == 'fedora':
-                            cmd += f" 'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \") && echo \"$latest_version\"'"
-                        elif selected_distro == 'archlinux':
-                            cmd += f" 'latest_version=$(pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\") && echo \"$latest_version\"'"
+                        if selected_distro in ["ubuntu", "debian"]:
+                            cmd += f' \'latest_version=$(apt-cache policy {package_name} | grep Candidate: | awk "{{print \\$2}}") && echo "$latest_version"\''
+                        elif selected_distro == "fedora":
+                            cmd += f' \'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F: "/Version/ {{print \\$2}}" | tr -d " ") && echo "$latest_version"\''
+                        elif selected_distro == "archlinux":
+                            cmd += f' \'latest_version=$(pacman -Si {package_name} 2>/dev/null | grep Version | awk "{{print \\$3}}") && echo "$latest_version"\''
 
                         try:
-                            result = subprocess.run(['bash', '-c', cmd],
-                                                 capture_output=True,
-                                                 text=True,
-                                                 timeout=30)
+                            result = subprocess.run(
+                                ["bash", "-c", cmd],
+                                capture_output=True,
+                                text=True,
+                                timeout=30,
+                            )
                             if result.returncode == 0 and result.stdout.strip():
-                                app['version'] = result.stdout.strip()
-                                print(f"Got version for distro app {app['app_name']}: {app['version']}")
+                                app["version"] = result.stdout.strip()
+                                print(
+                                    f"Got version for distro app {app['app_name']}: {app['version']}"
+                                )
                             else:
                                 print(f"Failed to get version for {app['app_name']}")
                                 if result.stderr:
                                     print(f"Error: {result.stderr}")
                         except Exception as e:
-                            print(f"Error getting version for distro app {app['app_name']}: {e}")
+                            print(
+                                f"Error getting version for distro app {app['app_name']}: {e}"
+                            )
                             continue
 
             # Step 5: Save updated versions to new apps.json
-            with open(APPSTORE_JSON, 'w') as f:
+            with open(APPSTORE_JSON, "w") as f:
                 json.dump(current_apps_data, f, indent=2)
                 print("Saved updated versions to apps.json")
 
             # Step 6: Compare versions and update pending_updates
             for app in current_apps_data:
-                if app['folder_name'] in self.installed_apps:  # Only check installed apps
-                    old_app = next((a for a in old_apps_data if a['folder_name'] == app['folder_name']), None)
+                if (
+                    app["folder_name"] in self.installed_apps
+                ):  # Only check installed apps
+                    old_app = next(
+                        (
+                            a
+                            for a in old_apps_data
+                            if a["folder_name"] == app["folder_name"]
+                        ),
+                        None,
+                    )
                     if old_app:
-                        old_version = old_app.get('version')
-                        new_version = app.get('version')
+                        old_version = old_app.get("version")
+                        new_version = app.get("version")
                         if old_version and new_version and old_version != new_version:
-                            print(f"Update found for {app['app_name']}: {old_version} -> {new_version}")
-                            self.pending_updates[app['folder_name']] = new_version
+                            print(
+                                f"Update found for {app['app_name']}: {old_version} -> {new_version}"
+                            )
+                            self.pending_updates[app["folder_name"]] = new_version
 
             # Step 7: Save pending updates
             self.save_pending_updates()
             print("Saved pending updates")
 
             # Refresh the UI to show updated versions
-            # Get current category before refreshing
+
             current_category = self._get_selected_category()
             GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
 
         except Exception as e:
             print(f"Error updating app versions: {e}")
             import traceback
+
             traceback.print_exc()
 
     def load_app_metadata_and_setup_ui(self):
         """Load app metadata and set up UI in the background"""
         self.load_app_metadata()
         GLib.idle_add(self.setup_app_list_ui)
-        GLib.idle_add(self.hide_loading_indicators)  # Add this line to hide both spinner and label
+        GLib.idle_add(self.hide_loading_indicators)
 
-        # Add this code to ensure the initial section is displayed
         GLib.timeout_add(300, self._show_initial_section)
 
     def hide_loading_indicators(self):
         """Hide all loading indicators"""
         self.spinner.stop()
         # Switch back to content view
-        if hasattr(self, 'main_stack'):
+        if hasattr(self, "main_stack"):
             self.main_stack.set_visible_child_name("content")
 
         # Make sure header tabs are visible
-        if hasattr(self, 'header_tabs_box'):
+        if hasattr(self, "header_tabs_box"):
             self.header_tabs_box.show()
 
-        # Process events to ensure UI updates
         while Gtk.events_pending():
             Gtk.main_iteration()
 
     def start_refresh(self, is_manual=True, skip_connectivity_check=False):
         """Start the refresh process in a background thread"""
-        # Check if a refresh operation is already in progress
         if self.is_refreshing:
             print("Refresh already in progress, skipping this request")
             return
 
         print("\nStarting refresh process...")
 
-        # Check for internet connectivity first (unless explicitly skipped)
         if not skip_connectivity_check and not self.check_internet_connection():
             print("No internet connection available, showing prompt")
 
@@ -1210,43 +1283,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.show_connectivity_dialog()
             return
 
-        # Set the refresh flag
         self.is_refreshing = True
 
         # Store is_manual flag as instance variable
         self.is_manual_refresh = is_manual
 
-        # Clear existing content
         for child in self.content_box.get_children():
             child.destroy()
 
         # Only hide the tab buttons, keep the header bar visible for window controls
-        if hasattr(self, 'header_tabs_box'):
+        if hasattr(self, "header_tabs_box"):
             self.header_tabs_box.hide()
 
-        # Show the spinner page instead of content
         self.main_stack.set_visible_child_name("spinner")
 
-        # Start the spinner
         self.spinner.start()
 
-        # Process pending events to ensure UI updates
         while Gtk.events_pending():
             Gtk.main_iteration()
 
-        # Start background thread for downloading
         thread = threading.Thread(target=self.refresh_data_background)
         thread.daemon = True
         thread.start()
 
     def show_connectivity_dialog(self):
         """Show a dialog with retry and cancel options when no internet connection is available"""
-        # Check if a dialog is already active to prevent duplicates
         if self.connectivity_dialog_active:
             print("Connectivity dialog already active, skipping duplicate")
             return
 
-        # Set the flag to indicate a dialog is active
         self.connectivity_dialog_active = True
 
         # First make sure any previous spinner is stopped
@@ -1256,32 +1321,30 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.main_stack.set_visible_child_name("content")
 
         # Only hide tab buttons, but keep header bar visible for window controls
-        if hasattr(self, 'header_tabs_box'):
+        if hasattr(self, "header_tabs_box"):
             self.header_tabs_box.hide()
 
-        # Process events to ensure UI updates immediately
         while Gtk.events_pending():
             Gtk.main_iteration()
 
-        # Create the dialog with two buttons
         dialog = Gtk.MessageDialog(
             transient_for=self,
             message_type=Gtk.MessageType.WARNING,
             flags=Gtk.DialogFlags.MODAL,  # Make it modal to block other interactions
             buttons=Gtk.ButtonsType.NONE,
-            text="No Internet Connection"
+            text="No Internet Connection",
         )
-        dialog.format_secondary_text("Please check your internet connection and try again.")
+        dialog.format_secondary_text(
+            "Please check your internet connection and try again."
+        )
 
-        # Add custom buttons
         retry_button = dialog.add_button("Retry", Gtk.ResponseType.YES)
-        close_app_button = dialog.add_button("Close App", Gtk.ResponseType.CLOSE)
+        dialog.add_button("Close App", Gtk.ResponseType.CLOSE)
 
         # Style the buttons
         retry_button_context = retry_button.get_style_context()
         retry_button_context.add_class("suggested-action")
 
-        # Add dialog styling
         dialog_context = dialog.get_style_context()
         dialog_context.add_class("connectivity-dialog")
 
@@ -1290,14 +1353,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # First hide the dialog to make it visually disappear immediately
             dialog.hide()
 
-            # Process events to ensure dialog is visually hidden
             while Gtk.events_pending():
                 Gtk.main_iteration()
 
             # Then destroy it
             dialog.destroy()
 
-            # Process events again to ensure dialog is fully destroyed
             while Gtk.events_pending():
                 Gtk.main_iteration()
 
@@ -1313,11 +1374,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     self.spinner.hide()
                     self.loading_label.hide()
 
-                    # Process events to ensure spinner is hidden
                     while Gtk.events_pending():
                         Gtk.main_iteration()
 
-                    # Check for internet connection
                     print("Retry clicked, checking internet connection")
                     has_internet = self.check_internet_connection()
 
@@ -1325,7 +1384,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Internet is available
                         print("Internet connection available, starting refresh process")
 
-                        # Show spinner immediately - do this before start_refresh to ensure it's visible
                         self.spinner.set_property("visible", True)
                         self.spinner.set_property("active", True)
                         self.spinner.show_all()
@@ -1337,7 +1395,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         while Gtk.events_pending():
                             Gtk.main_iteration()
 
-                        # Start the refresh process with special flag to skip connectivity check
                         self.start_refresh(skip_connectivity_check=True)
                     else:
                         # Still no internet - make absolutely sure spinner is hidden
@@ -1350,10 +1407,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             Gtk.main_iteration()
 
                         print("Still no internet connection, showing dialog again")
-                        # Show the dialog again
                         self.show_connectivity_dialog()
 
-                    # Remove this function from idle queue
                     return False
 
                 # Schedule the internet check function to run on the main loop
@@ -1373,8 +1428,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     else:
                         # Fallback if application reference is not available
                         Gtk.main_quit()
-                        # Additional safety - exit process
                         import sys
+
                         sys.exit(0)
                     return False
 
@@ -1383,36 +1438,46 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Connect the response signal to our handler
         dialog.connect("response", on_response)
 
-        # Show the dialog
         dialog.show_all()
 
     def check_native_package_installed(self, package_name):
         """Check if a native package is installed based on package manager"""
         try:
-            # Get package manager type
             cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && echo $TERMUX_APP_PACKAGE_MANAGER"
-            result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True)
+            result = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
             pkg_manager = result.stdout.strip()
 
             if pkg_manager == "apt":
                 # Try dpkg -l first
                 cmd = f"dpkg -l | grep -q '^ii  {package_name}'"
-                if subprocess.run(['bash', '-c', cmd], capture_output=True).returncode == 0:
+                if (
+                    subprocess.run(["bash", "-c", cmd], capture_output=True).returncode
+                    == 0
+                ):
                     return True
 
                 # Try apt list as fallback
                 cmd = f"apt list --installed 2>/dev/null | grep -q '^{package_name}/'"
-                return subprocess.run(['bash', '-c', cmd], capture_output=True).returncode == 0
+                return (
+                    subprocess.run(["bash", "-c", cmd], capture_output=True).returncode
+                    == 0
+                )
 
             elif pkg_manager == "pacman":
                 # Try pacman -Qi first
                 cmd = f"pacman -Qi {package_name} 2>/dev/null"
-                if subprocess.run(['bash', '-c', cmd], capture_output=True).returncode == 0:
+                if (
+                    subprocess.run(["bash", "-c", cmd], capture_output=True).returncode
+                    == 0
+                ):
                     return True
 
                 # Try pacman -Q as fallback
                 cmd = f"pacman -Q {package_name} 2>/dev/null"
-                return subprocess.run(['bash', '-c', cmd], capture_output=True).returncode == 0
+                return (
+                    subprocess.run(["bash", "-c", cmd], capture_output=True).returncode
+                    == 0
+                )
 
             return False
         except Exception as e:
@@ -1422,23 +1487,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def check_distro_package_installed(self, package_name, selected_distro):
         """Check if a package is installed in the selected distro"""
         try:
-            # Build command based on distro type
             cmd = self.get_distro_command(selected_distro)
 
-            if selected_distro in ['ubuntu', 'debian']:
+            if selected_distro in ["ubuntu", "debian"]:
                 # Try dpkg -l first
-                cmd += f" 'dpkg -l | grep -q \"^ii  {package_name}\" || "
+                cmd += f' \'dpkg -l | grep -q "^ii  {package_name}" || '
                 # Try apt list as fallback
-                cmd += f"apt list --installed 2>/dev/null | grep -q \"^{package_name}/\"'"
-            elif selected_distro == 'fedora':
+                cmd += (
+                    f'apt list --installed 2>/dev/null | grep -q "^{package_name}/"\''
+                )
+            elif selected_distro == "fedora":
                 cmd += f" 'rpm -q {package_name} >/dev/null 2>&1'"
-            elif selected_distro == 'archlinux':
+            elif selected_distro == "archlinux":
                 # Try pacman -Qi first
                 cmd += f" 'pacman -Qi {package_name} >/dev/null 2>&1 || "
                 # Try pacman -Q as fallback
                 cmd += f"pacman -Q {package_name} >/dev/null 2>&1'"
 
-            result = subprocess.run(['bash', '-c', cmd], capture_output=True)
+            result = subprocess.run(["bash", "-c", cmd], capture_output=True)
             return result.returncode == 0
 
         except Exception as e:
@@ -1448,7 +1514,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def download_and_extract_logos(self):
         """Download and extract logos zip file"""
         try:
-            # Create temp directory if it doesn't exist
             os.makedirs(TERMUX_TMP, exist_ok=True)
 
             # Download logos zip file
@@ -1463,8 +1528,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Try aria2c first (most efficient)
             try:
                 print("Trying aria2c...")
-                command = f"aria2c -x 16 -s 16 '{logos_url}' -d '{TERMUX_TMP}' -o 'logos.zip'"
-                result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                command = (
+                    f"aria2c -x 16 -s 16 '{logos_url}' -d '{TERMUX_TMP}' -o 'logos.zip'"
+                )
+                result = subprocess.run(
+                    command, shell=True, capture_output=True, text=True
+                )
                 if result.returncode == 0:
                     download_success = True
                     print("Download with aria2c successful")
@@ -1478,7 +1547,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 try:
                     print("Trying wget...")
                     command = f"wget '{logos_url}' -O '{logos_zip}'"
-                    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                    result = subprocess.run(
+                        command, shell=True, capture_output=True, text=True
+                    )
                     if result.returncode == 0:
                         download_success = True
                         print("Download with wget successful")
@@ -1492,7 +1563,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 try:
                     print("Trying curl...")
                     command = f"curl -L '{logos_url}' -o '{logos_zip}'"
-                    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                    result = subprocess.run(
+                        command, shell=True, capture_output=True, text=True
+                    )
                     if result.returncode == 0:
                         download_success = True
                         print("Download with curl successful")
@@ -1501,30 +1574,32 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 except Exception as e:
                     print(f"Error using curl: {e}")
 
-            # Check if any download method succeeded
             if not download_success:
                 print("All download methods failed")
-                # Check if the directory already exists and has some content
                 if os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
                     print("Using existing logo directory since download failed")
                     return True
                 return False
 
-            # Create logo directory
             os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
 
-            # Extract logos
             print("Extracting logos...")
             try:
                 command = f"unzip -o '{logos_zip}' -d '{APPSTORE_LOGO_DIR}'"
-                result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                result = subprocess.run(
+                    command, shell=True, capture_output=True, text=True
+                )
 
                 # Clean up zip file
                 if os.path.exists(logos_zip):
                     os.remove(logos_zip)
 
                 # If extraction fails but directory exists with content, consider it a success
-                if result.returncode != 0 and os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
+                if (
+                    result.returncode != 0
+                    and os.path.exists(APPSTORE_LOGO_DIR)
+                    and os.listdir(APPSTORE_LOGO_DIR)
+                ):
                     print("Using existing logo directory since extraction failed")
                     return True
 
@@ -1539,7 +1614,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         except Exception as e:
             print(f"Error handling logos: {e}")
-            # Check if the directory already exists and has some content
             if os.path.exists(APPSTORE_LOGO_DIR) and os.listdir(APPSTORE_LOGO_DIR):
                 print("Using existing logo directory since an error occurred")
                 return True
@@ -1551,19 +1625,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Double-check that we're not already refreshing
             if not self.is_refreshing:
-                print("Warning: Refresh flag not set, but refresh_data_background was called")
+                print(
+                    "Warning: Refresh flag not set, but refresh_data_background was called"
+                )
                 self.is_refreshing = True
 
             # Ensure spinner is visible
             self.ensure_spinner_visible()
 
-            # Load existing pending updates to preserve them
             existing_updates = self.pending_updates.copy()
             print(f"Preserving existing updates: {existing_updates}")
 
             # 1. First ensure old_json directory exists
             os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
-            old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
+            old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, "apps.json")
 
             # 2. If current apps.json exists, back it up before deleting
             if os.path.exists(APPSTORE_JSON):
@@ -1573,7 +1648,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # 3. Download new apps.json
             print("Downloading new apps.json...")
-            command = f"aria2c -x 16 -s 16 {GITHUB_APPS_JSON} -d {APPSTORE_DIR} -o apps.json"
+            command = (
+                f"aria2c -x 16 -s 16 {GITHUB_APPS_JSON} -d {APPSTORE_DIR} -o apps.json"
+            )
             result = os.system(command)
             if result != 0:
                 print("Error downloading apps.json")
@@ -1593,20 +1670,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # 5. Filter apps based on architecture compatibility
             print("Filtering apps based on architecture...")
-            with open(APPSTORE_JSON, 'r') as f:
+            with open(APPSTORE_JSON, "r") as f:
                 all_apps = json.load(f)
 
-            compatible_archs = self.arch_compatibility.get(self.system_arch, [self.system_arch])
+            compatible_archs = self.arch_compatibility.get(
+                self.system_arch, [self.system_arch]
+            )
             filtered_apps = []
             for app in all_apps:
-                app_arch = app.get('supported_arch', '')
+                app_arch = app.get("supported_arch", "")
                 if not app_arch:  # If no architecture specified, assume compatible
                     filtered_apps.append(app)
                     continue
 
-                supported_archs = [arch.strip().lower() for arch in app_arch.split(',')]
+                supported_archs = [arch.strip().lower() for arch in app_arch.split(",")]
 
-                # Check if any of the app's architectures are compatible
                 if any(arch in compatible_archs for arch in supported_archs):
                     filtered_apps.append(app)
                     print(f"Added compatible app: {app['app_name']} ({app_arch})")
@@ -1615,27 +1693,46 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # 6. Check installed packages and update versions
             print("Checking installed packages and versions...")
-            # Check Termux Desktop configuration
-            termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-            distro_enabled = False  # Initialize the variable
-            selected_distro = None  # Initialize the variable
+
+            termux_desktop_config = (
+                "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            )
+            distro_enabled = False
+
+            selected_distro = None
 
             if os.path.exists(termux_desktop_config):
                 try:
-                    with open(termux_desktop_config, 'r') as f:
+                    with open(termux_desktop_config, "r") as f:
                         for line in f:
                             line = line.strip()
-                            if line.startswith('distro_add_answer='):
-                                value = line.split('=')[1].strip().strip('"').strip("'").lower()  # Remove quotes
-                                if value in ['y', 'yes']:
+                            if line.startswith("distro_add_answer="):
+                                value = (
+                                    line.split("=")[1]
+                                    .strip()
+                                    .strip('"')
+                                    .strip("'")
+                                    .lower()
+                                )
+                                if value in ["y", "yes"]:
                                     distro_enabled = True
-                                elif value in ['n', 'no']:
+                                elif value in ["n", "no"]:
                                     distro_enabled = False
                                 else:
-                                    print(f"Warning: Unrecognized value for distro_add_answer: '{value}'")
-                                print(f"Found distro_add_answer: {value} -> enabled: {distro_enabled}")
-                            elif line.startswith('selected_distro='):
-                                selected_distro = line.split('=')[1].strip().strip('"').strip("'").lower()  # Remove quotes
+                                    print(
+                                        f"Warning: Unrecognized value for distro_add_answer: '{value}'"
+                                    )
+                                print(
+                                    f"Found distro_add_answer: {value} -> enabled: {distro_enabled}"
+                                )
+                            elif line.startswith("selected_distro="):
+                                selected_distro = (
+                                    line.split("=")[1]
+                                    .strip()
+                                    .strip('"')
+                                    .strip("'")
+                                    .lower()
+                                )
                                 print(f"Found selected_distro: {selected_distro}")
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
@@ -1643,130 +1740,181 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             else:
                 print("Warning: Termux Desktop not installed")
 
-            # Load current installed apps
             installed_apps = set()
             if os.path.exists(self.installed_apps_file):
                 with open(self.installed_apps_file) as f:
                     installed_apps = set(json.load(f))
 
-            # Check native packages and update versions
             for app in filtered_apps:
-                if app['app_type'] == 'native':
-                    package_name = app.get('package_name') or app.get('run_cmd')
+                if app["app_type"] == "native":
+                    package_name = app.get("package_name") or app.get("run_cmd")
                     if package_name:
                         if self.check_native_package_installed(package_name):
                             print(f"Found installed native package: {package_name}")
-                            installed_apps.add(app['folder_name'])
+                            installed_apps.add(app["folder_name"])
 
-                        if app.get('version') == 'termux_local_version':
+                        if app.get("version") == "termux_local_version":
                             cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
-                            cmd += "if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                            cmd += (
+                                'if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then '
+                            )
                             cmd += f"apt-cache policy {package_name} | grep 'Candidate:' | awk '{{print $2}}'; "
-                            cmd += "elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                            cmd += 'elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then '
                             cmd += f"pacman -Si {package_name} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
 
                             try:
-                                result = subprocess.run(['bash', '-c', cmd],
-                                                     capture_output=True,
-                                                     text=True,
-                                                     timeout=10)
+                                result = subprocess.run(
+                                    ["bash", "-c", cmd],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=10,
+                                )
                                 if result.returncode == 0 and result.stdout.strip():
-                                    app['version'] = result.stdout.strip()
-                                    print(f"Updated version for {app['app_name']}: {app['version']}")
+                                    app["version"] = result.stdout.strip()
+                                    print(
+                                        f"Updated version for {app['app_name']}: {app['version']}"
+                                    )
                             except Exception as e:
-                                print(f"Error getting version for {app['app_name']}: {e}")
+                                print(
+                                    f"Error getting version for {app['app_name']}: {e}"
+                                )
 
-            # Check distro packages if distro is enabled
             if distro_enabled and selected_distro:
                 test_cmd = f"{self.get_distro_command(selected_distro)} 'echo test'"
                 try:
-                    test_result = subprocess.run(['bash', '-c', test_cmd],
-                                              capture_output=True,
-                                              text=True,
-                                              timeout=10)
+                    test_result = subprocess.run(
+                        ["bash", "-c", test_cmd],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
                     if test_result.returncode == 0:
-                        print(f"Checking installed packages for distro: {selected_distro}")
+                        print(
+                            f"Checking installed packages for distro: {selected_distro}"
+                        )
 
                         for app in filtered_apps:
-                            if app['app_type'] == 'distro' and distro_enabled and selected_distro:
-                                # Add the check for distro apps
-                                supported_distro = app.get('supported_distro')
-                                if supported_distro and supported_distro != 'all':
+                            if (
+                                app["app_type"] == "distro"
+                                and distro_enabled
+                                and selected_distro
+                            ):
+                                supported_distro = app.get("supported_distro")
+                                if supported_distro and supported_distro != "all":
                                     # Split supported_distro into a list if it contains commas
-                                    supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                                    supported_distros = [
+                                        d.strip().lower()
+                                        for d in supported_distro.split(",")
+                                    ]
                                     if selected_distro not in supported_distros:
-                                        print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
+                                        print(
+                                            f"Skipping {app['app_name']}: not compatible with {selected_distro}"
+                                        )
                                         continue
 
-                                package_name = app.get(f"{selected_distro}_package_name") or app.get('package_name')
+                                package_name = app.get(
+                                    f"{selected_distro}_package_name"
+                                ) or app.get("package_name")
                                 if not package_name:
                                     # Try distro-specific run command as fallback
-                                    run_cmd = app.get(f"{selected_distro}_run_cmd") or app.get('run_cmd')
-                                    package_name = run_cmd.split()[0] if run_cmd else None
+                                    run_cmd = app.get(
+                                        f"{selected_distro}_run_cmd"
+                                    ) or app.get("run_cmd")
+                                    package_name = (
+                                        run_cmd.split()[0] if run_cmd else None
+                                    )
 
                                 if not package_name:
-                                    print(f"Skipping {app['app_name']}: no package name or run command found")
+                                    print(
+                                        f"Skipping {app['app_name']}: no package name or run command found"
+                                    )
                                     continue
 
-                                # Check if installed
-                                if self.check_distro_package_installed(package_name, selected_distro):
-                                    print(f"Found installed distro package: {package_name}")
-                                    installed_apps.add(app['folder_name'])
+                                if self.check_distro_package_installed(
+                                    package_name, selected_distro
+                                ):
+                                    print(
+                                        f"Found installed distro package: {package_name}"
+                                    )
+                                    installed_apps.add(app["folder_name"])
                                 # Also check by executable path if package check failed
-                                elif app.get('run_cmd'):
-                                    run_cmd = app.get(f"{selected_distro}_run_cmd") or app.get('run_cmd')
-                                    if self.check_distro_app_installed_by_path(run_cmd, selected_distro):
-                                        print(f"Found installed distro app by path: {run_cmd}")
-                                        installed_apps.add(app['folder_name'])
+                                elif app.get("run_cmd"):
+                                    run_cmd = app.get(
+                                        f"{selected_distro}_run_cmd"
+                                    ) or app.get("run_cmd")
+                                    if self.check_distro_app_installed_by_path(
+                                        run_cmd, selected_distro
+                                    ):
+                                        print(
+                                            f"Found installed distro app by path: {run_cmd}"
+                                        )
+                                        installed_apps.add(app["folder_name"])
 
-                                # Update version if needed
-                                if app.get('version') == 'distro_local_version':
+                                if app.get("version") == "distro_local_version":
                                     # Use package_name if available, otherwise fall back to run_cmd
-                                    package_name = app.get('package_name') or app.get('run_cmd')
+                                    package_name = app.get("package_name") or app.get(
+                                        "run_cmd"
+                                    )
                                     if not package_name:
-                                        print(f"Skipping {app['app_name']}: no package name or run command found")
+                                        print(
+                                            f"Skipping {app['app_name']}: no package name or run command found"
+                                        )
                                         continue
 
                                     print(f"\nDebug info for {app['app_name']}:")
                                     print(f"Package name: {package_name}")
-                                    # Remove any quotes from selected_distro
                                     selected_distro = selected_distro.strip('"')
                                     print(f"Selected distro: {selected_distro}")
 
                                     version_cmd = None
                                     base_cmd = self.get_distro_command(selected_distro)
-                                    if selected_distro in ['ubuntu', 'debian']:
-                                        version_cmd = f"{base_cmd} 'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\" | tr -d \"\\n\"'"
-                                    elif selected_distro == 'fedora':
-                                        version_cmd = f"{base_cmd} 'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F\": \" \"/^Version/ {{print \\$2}}\" | tr -d \"\\n\") && echo \"$latest_version\"'"
-                                    elif selected_distro == 'archlinux':
-                                        version_cmd = f"{base_cmd} 'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\" | tr -d \"\\n\"'"
+                                    if selected_distro in ["ubuntu", "debian"]:
+                                        version_cmd = f'{base_cmd} \'apt-cache policy {package_name} | grep Candidate: | awk "{{print \\$2}}" | tr -d "\\n"\''
+                                    elif selected_distro == "fedora":
+                                        version_cmd = f'{base_cmd} \'latest_version=$(dnf info {package_name} 2>/dev/null | awk -F": " "/^Version/ {{print \\$2}}" | tr -d "\\n") && echo "$latest_version"\''
+                                    elif selected_distro == "archlinux":
+                                        version_cmd = f'{base_cmd} \'pacman -Si {package_name} 2>/dev/null | grep Version | awk "{{print \\$3}}" | tr -d "\\n"\''
 
                                     if not version_cmd:
-                                        print(f"Skipping {app['app_name']}: unsupported distro {selected_distro}")
+                                        print(
+                                            f"Skipping {app['app_name']}: unsupported distro {selected_distro}"
+                                        )
                                         continue
 
                                     print(f"Generated command: {version_cmd}")
 
                                     try:
-                                        print(f"Checking version for {app['app_name']}...")
-                                        result = subprocess.run(['bash', '-c', version_cmd],
-                                                             capture_output=True,
-                                                             text=True,
-                                                             timeout=30)
+                                        print(
+                                            f"Checking version for {app['app_name']}..."
+                                        )
+                                        result = subprocess.run(
+                                            ["bash", "-c", version_cmd],
+                                            capture_output=True,
+                                            text=True,
+                                            timeout=30,
+                                        )
                                         print(f"Return code: {result.returncode}")
                                         print(f"Stdout: {result.stdout}")
                                         print(f"Stderr: {result.stderr}")
 
-                                        if result.returncode == 0 and result.stdout.strip():
-                                            app['version'] = result.stdout.strip()
-                                            print(f"Updated version for distro app {app['app_name']}: {app['version']}")
+                                        if (
+                                            result.returncode == 0
+                                            and result.stdout.strip()
+                                        ):
+                                            app["version"] = result.stdout.strip()
+                                            print(
+                                                f"Updated version for distro app {app['app_name']}: {app['version']}"
+                                            )
                                         else:
-                                            print(f"Failed to get version for {app['app_name']}")
+                                            print(
+                                                f"Failed to get version for {app['app_name']}"
+                                            )
                                             if result.stderr:
                                                 print(f"Error: {result.stderr}")
                                     except Exception as e:
-                                        print(f"Error getting version for distro app {app['app_name']}: {e}")
+                                        print(
+                                            f"Error getting version for distro app {app['app_name']}: {e}"
+                                        )
                                         print(f"Exception type: {type(e)}")
                                         continue
                     else:
@@ -1775,18 +1923,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 except Exception as e:
                     print(f"Error testing proot-distro: {e}")
 
-            # Save filtered apps with updated versions
-            with open(APPSTORE_JSON, 'w') as f:
+            with open(APPSTORE_JSON, "w") as f:
                 json.dump(filtered_apps, f, indent=2)
 
-            # Save updated installed apps list
-            with open(self.installed_apps_file, 'w') as f:
+            with open(self.installed_apps_file, "w") as f:
                 json.dump(list(installed_apps), f, indent=2)
 
             self.installed_apps = list(installed_apps)
 
             # Restore existing pending updates that were preserved at the beginning
-            if 'existing_updates' in locals():
+            if "existing_updates" in locals():
                 for app_id, version in existing_updates.items():
                     # Only restore if the app is still in the installed apps list
                     if app_id in self.installed_apps:
@@ -1802,6 +1948,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error during refresh: {e}")
             import traceback
+
             traceback.print_exc()
             if not self.stop_background_tasks:
                 GLib.idle_add(self.refresh_error, str(e))
@@ -1811,7 +1958,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def _ensure_header_hidden(self):
         """Make sure only the header tabs are hidden, but keep window controls visible"""
         # Don't hide the entire header bar, just the tabs
-        if hasattr(self, 'header_tabs_box'):
+        if hasattr(self, "header_tabs_box"):
             self.header_tabs_box.hide()
         return False  # Don't repeat this idle callback
 
@@ -1820,29 +1967,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         print("Refresh completed")
         self.is_refreshing = False
 
-        # Stop the spinner
         self.spinner.stop()
 
         # Switch back to content view
         self.main_stack.set_visible_child_name("content")
 
-        # Update last version check timestamp
         from datetime import datetime as dt  # Local import to avoid conflicts
+
         current_time = dt.now()
-        with open(LAST_VERSION_CHECK_FILE, 'w') as f:
+        with open(LAST_VERSION_CHECK_FILE, "w") as f:
             f.write(str(current_time.timestamp()))
         print(f"Updated last version check timestamp: {current_time}")
 
-        # Show header tabs box again
-        if hasattr(self, 'header_tabs_box'):
+        if hasattr(self, "header_tabs_box"):
             self.header_tabs_box.show()
 
-        # Process events to ensure UI updates
         while Gtk.events_pending():
             Gtk.main_iteration()
 
         # Skip full UI rebuild if we're just handling cancellation
-        if hasattr(self, 'cancellation_in_progress') and self.cancellation_in_progress:
+        if hasattr(self, "cancellation_in_progress") and self.cancellation_in_progress:
             # Just make sure spinner is stopped and we're in content view
             # No need to rebuild the UI or switch sections during cancellation
             return False
@@ -1856,14 +2000,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # No need to call hide_loading_indicators again as we've already done it above
 
         # If this was an automatic refresh, don't switch sections
-        if not hasattr(self, 'is_manual_refresh') or self.is_manual_refresh:
+        if not hasattr(self, "is_manual_refresh") or self.is_manual_refresh:
             # Schedule section display AFTER UI is set up
             GLib.timeout_add(100, self._show_initial_section)
 
         # Make sure search box stays hidden by default after refresh
         GLib.timeout_add(200, self._ensure_search_box_hidden)
 
-        # Process UI events to make sure changes take effect
         while Gtk.events_pending():
             Gtk.main_iteration()
 
@@ -1873,13 +2016,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Show the initial section after refresh (with delay to ensure UI is ready)"""
         try:
             # Trigger display of the appropriate section
-            if hasattr(self, 'current_section'):
+            if hasattr(self, "current_section"):
                 self.on_section_clicked(self.explore_button, self.current_section)
             else:
                 self.on_section_clicked(self.explore_button, "explore")
         except Exception as e:
             print(f"Error showing initial section: {e}")
             import traceback
+
             traceback.print_exc()
         return False
 
@@ -1898,7 +2042,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def save_installed_apps(self):
         """Save the list of installed apps"""
-        with open(self.installed_apps_file, 'w') as f:
+        with open(self.installed_apps_file, "w") as f:
             json.dump(self.installed_apps, f, indent=2)
 
     def update_installation_status(self, app_name, installed):
@@ -1908,7 +2052,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         elif not installed and app_name in self.installed_apps:
             self.installed_apps.remove(app_name)
         self.save_installed_apps()
-        # Get current category before refreshing
+
         current_category = self._get_selected_category()
         GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
 
@@ -1918,57 +2062,77 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             return True
 
         # Split multiple architectures if present
-        supported_archs = [arch.strip().lower() for arch in app_arch.split(',')]
+        supported_archs = [arch.strip().lower() for arch in app_arch.split(",")]
 
-        # Get compatible architectures for the system
-        compatible_archs = self.arch_compatibility.get(self.system_arch, [self.system_arch])
+        compatible_archs = self.arch_compatibility.get(
+            self.system_arch, [self.system_arch]
+        )
 
-        # Check if any of the app's supported architectures match the system's compatible ones
         return any(arch in compatible_archs for arch in supported_archs)
 
     def load_app_metadata(self):
         """Load app metadata from the centralized JSON file"""
         try:
-            # Show spinner and loading label during metadata loading
             GLib.idle_add(lambda: self.spinner.show())
             GLib.idle_add(lambda: self.spinner.start())
-            GLib.idle_add(lambda: self.loading_label.set_text("Loading app metadata..."))
+            GLib.idle_add(
+                lambda: self.loading_label.set_text("Loading app metadata...")
+            )
             GLib.idle_add(lambda: self.loading_label.show())
 
             # First check Termux Desktop configuration
-            termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-            distro_enabled = False  # Initialize the variable
-            selected_distro = None  # Initialize the variable
+            termux_desktop_config = (
+                "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            )
+            distro_enabled = False
+
+            selected_distro = None
 
             if os.path.exists(termux_desktop_config):
                 try:
-                    with open(termux_desktop_config, 'r') as f:
+                    with open(termux_desktop_config, "r") as f:
                         for line in f:
                             line = line.strip()
-                            if line.startswith('#') or not line:
+                            if line.startswith("#") or not line:
                                 continue
-                            if line.startswith('distro_add_answer='):
-                                value = line.split('=')[1].strip().strip('"').strip("'").lower()  # Remove quotes
+                            if line.startswith("distro_add_answer="):
+                                value = (
+                                    line.split("=")[1]
+                                    .strip()
+                                    .strip('"')
+                                    .strip("'")
+                                    .lower()
+                                )
                                 self.distro_add_answer = value
-                                # Set distro_enabled based on the value
-                                if value in ['y', 'yes']:
+
+                                if value in ["y", "yes"]:
                                     distro_enabled = True
-                                elif value in ['n', 'no']:
+                                elif value in ["n", "no"]:
                                     distro_enabled = False
                                 else:
-                                    print(f"Warning: Unrecognized value for distro_add_answer: '{value}'")
-                                print(f"Found distro_add_answer: {value} -> enabled: {distro_enabled}")
-                            elif line.startswith('selected_distro='):
-                                selected_distro = line.split('=')[1].strip().strip('"').strip("'").lower()  # Remove quotes
+                                    print(
+                                        f"Warning: Unrecognized value for distro_add_answer: '{value}'"
+                                    )
+                                print(
+                                    f"Found distro_add_answer: {value} -> enabled: {distro_enabled}"
+                                )
+                            elif line.startswith("selected_distro="):
+                                selected_distro = (
+                                    line.split("=")[1]
+                                    .strip()
+                                    .strip('"')
+                                    .strip("'")
+                                    .lower()
+                                )
                                 print(f"Found selected_distro: {selected_distro}")
                 except Exception as e:
                     print(f"Error reading Termux Desktop config: {e}")
                     import traceback
+
                     traceback.print_exc()
             else:
                 print("Warning: Termux Desktop configuration file not found")
 
-            # Set distro_enabled based on the parsed value
             if self.distro_add_answer in ["y", "yes"]:
                 distro_enabled = True
 
@@ -1979,61 +2143,66 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             with open(APPSTORE_JSON) as f:
                 all_apps = json.load(f)
 
-            # Get compatible architectures for the system
-            compatible_archs = self.arch_compatibility.get(self.system_arch, [self.system_arch])
+            compatible_archs = self.arch_compatibility.get(
+                self.system_arch, [self.system_arch]
+            )
             print(f"System architecture: {self.system_arch}")
             print(f"Compatible architectures: {compatible_archs}")
 
             # Filter apps based on architecture compatibility and distro settings
             self.apps_data = []
             for app in all_apps:
-                # Check architecture compatibility first
-                app_arch = app.get('supported_arch', '')
+                app_arch = app.get("supported_arch", "")
                 if not app_arch:  # If no architecture specified, assume compatible
                     self.apps_data.append(app)
                     continue
 
                 # Split and clean architecture strings
-                supported_archs = [arch.strip().lower() for arch in app_arch.split(',')]
+                supported_archs = [arch.strip().lower() for arch in app_arch.split(",")]
 
-                # Check if any of the app's architectures are compatible
                 if any(arch in compatible_archs for arch in supported_archs):
                     # For native apps, add them directly
-                    if app.get('app_type') != 'distro':
+                    if app.get("app_type") != "distro":
                         self.apps_data.append(app)
                         print(f"Added compatible app: {app['app_name']} ({app_arch})")
                         continue
 
                     # For distro apps, check distro compatibility
                     if not distro_enabled:
-                        print(f"Skipping distro app {app['app_name']}: distro support disabled")
+                        print(
+                            f"Skipping distro app {app['app_name']}: distro support disabled"
+                        )
                         continue
 
-                    # Check distro compatibility
-                    supported_distro = app.get('supported_distro')
-                    if supported_distro == 'all':
+                    supported_distro = app.get("supported_distro")
+                    if supported_distro == "all":
                         self.apps_data.append(app)
                         print(f"Added compatible app: {app['app_name']} ({app_arch})")
                     elif supported_distro:
                         # Split supported_distro into a list if it contains commas
-                        supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                        supported_distros = [
+                            d.strip().lower() for d in supported_distro.split(",")
+                        ]
                         if selected_distro in supported_distros:
                             self.apps_data.append(app)
-                            print(f"Added compatible app: {app['app_name']} ({app_arch})")
+                            print(
+                                f"Added compatible app: {app['app_name']} ({app_arch})"
+                            )
                         else:
-                            print(f"Skipping incompatible distro app {app['app_name']}: requires one of {supported_distros}, but using {selected_distro}")
+                            print(
+                                f"Skipping incompatible distro app {app['app_name']}: requires one of {supported_distros}, but using {selected_distro}"
+                            )
                 else:
                     print(f"Skipped incompatible app: {app['app_name']} ({app_arch})")
 
-            # Extract categories from filtered apps
-            self.categories = sorted(list(set(
-                cat for app in self.apps_data
-                for cat in app['categories']
-            )))
+            self.categories = sorted(
+                list(set(cat for app in self.apps_data for cat in app["categories"]))
+            )
 
-            print(f"Loaded {len(self.apps_data)} compatible apps out of {len(all_apps)} total apps")
+            print(
+                f"Loaded {len(self.apps_data)} compatible apps out of {len(all_apps)} total apps"
+            )
 
-            # Hide spinner and loading label after completion
             GLib.idle_add(lambda: self.spinner.stop())
             GLib.idle_add(lambda: self.spinner.hide())
             GLib.idle_add(lambda: self.loading_label.hide())
@@ -2055,18 +2224,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def setup_app_list_ui(self):
         """Set up the main app list UI"""
-        # Add architecture warning for non-arm64 systems
-        if self.system_arch not in ['arm64', 'aarch64']:
+        if self.system_arch not in ["arm64", "aarch64"]:
             warning_bar = Gtk.InfoBar()
             warning_bar.set_message_type(Gtk.MessageType.WARNING)
             warning_bar.set_show_close_button(True)
             warning_bar.connect("response", lambda bar, resp: bar.destroy())
 
             warning_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            warning_icon = Gtk.Image.new_from_icon_name("dialog-warning", Gtk.IconSize.MENU)
+            warning_icon = Gtk.Image.new_from_icon_name(
+                "dialog-warning", Gtk.IconSize.MENU
+            )
             warning_box.pack_start(warning_icon, False, False, 0)
             warning_label = Gtk.Label()
-            warning_label.set_markup(f"System architecture <b>{self.system_arch}</b> might get some compatibility issues")
+            warning_label.set_markup(
+                f"System architecture <b>{self.system_arch}</b> might get some compatibility issues"
+            )
             warning_box.pack_start(warning_label, False, False, 0)
 
             warning_bar.get_content_area().add(warning_box)
@@ -2079,7 +2251,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.sidebar.set_margin_start(10)
         self.sidebar.set_margin_end(10)
         self.sidebar.set_margin_top(10)
-        self.sidebar.set_margin_bottom(10)  # Add bottom margin
+        self.sidebar.set_margin_bottom(10)
+
         self.content_box.pack_start(self.sidebar, False, True, 0)
 
         # Category list
@@ -2091,10 +2264,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         categories_label.set_margin_bottom(10)
         self.sidebar.pack_start(categories_label, False, True, 0)
 
-        # Add "All Apps" button first
         all_button = Gtk.Button(label="All Apps")
         all_button.connect("clicked", self.on_category_clicked)
-        all_button.set_size_request(180, 40)  # Set fixed width and height
+        all_button.set_size_request(180, 40)
+
         all_button.get_style_context().add_class("category-button")
         all_button.get_style_context().add_class("selected")
         self.sidebar.pack_start(all_button, False, True, 0)
@@ -2104,7 +2277,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         for category in sorted(self.categories):
             button = Gtk.Button(label=category)
             button.connect("clicked", self.on_category_clicked)
-            button.set_size_request(180, 40)  # Set fixed width and height
+            button.set_size_request(180, 40)
+
             button.get_style_context().add_class("category-button")
             self.sidebar.pack_start(button, False, True, 0)
             self.category_buttons.append(button)
@@ -2113,17 +2287,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.right_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.content_box.pack_start(self.right_panel, True, True, 0)
 
-        # Add search entry at the top of app list
         self.search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.search_box.set_margin_start(10)
         self.search_box.set_margin_end(10)
         self.search_box.set_margin_top(10)
-        self.search_box.get_style_context().add_class('search-box')
+        self.search_box.get_style_context().add_class("search-box")
         self.search_entry = Gtk.Entry()
         self.search_entry.set_placeholder_text("Search apps...")
-        self.search_entry.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, "system-search-symbolic")
+        self.search_entry.set_icon_from_icon_name(
+            Gtk.EntryIconPosition.PRIMARY, "system-search-symbolic"
+        )
         self.search_entry.set_icon_activatable(Gtk.EntryIconPosition.PRIMARY, False)
-        self.search_entry.get_style_context().add_class('search-entry')
+        self.search_entry.get_style_context().add_class("search-entry")
         self.search_entry.connect("changed", self.on_search_changed)
         # Connect Enter key to trigger a focus change to the app list
         self.search_entry.connect("activate", self.on_search_entry_activate)
@@ -2131,15 +2306,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.search_box.pack_start(self.search_entry, True, True, 0)
         self.right_panel.pack_start(self.search_box, False, True, 0)
 
-        # Hide search box by default - will be shown when search button is clicked
         self.search_box.hide()
 
         # Schedule another hide call with a delay to ensure it stays hidden
         GLib.timeout_add(100, self._ensure_search_box_hidden)
 
-        # Create check for updates button (initially hidden)
         self.update_button = Gtk.Button(label="Check for Updates")
-        self.update_button.get_style_context().add_class('system-update-button')
+        self.update_button.get_style_context().add_class("system-update-button")
         self.update_button.connect("clicked", self.on_update_system)
         self.update_button.set_margin_top(10)
         self.update_button.set_margin_start(10)
@@ -2167,48 +2340,44 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.app_list_box.set_margin_bottom(10)
         scrolled.add(self.app_list_box)
 
-        # Show all apps initially with "All Apps" selected
         self.show_apps(None)  # Pass None to show all apps
         self.content_box.show_all()
         self.update_button.hide()  # Ensure update button is hidden initially
 
     def on_category_clicked(self, button):
         """Handle category button clicks"""
-        # Update selected state of category buttons
         for child in self.category_buttons:
-            child.get_style_context().remove_class('selected')
-        button.get_style_context().add_class('selected')
+            child.get_style_context().remove_class("selected")
+        button.get_style_context().add_class("selected")
 
         category = button.get_label()
         print(f"Category selected: {category}")
 
-        # Hide search box when changing categories
-        if hasattr(self, 'search_box') and self.search_box.get_visible():
+        if hasattr(self, "search_box") and self.search_box.get_visible():
             self.search_box.hide()
-            # Update search button icon and tooltip
-            if hasattr(self, 'search_button'):
-                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+            if hasattr(self, "search_button"):
+                self.search_button.set_image(
+                    Gtk.Image.new_from_icon_name(
+                        "system-search-symbolic", Gtk.IconSize.BUTTON
+                    )
+                )
                 self.search_button.set_tooltip_text("Show Search")
 
-        # Get current search text before clearing
         current_search = self.search_entry.get_text()
 
         # Only clear search if user hasn't entered anything
         if not current_search:
             self.search_entry.set_text("")
 
-        # Show apps for the selected category
         self.show_apps(category)
 
     def on_refresh_clicked(self, button):
         """Handle refresh button click"""
-        # Delete apps.json and logo folder
         if os.path.exists(APPSTORE_JSON):
             os.remove(APPSTORE_JSON)
         if os.path.exists(APPSTORE_LOGO_DIR):
             shutil.rmtree(APPSTORE_LOGO_DIR)
 
-        # Start the refresh process
         self.start_refresh()
 
     def show_error_dialog(self, message):
@@ -2217,7 +2386,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             transient_for=self,
             message_type=Gtk.MessageType.ERROR,
             buttons=Gtk.ButtonsType.OK,
-            text=message
+            text=message,
         )
         dialog.run()
         dialog.destroy()
@@ -2229,27 +2398,30 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             modal=True,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.YES_NO,
-            text=f"Install {app['app_name']}?"
+            text=f"Install {app['app_name']}?",
         )
         response = dialog.run()
         dialog.destroy()
 
         if response == Gtk.ResponseType.YES:
-            # Create progress dialog with terminal toggle
-            progress_dialog, status_label, progress_bar, terminal_view = self.create_progress_dialog("Installing...")
+            progress_dialog, status_label, progress_bar, terminal_view = (
+                self.create_progress_dialog("Installing...")
+            )
 
             # Track current process and script path
             install_process = None
             install_cancelled = False
             script_file = None
 
-            # Get cancel button using the dialog's action area
             cancel_button = None
             # Modern approach to find buttons in a dialog
             for widget in progress_dialog.get_content_area().get_children():
                 if isinstance(widget, Gtk.ButtonBox):
                     for button in widget.get_children():
-                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                        if isinstance(button, Gtk.Button) and button.get_label() in [
+                            "Cancel",
+                            "_Cancel",
+                        ]:
                             cancel_button = button
                             break
                     if cancel_button:
@@ -2259,34 +2431,41 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if not cancel_button:
                 try:
                     for button in progress_dialog.get_action_area().get_children():
-                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                        if isinstance(button, Gtk.Button) and button.get_label() in [
+                            "Cancel",
+                            "_Cancel",
+                        ]:
                             cancel_button = button
                             break
                 except (AttributeError, TypeError):
-                    # get_action_area is deprecated, so it might not be available
                     pass
 
             def on_cancel_clicked(*args):
                 """Handle cancel button click"""
                 print("Cancellation requested")
 
-                # Set cancellation flag immediately
                 self.installation_cancelled = True
                 self.cancellation_in_progress = True
 
                 try:
-                    # Stop the command runner if it exists
-                    if hasattr(terminal_view, 'terminal_emulator') and hasattr(terminal_view.terminal_emulator, 'command_runner'):
+                    if hasattr(terminal_view, "terminal_emulator") and hasattr(
+                        terminal_view.terminal_emulator, "command_runner"
+                    ):
                         terminal_view.terminal_emulator.command_runner.cancel()
 
-                    # Add clear message to the terminal
-                    if hasattr(terminal_view, 'terminal_emulator'):
-                        GLib.idle_add(lambda: terminal_view.terminal_emulator.append_text("\n\nCANCELLED: Installation was cancelled by user\n"))
+                    if hasattr(terminal_view, "terminal_emulator"):
+                        GLib.idle_add(
+                            lambda: terminal_view.terminal_emulator.append_text(
+                                "\n\nCANCELLED: Installation was cancelled by user\n"
+                            )
+                        )
 
                     # Close any open log files
                     if self.logging_active and self.log_file:
                         try:
-                            self.log_file.write("\n\n--- Installation cancelled by user ---\n")
+                            self.log_file.write(
+                                "\n\n--- Installation cancelled by user ---\n"
+                            )
                             self.log_file.close()
                         except Exception:
                             pass
@@ -2299,7 +2478,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     self.installation_cancelled = True
 
                     # Close dialog with delay to allow final messages to be displayed
-                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog else None)
+                    GLib.timeout_add(
+                        500,
+                        lambda: progress_dialog.destroy() if progress_dialog else None,
+                    )
                 except Exception as e:
                     print(f"Error during cancellation: {e}")
                     if progress_dialog:
@@ -2308,7 +2490,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 return True
 
             # Connect the response signal
-            progress_dialog.connect('response', on_cancel_clicked)
+            progress_dialog.connect("response", on_cancel_clicked)
 
             # Find and connect the cancel button if it exists
             cancel_button = None
@@ -2318,7 +2500,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             action_area = progress_dialog.get_action_area()
             if action_area:
                 for button in action_area.get_children():
-                    if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                    if isinstance(button, Gtk.Button) and button.get_label() in [
+                        "Cancel",
+                        "_Cancel",
+                    ]:
                         cancel_button = button
                         break
 
@@ -2327,7 +2512,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 for child in progress_dialog.get_content_area().get_children():
                     if isinstance(child, Gtk.Box):
                         for button in child.get_children():
-                            if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                            if isinstance(
+                                button, Gtk.Button
+                            ) and button.get_label() in ["Cancel", "_Cancel"]:
                                 cancel_button = button
                                 break
 
@@ -2339,33 +2526,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             def on_dialog_response(dialog, response_id):
                 """Handle dialog responses that might come through the window manager"""
-                if response_id == Gtk.ResponseType.CANCEL or response_id == Gtk.ResponseType.DELETE_EVENT:
+                if (
+                    response_id == Gtk.ResponseType.CANCEL
+                    or response_id == Gtk.ResponseType.DELETE_EVENT
+                ):
                     # Use the same cancel handler for consistency
                     on_cancel_clicked()
 
             # Store the handler ID for later disconnection if needed
-            dialog_response_handler_id = progress_dialog.connect("response", on_dialog_response)
+            progress_dialog.connect("response", on_dialog_response)
 
             def update_progress(fraction, status_text):
                 if not status_text:
                     return False
 
-                # Check if dialog is still valid
                 if not progress_dialog or not progress_dialog.get_window():
                     return False
 
-                # Update both progress view and terminal view
-                if '[#' in status_text and ']' in status_text:
-                    # Extract progress details from aria2c output
-                    progress_part = status_text[status_text.find('['):status_text.find(']')+1]
-                    file_part = status_text[status_text.find(']')+1:].strip()
+                if "[#" in status_text and "]" in status_text:
+                    progress_part = status_text[
+                        status_text.find("[") : status_text.find("]") + 1
+                    ]
+                    file_part = status_text[status_text.find("]") + 1 :].strip()
 
-                    # Format the status text to show both progress and file
                     status_label.set_text(f"{progress_part}\n{file_part}")
                 elif isinstance(status_text, str) and status_text.strip():
                     status_label.set_text(status_text)
 
-                # Get the stack widget from the progress dialog
                 stack = None
                 try:
                     for child in progress_dialog.get_content_area().get_children():
@@ -2394,9 +2581,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     parts = line[9:].split(":", 2)
                     if len(parts) >= 2:
                         return {
-                            'type': parts[0],
-                            'value': parts[1],
-                            'message': parts[2] if len(parts) > 2 else ""
+                            "type": parts[0],
+                            "value": parts[1],
+                            "message": parts[2] if len(parts) > 2 else "",
                         }
                 return None
 
@@ -2410,7 +2597,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                     # Download script (20%)
                     GLib.idle_add(update_progress, 0.2, "Downloading install script...")
-                    script_file = self.download_script(app['install_url'])
+                    script_file = self.download_script(app["install_url"])
                     if not script_file or install_cancelled:
                         if script_file and os.path.exists(script_file):
                             os.remove(script_file)
@@ -2427,14 +2614,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         "package_install_and_check": 50,  # Highest priority
                         "package_remove_and_check": 30,
                         "install_appimage": 30,
-                        "download_file": 20,              # Medium priority
+                        "download_file": 20,  # Medium priority
                         "extract": 15,
                         "distro_run": 25,
                         "check_and_create_directory": 2,  # Low priority
                         "check_and_delete": 2,
                         "check_and_backup": 2,
                         "check_and_restore": 2,
-                        "echo": 1
+                        "echo": 1,
                     }
                     default_weight = 5
 
@@ -2442,11 +2629,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     script_ops = []  # List of (line_content, weight)
 
                     try:
-                        with open(script_file, 'r') as f:
+                        with open(script_file, "r") as f:
                             for line in f:
                                 # Skip empty lines and comments
                                 line = line.strip()
-                                if line and not line.startswith('#'):
+                                if line and not line.startswith("#"):
                                     # Determine weight
                                     weight = default_weight
                                     matched = False
@@ -2455,49 +2642,53 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                             weight = w
                                             matched = True
                                             break
-                                    
+
                                     # If not matched, check if it looks like a function call or command
                                     if not matched:
                                         # Give slightly more weight to apt/pacman if called directly
                                         if "apt install" in line or "pacman -" in line:
                                             weight = 40
-                                    
-                                    script_ops.append({'line': line, 'weight': weight})
+
+                                    script_ops.append({"line": line, "weight": weight})
                                     total_script_weight += weight
 
                         # Ensure we have at least some weight
                         total_script_weight = max(1, total_script_weight)
-                         
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view,
-                              f"Script analysis: {len(script_ops)} steps, total weight: {total_script_weight}\n"))
+
+                        GLib.idle_add(
+                            lambda: self.update_terminal(
+                                terminal_view,
+                                f"Script analysis: {len(script_ops)} steps, total weight: {total_script_weight}\n",
+                            )
+                        )
 
                     except Exception as e:
                         print(f"Error analyzing script: {e}")
                         total_script_weight = 100
-                        script_ops = [{'line': "unknown", 'weight': 100}]
+                        script_ops = [{"line": "unknown", "weight": 100}]
 
                     # Calculate progress range
                     start_progress = 0.15
                     end_progress = 0.95
                     progress_range = end_progress - start_progress
-                    
-                    # Process state tracking
-                    current_op_index = 0
+
                     completed_weight = 0
                     current_operation_progress = 0.0
-                    
+
                     # Track which heavyweight op we are currently in
                     current_op_weight = 0
 
                     # Execute script with better progress tracking
-                    GLib.idle_add(update_progress, start_progress, "Starting installation...")
+                    GLib.idle_add(
+                        update_progress, start_progress, "Starting installation..."
+                    )
                     install_process = subprocess.Popen(
-                        ['bash', script_file],
+                        ["bash", script_file],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         universal_newlines=True,
                         bufsize=1,
-                        preexec_fn=os.setsid  # Create new process group
+                        preexec_fn=os.setsid,
                     )
 
                     while True:
@@ -2513,7 +2704,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     install_process.wait(timeout=1)
                             except Exception as e:
                                 print(f"Error stopping process: {e}")
-                            
+
                             GLib.idle_add(progress_dialog.destroy)
                             return
 
@@ -2528,19 +2719,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         if not line:
                             continue
 
-
-
-                        # Check for progress info first
                         progress_info = parse_progress_line(line)
                         if progress_info:
                             # Granular progress update
-                            operation_type = progress_info['type']
-                            
-                            # Parse value
+
                             try:
-                                val_str = progress_info['value']
-                                if '/' in val_str:
-                                    curr, tot = val_str.split('/')
+                                val_str = progress_info["value"]
+                                if "/" in val_str:
+                                    curr, tot = val_str.split("/")
                                     sub_progress = float(curr) / max(1, float(tot))
                                 else:
                                     sub_progress = float(val_str) / 100.0
@@ -2549,63 +2735,89 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                             # If we are inside an operation, update its internal progress
                             current_operation_progress = sub_progress
-                            
+
                             # Recalculate global progress
                             # We assume current_op_weight is set when we entered the op (via text match below)
                             # If not set (unlikely if script structured well), use default
-                            eff_weight = current_op_weight if current_op_weight > 0 else default_weight
+                            eff_weight = (
+                                current_op_weight
+                                if current_op_weight > 0
+                                else default_weight
+                            )
 
-                            weighted_progress = (completed_weight + (eff_weight * current_operation_progress)) / total_script_weight
-                            current_progress = start_progress + (weighted_progress * progress_range)
+                            weighted_progress = (
+                                completed_weight
+                                + (eff_weight * current_operation_progress)
+                            ) / total_script_weight
+                            current_progress = start_progress + (
+                                weighted_progress * progress_range
+                            )
                             current_progress = min(end_progress, current_progress)
-                            
-                            GLib.idle_add(update_progress, current_progress, progress_info['message'])
-                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+
+                            GLib.idle_add(
+                                update_progress,
+                                current_progress,
+                                progress_info["message"],
+                            )
+                            GLib.idle_add(
+                                lambda log_line=line: self.update_terminal(
+                                    terminal_view, log_line + "\n"
+                                )
+                            )
                             continue
 
-                        # Check if this line indicates start of a known operation
                         # We use this to advance the "completed" pointer
                         is_heavyweight_start = False
                         for func, w in function_weights.items():
                             if func in line:
                                 is_heavyweight_start = True
-                                
+
                                 # Finish previous op fully
                                 # Note: This assumes linear execution matching our analysis
                                 if current_op_weight > 0:
-                                     completed_weight += current_op_weight
-                                
-                                # Start new op
+                                    completed_weight += current_op_weight
+
                                 current_op_weight = w
                                 current_operation_progress = 0.0
                                 break
-                        
+
                         if not is_heavyweight_start:
-                             # For normal lines, we could increment a small amount, 
-                             # but it's safer to just rely on major steps to move the bar significantly.
-                             # If we are not in a heavy op, maybe just add default weight to completed?
-                             pass
-                        
+                            # For normal lines, we could increment a small amount,
+                            # but it's safer to just rely on major steps to move the bar significantly.
+                            # If we are not in a heavy op, maybe just add default weight to completed?
+                            pass
+
                         # Calculate progress
-                        eff_weight = current_op_weight if current_op_weight > 0 else default_weight
-                        weighted_progress = (completed_weight + (eff_weight * current_operation_progress)) / total_script_weight
-                        current_progress = start_progress + (weighted_progress * progress_range)
+                        eff_weight = (
+                            current_op_weight
+                            if current_op_weight > 0
+                            else default_weight
+                        )
+                        weighted_progress = (
+                            completed_weight + (eff_weight * current_operation_progress)
+                        ) / total_script_weight
+                        current_progress = start_progress + (
+                            weighted_progress * progress_range
+                        )
                         current_progress = min(end_progress, current_progress)
-                        
+
                         GLib.idle_add(update_progress, current_progress, line)
-                        GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                        GLib.idle_add(
+                            lambda log_line=line: self.update_terminal(
+                                terminal_view, log_line + "\n"
+                            )
+                        )
 
                     if install_process.wait() == 0 and not install_cancelled:
-                        # Update installation status (95%)
-                        GLib.idle_add(update_progress, 0.95, "Finalizing installation...")
-                        self.update_installation_status(app['folder_name'], True)
+                        GLib.idle_add(
+                            update_progress, 0.95, "Finalizing installation..."
+                        )
+                        self.update_installation_status(app["folder_name"], True)
 
-                        # Remove from pending updates if this was an update
-                        if app['folder_name'] in self.pending_updates:
-                            del self.pending_updates[app['folder_name']]
+                        if app["folder_name"] in self.pending_updates:
+                            del self.pending_updates[app["folder_name"]]
                             self.save_pending_updates()
 
-                        # Get current category before refreshing
                         current_category = self._get_selected_category()
                         GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
 
@@ -2615,7 +2827,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # Close log file if logging is active
                         if self.logging_active and self.log_file:
                             try:
-                                self.log_file.write("\n--- Installation completed successfully ---\n")
+                                self.log_file.write(
+                                    "\n--- Installation completed successfully ---\n"
+                                )
                                 self.log_file.close()
                             except Exception:
                                 pass
@@ -2632,7 +2846,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             # Close log file if logging is active
                             if self.logging_active and self.log_file:
                                 try:
-                                    self.log_file.write("\n--- Installation failed ---\n")
+                                    self.log_file.write(
+                                        "\n--- Installation failed ---\n"
+                                    )
                                     self.log_file.close()
                                 except Exception:
                                     pass
@@ -2647,7 +2863,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if script_file and os.path.exists(script_file):
                         try:
                             os.remove(script_file)
-                        except:
+                        except Exception:
                             pass
 
                 except Exception as e:
@@ -2657,7 +2873,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # Close log file if logging is active
                     if self.logging_active and self.log_file:
                         try:
-                            self.log_file.write(f"\n--- Installation error: {str(e)} ---\n")
+                            self.log_file.write(
+                                f"\n--- Installation error: {str(e)} ---\n"
+                            )
                             self.log_file.close()
                         except Exception:
                             pass
@@ -2672,7 +2890,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if install_process:
                         try:
                             os.killpg(os.getpgid(install_process.pid), signal.SIGTERM)
-                        except:
+                        except Exception:
                             pass
                     install_process = None
                     if script_file and os.path.exists(script_file):
@@ -2689,24 +2907,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def modify_script(self, script_path):
         """Add source line for common functions after shebang"""
         try:
-            # Read the original script content
-            with open(script_path, 'r') as f:
+            with open(script_path, "r") as f:
                 content = f.read()
 
-            # Get path to inbuild_functions
-            inbuild_functions_path = Path(__file__).parent / 'inbuild_functions' / 'inbuild_functions'
+            inbuild_functions_path = (
+                Path(__file__).parent / "inbuild_functions" / "inbuild_functions"
+            )
 
-            # Add inbuild_functions source after shebang
             # Try both common shebang variants
-            for shebang in ['#!/data/data/com.termux/files/usr/bin/bash\n', '#!/bin/bash\n']:
+            for shebang in [
+                "#!/data/data/com.termux/files/usr/bin/bash\n",
+                "#!/bin/bash\n",
+            ]:
                 if shebang in content:
                     new_content = content.replace(
-                        shebang,
-                        f'{shebang}source {inbuild_functions_path}\n'
+                        shebang, f"{shebang}source {inbuild_functions_path}\n"
                     )
 
-                    # Write modified content back
-                    with open(script_path, 'w') as f:
+                    with open(script_path, "w") as f:
                         f.write(new_content)
                     return True
 
@@ -2721,17 +2939,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Download a script from URL and return its local path"""
         script_path = None
         try:
-            # Create temp directory if it doesn't exist
             os.makedirs(TERMUX_TMP, exist_ok=True)
 
-            # Create a temporary file
             script_name = f"appstore_{int(time.time())}.sh"
             script_path = os.path.join(TERMUX_TMP, script_name)
 
             # Download using aria2c with proper encoding handling
             print(f"Downloading script from {url} to {script_path}")
             command = f"aria2c -x 16 -s 16 '{url}' -d '{TERMUX_TMP}' -o '{script_name}'"
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, encoding='utf-8')
+            result = subprocess.run(
+                command, shell=True, capture_output=True, text=True, encoding="utf-8"
+            )
 
             if result.returncode != 0:
                 print(f"Download failed: {result.stderr}")
@@ -2742,10 +2960,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 print("Script file not found after download")
                 return None
 
-            # Read file content to verify encoding
             try:
-                with open(script_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
+                with open(script_path, "r", encoding="utf-8") as f:
+                    f.read()
             except UnicodeDecodeError:
                 print("Script file has invalid encoding")
                 if os.path.exists(script_path):
@@ -2771,30 +2988,29 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             flags=0,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.YES_NO,
-            text=f"Uninstall {app['app_name']}?"
+            text=f"Uninstall {app['app_name']}?",
         )
         response = dialog.run()
         dialog.destroy()
 
         if response == Gtk.ResponseType.YES:
-            # Create progress dialog with terminal functionality
-            progress_dialog, status_label, progress_bar, terminal_view = self.create_progress_dialog(
-                title="Uninstalling...",
-                allow_cancel=True
+            progress_dialog, status_label, progress_bar, terminal_view = (
+                self.create_progress_dialog(title="Uninstalling...", allow_cancel=True)
             )
 
-            # Initialize variables for nonlocal access
             uninstall_process = None
             uninstall_cancelled = False
             script_file = None
 
-            # Get cancel button using the dialog's action area
             cancel_button = None
             # Modern approach to find buttons in a dialog
             for widget in progress_dialog.get_content_area().get_children():
                 if isinstance(widget, Gtk.ButtonBox):
                     for button in widget.get_children():
-                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                        if isinstance(button, Gtk.Button) and button.get_label() in [
+                            "Cancel",
+                            "_Cancel",
+                        ]:
                             cancel_button = button
                             break
                     if cancel_button:
@@ -2804,34 +3020,41 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             if not cancel_button:
                 try:
                     for button in progress_dialog.get_action_area().get_children():
-                        if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                        if isinstance(button, Gtk.Button) and button.get_label() in [
+                            "Cancel",
+                            "_Cancel",
+                        ]:
                             cancel_button = button
                             break
                 except (AttributeError, TypeError):
-                    # get_action_area is deprecated, so it might not be available
                     pass
 
             def on_cancel_clicked(*args):
                 """Handle cancel button click"""
                 print("Uninstall cancellation requested")
 
-                # Set cancellation flag immediately
                 self.uninstallation_cancelled = True
                 self.cancellation_in_progress = True
 
                 try:
-                    # Stop the command runner if it exists
-                    if hasattr(terminal_view, 'terminal_emulator') and hasattr(terminal_view.terminal_emulator, 'command_runner'):
+                    if hasattr(terminal_view, "terminal_emulator") and hasattr(
+                        terminal_view.terminal_emulator, "command_runner"
+                    ):
                         terminal_view.terminal_emulator.command_runner.cancel()
 
-                    # Add clear message to the terminal
-                    if hasattr(terminal_view, 'terminal_emulator'):
-                        GLib.idle_add(lambda: terminal_view.terminal_emulator.append_text("\n\nCANCELLED: Uninstallation was cancelled by user\n"))
+                    if hasattr(terminal_view, "terminal_emulator"):
+                        GLib.idle_add(
+                            lambda: terminal_view.terminal_emulator.append_text(
+                                "\n\nCANCELLED: Uninstallation was cancelled by user\n"
+                            )
+                        )
 
                     # Close any open log files
                     if self.logging_active and self.log_file:
                         try:
-                            self.log_file.write("\n\n--- Uninstallation cancelled by user ---\n")
+                            self.log_file.write(
+                                "\n\n--- Uninstallation cancelled by user ---\n"
+                            )
                             self.log_file.close()
                         except Exception:
                             pass
@@ -2843,7 +3066,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     self.current_installation = None
 
                     # Close dialog with delay to allow final messages to be displayed
-                    GLib.timeout_add(500, lambda: progress_dialog.destroy() if progress_dialog else None)
+                    GLib.timeout_add(
+                        500,
+                        lambda: progress_dialog.destroy() if progress_dialog else None,
+                    )
                 except Exception as e:
                     print(f"Error during uninstall cancellation: {e}")
                     if progress_dialog:
@@ -2852,15 +3078,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 return True
 
             def update_progress(fraction, status_text):
-                # Check if dialog is still valid before proceeding
                 if not progress_dialog or not progress_dialog.get_window():
                     return False
 
-                if status_text and not status_text.strip('-'):
+                if status_text and not status_text.strip("-"):
                     status_label.set_text(status_text)
                     self.update_terminal(terminal_view, status_text + "\n")
 
-                # Get the stack widget from the progress dialog
                 stack = None
                 try:
                     for child in progress_dialog.get_content_area().get_children():
@@ -2888,34 +3112,49 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     parts = line[9:].split(":", 2)
                     if len(parts) >= 2:
                         return {
-                            'type': parts[0],
-                            'value': parts[1],
-                            'message': parts[2] if len(parts) > 2 else ""
+                            "type": parts[0],
+                            "value": parts[1],
+                            "message": parts[2] if len(parts) > 2 else "",
                         }
                 return None
 
             def uninstall_thread():
                 nonlocal script_file, uninstall_process
                 try:
-                    # Check if uninstall script URL is available
-                    uninstall_url = app.get('uninstall_url') or app.get('uninstall_script')
+                    uninstall_url = app.get("uninstall_url") or app.get(
+                        "uninstall_script"
+                    )
                     if not uninstall_url:
                         error_msg = "No uninstall script available for this app!"
                         GLib.idle_add(update_progress, 1.0, error_msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                        GLib.idle_add(
+                            lambda: self.update_terminal(
+                                terminal_view, error_msg + "\n"
+                            )
+                        )
                         time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
                         return
 
                     # Download uninstall script
-                    GLib.idle_add(update_progress, 0.1, "Downloading uninstall script...")
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, "Downloading uninstall script...\n"))
+                    GLib.idle_add(
+                        update_progress, 0.1, "Downloading uninstall script..."
+                    )
+                    GLib.idle_add(
+                        lambda: self.update_terminal(
+                            terminal_view, "Downloading uninstall script...\n"
+                        )
+                    )
                     script_file = self.download_script(uninstall_url)
 
                     if not script_file:
                         error_msg = "Failed to download uninstall script!"
                         GLib.idle_add(update_progress, 1.0, error_msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                        GLib.idle_add(
+                            lambda: self.update_terminal(
+                                terminal_view, error_msg + "\n"
+                            )
+                        )
                         time.sleep(2)
                         GLib.idle_add(progress_dialog.destroy)
                         return
@@ -2924,7 +3163,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     os.chmod(script_file, 0o755)
                     status_msg = "Preparing uninstallation..."
                     GLib.idle_add(update_progress, 0.2, status_msg)
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
+                    GLib.idle_add(
+                        lambda: self.update_terminal(terminal_view, status_msg + "\n")
+                    )
 
                     # Count the number of significant lines in the script to track progress
                     total_lines = 0
@@ -2935,23 +3176,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         "package_install_and_check",
                         "package_remove_and_check",
                         "install_appimage",
-                        "distro_run"
+                        "distro_run",
                     ]
                     # Track heavyweight operations for weighting
                     heavyweight_ops_count = 0
                     total_ops_count = 0
 
                     try:
-                        with open(script_file, 'r') as f:
+                        with open(script_file, "r") as f:
                             for line in f:
                                 # Skip empty lines and comments
                                 line = line.strip()
-                                if line and not line.startswith('#'):
+                                if line and not line.startswith("#"):
                                     total_lines += 1
                                     significant_lines.append(line)
                                     total_ops_count += 1
 
-                                    # Check if the line contains any heavyweight function
                                     for func in heavyweight_functions:
                                         if func in line:
                                             heavyweight_ops_count += 1
@@ -2959,7 +3199,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                         # Ensure we have at least one line
                         total_lines = max(1, total_lines)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
+                        GLib.idle_add(
+                            lambda: self.update_terminal(
+                                terminal_view,
+                                f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n",
+                            )
+                        )
                     except Exception as e:
                         print(f"Error counting script lines: {e}")
                         # Default to a reasonable number if counting fails
@@ -2972,32 +3217,44 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     # - 40% for heavyweight operations
                     # - 30% for other operations
                     heavyweight_weight = 0.4 if heavyweight_ops_count > 0 else 0
-                    normal_ops_weight = 0.7 - heavyweight_weight if total_ops_count - heavyweight_ops_count > 0 else 0.7
+                    normal_ops_weight = (
+                        0.7 - heavyweight_weight
+                        if total_ops_count - heavyweight_ops_count > 0
+                        else 0.7
+                    )
 
                     # Calculate progress weights for each type of line
-                    heavyweight_progress_per_op = heavyweight_weight / max(1, heavyweight_ops_count)
-                    normal_progress_per_op = normal_ops_weight / max(1, total_ops_count - heavyweight_ops_count)
+                    heavyweight_progress_per_op = heavyweight_weight / max(
+                        1, heavyweight_ops_count
+                    )
+                    normal_progress_per_op = normal_ops_weight / max(
+                        1, total_ops_count - heavyweight_ops_count
+                    )
 
-                    # Process state tracking
                     current_line = 0
                     processed_heavyweight_ops = 0
                     processed_normal_ops = 0
-                    current_operation_progress = 0.0  # Track progress within current heavyweight operation
+                    current_operation_progress = (
+                        0.0  # Track progress within current heavyweight operation
+                    )
                     in_heavyweight_operation = False
 
                     # Execute script with better progress tracking
                     status_msg = "Starting uninstallation..."
                     GLib.idle_add(update_progress, base_progress, status_msg)
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_msg + "\n"))
+                    GLib.idle_add(
+                        lambda: self.update_terminal(terminal_view, status_msg + "\n")
+                    )
 
-                    line = "" # Initialize to prevent unbound variable error
+                    line = ""
+
                     uninstall_process = subprocess.Popen(
                         [script_file],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         universal_newlines=True,
                         bufsize=1,
-                        preexec_fn=os.setsid
+                        preexec_fn=os.setsid,
                     )
 
                     if uninstall_process.stdout:
@@ -3009,7 +3266,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     try:
                                         uninstall_process.wait(timeout=3)
                                     except subprocess.TimeoutExpired:
-                                        print("Process refused to stop, forcing SIGKILL...")
+                                        print(
+                                            "Process refused to stop, forcing SIGKILL..."
+                                        )
                                         os.killpg(pgid, signal.SIGKILL)
                                         uninstall_process.wait(timeout=1)
                                 except Exception as e:
@@ -3017,60 +3276,86 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                                 msg = "Uninstallation cancelled!"
                                 GLib.idle_add(update_progress, 1.0, msg)
-                                GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                                GLib.idle_add(
+                                    lambda: self.update_terminal(
+                                        terminal_view, msg + "\n"
+                                    )
+                                )
                                 time.sleep(1)
                                 GLib.idle_add(progress_dialog.destroy)
                                 return
 
-                            
-                            # Update current line
                             current_line += 1
 
-                            # Check for progress markers first
                             progress_info = parse_progress_line(line)
-                            
+
                             if progress_info:
                                 # Real-time progress from heavyweight operation
-                                operation_type = progress_info['type']
-                                
-                                if operation_type == 'DOWNLOAD':
+                                operation_type = progress_info["type"]
+
+                                if operation_type == "DOWNLOAD":
                                     try:
-                                        sub_percent = int(progress_info['value'])
+                                        sub_percent = int(progress_info["value"])
                                         current_operation_progress = sub_percent / 100.0
                                     except (ValueError, TypeError):
                                         current_operation_progress = 0.5
-                                        
-                                elif operation_type == 'PACKAGE':
-                                    value = progress_info['value']
-                                    if '/' in value:
+
+                                elif operation_type == "PACKAGE":
+                                    value = progress_info["value"]
+                                    if "/" in value:
                                         try:
-                                            current, total = value.split('/')
-                                            current_operation_progress = int(current) / max(1, int(total))
+                                            current, total = value.split("/")
+                                            current_operation_progress = int(
+                                                current
+                                            ) / max(1, int(total))
                                         except (ValueError, TypeError):
                                             current_operation_progress = 0.5
                                     else:
                                         try:
-                                            current_operation_progress = int(value) / 100.0
+                                            current_operation_progress = (
+                                                int(value) / 100.0
+                                            )
                                         except (ValueError, TypeError):
                                             current_operation_progress = 0.5
-                                            
-                                elif operation_type == 'EXTRACT':
+
+                                elif operation_type == "EXTRACT":
                                     try:
-                                        sub_percent = int(progress_info['value'])
+                                        sub_percent = int(progress_info["value"])
                                         current_operation_progress = sub_percent / 100.0
                                     except (ValueError, TypeError):
                                         current_operation_progress = 0.5
-                                
+
                                 # Calculate overall progress with sub-operation granularity
-                                completed_ops_progress = processed_heavyweight_ops * heavyweight_progress_per_op
-                                current_op_progress = current_operation_progress * heavyweight_progress_per_op
-                                normal_progress = processed_normal_ops * normal_progress_per_op
-                                
-                                current_progress = base_progress + completed_ops_progress + current_op_progress + normal_progress
+                                completed_ops_progress = (
+                                    processed_heavyweight_ops
+                                    * heavyweight_progress_per_op
+                                )
+                                current_op_progress = (
+                                    current_operation_progress
+                                    * heavyweight_progress_per_op
+                                )
+                                normal_progress = (
+                                    processed_normal_ops * normal_progress_per_op
+                                )
+
+                                current_progress = (
+                                    base_progress
+                                    + completed_ops_progress
+                                    + current_op_progress
+                                    + normal_progress
+                                )
                                 current_progress = min(0.8, current_progress)
-                                
-                                GLib.idle_add(update_progress, current_progress, progress_info['message'])
-                                GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+
+                                GLib.idle_add(
+                                    update_progress,
+                                    current_progress,
+                                    progress_info["message"],
+                                )
+                                GLib.idle_add(
+                                    lambda log_line=line: self.update_terminal(
+                                        terminal_view, log_line
+                                    )
+                                )
                                 continue
 
                             # Determine if this output line indicates a heavyweight operation
@@ -3083,55 +3368,87 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                         in_heavyweight_operation = True
                                         current_operation_progress = 0.0
                                     break
-                            
+
                             if not is_heavyweight and in_heavyweight_operation:
                                 in_heavyweight_operation = False
                                 current_operation_progress = 0.0
 
-                            # Update appropriate counter based on operation type
                             if not is_heavyweight and not in_heavyweight_operation:
                                 processed_normal_ops += 1
 
                             # Calculate current progress
                             # Base progress + heavyweight progress + normal progress
-                            heavyweight_progress = processed_heavyweight_ops * heavyweight_progress_per_op
-                            normal_progress = processed_normal_ops * normal_progress_per_op
-                            current_progress = base_progress + heavyweight_progress + normal_progress
+                            heavyweight_progress = (
+                                processed_heavyweight_ops * heavyweight_progress_per_op
+                            )
+                            normal_progress = (
+                                processed_normal_ops * normal_progress_per_op
+                            )
+                            current_progress = (
+                                base_progress + heavyweight_progress + normal_progress
+                            )
 
                             # Cap progress at 80% - the final 20% is reserved for completion tasks
                             current_progress = min(0.8, current_progress)
 
-                            # Update progress
-                            GLib.idle_add(update_progress, current_progress, line.strip())
+                            GLib.idle_add(
+                                update_progress, current_progress, line.strip()
+                            )
 
-                            # Update terminal
-                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l))
+                            GLib.idle_add(
+                                lambda log_line=line: self.update_terminal(
+                                    terminal_view, log_line
+                                )
+                            )
 
                     uninstall_process.wait()
                     if uninstall_process.returncode == 0 and not uninstall_cancelled:
                         msg = "Finalizing uninstallation..."
                         GLib.idle_add(update_progress, 0.95, msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        GLib.idle_add(
+                            lambda: self.update_terminal(terminal_view, msg + "\n")
+                        )
 
                         # Disable cancel button as uninstallation is almost complete
                         if cancel_button:
-                            GLib.idle_add(lambda b=cancel_button: b.set_sensitive(False) if b else None)
-                            GLib.idle_add(lambda b=cancel_button: b.set_tooltip_text("Uninstallation is almost complete and cannot be cancelled") if b else None)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUninstallation is almost complete and cannot be cancelled\n"))
+                            GLib.idle_add(
+                                lambda b=cancel_button: (
+                                    b.set_sensitive(False) if b else None
+                                )
+                            )
+                            GLib.idle_add(
+                                lambda b=cancel_button: (
+                                    b.set_tooltip_text(
+                                        "Uninstallation is almost complete and cannot be cancelled"
+                                    )
+                                    if b
+                                    else None
+                                )
+                            )
+                            GLib.idle_add(
+                                lambda: self.update_terminal(
+                                    terminal_view,
+                                    "\nUninstallation is almost complete and cannot be cancelled\n",
+                                )
+                            )
 
-                        self.installed_apps.remove(app['folder_name'])
+                        self.installed_apps.remove(app["folder_name"])
                         self.save_installed_apps()
-                        # Get current category before refreshing
+
                         current_category = self._get_selected_category()
                         GLib.idle_add(lambda cat=current_category: self.show_apps(cat))
                         msg = "Uninstallation complete!"
                         GLib.idle_add(update_progress, 1.0, msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        GLib.idle_add(
+                            lambda: self.update_terminal(terminal_view, msg + "\n")
+                        )
 
                         # Close log file if logging is active
                         if self.logging_active and self.log_file:
                             try:
-                                self.log_file.write("\n--- Uninstallation completed successfully ---\n")
+                                self.log_file.write(
+                                    "\n--- Uninstallation completed successfully ---\n"
+                                )
                                 self.log_file.close()
                             except Exception:
                                 pass
@@ -3143,7 +3460,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     else:
                         msg = "Uninstallation failed!"
                         GLib.idle_add(update_progress, 1.0, msg)
-                        GLib.idle_add(lambda: self.update_terminal(terminal_view, msg + "\n"))
+                        GLib.idle_add(
+                            lambda: self.update_terminal(terminal_view, msg + "\n")
+                        )
 
                         # Close log file if logging is active
                         if self.logging_active and self.log_file:
@@ -3163,12 +3482,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     error_msg = f"Uninstallation error: {str(e)}"
                     print(error_msg)
                     GLib.idle_add(update_progress, 1.0, f"Error: {str(e)}")
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, error_msg + "\n"))
+                    GLib.idle_add(
+                        lambda: self.update_terminal(terminal_view, error_msg + "\n")
+                    )
 
                     # Close log file if logging is active
                     if self.logging_active and self.log_file:
                         try:
-                            self.log_file.write(f"\n--- Uninstallation error: {str(e)} ---\n")
+                            self.log_file.write(
+                                f"\n--- Uninstallation error: {str(e)} ---\n"
+                            )
                             self.log_file.close()
                         except Exception:
                             pass
@@ -3184,7 +3507,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             thread.start()
 
             # Connect the response signal
-            progress_dialog.connect('response', on_cancel_clicked)
+            progress_dialog.connect("response", on_cancel_clicked)
 
             # Connect the cancel button if found
             if cancel_button:
@@ -3195,38 +3518,42 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def show_apps(self, category=None):
         """Display apps based on category"""
         try:
-            # Clear current list safely
             GLib.idle_add(self.clear_app_list_box)
 
             # Filter apps based on category and search query
             filtered_apps = self.apps_data
             if category and category != "All Apps":
-                filtered_apps = [app for app in filtered_apps if category in app['categories']]
+                filtered_apps = [
+                    app for app in filtered_apps if category in app["categories"]
+                ]
                 # print(f"Filtered by category '{category}': {len(filtered_apps)} apps")
 
             # Apply search filter if search entry has text
             search_text = self.search_entry.get_text().lower()
             if search_text:
                 # print(f"Filtering by search term: '{search_text}'")
-                original_count = len(filtered_apps)
 
-                # Check if fuzzy search is enabled
-                if self.get_setting("enable_fuzzy_search", False) and (fuzz is not None):
+                if self.get_setting("enable_fuzzy_search", False) and (
+                    fuzz is not None
+                ):
                     # Use fuzzy search
                     fuzzy_threshold = 60  # Minimum score to consider a match (0-100)
                     fuzzy_matches = []
 
                     for app in filtered_apps:
-                        # Check app name
-                        name_score = fuzz.partial_ratio(search_text, app['app_name'].lower())
+                        name_score = fuzz.partial_ratio(
+                            search_text, app["app_name"].lower()
+                        )
 
-                        # Check description
-                        desc_score = fuzz.partial_ratio(search_text, app['description'].lower())
+                        desc_score = fuzz.partial_ratio(
+                            search_text, app["description"].lower()
+                        )
 
-                        # Check categories
                         cat_score = 0
-                        for cat in app['categories']:
-                            cat_score = max(cat_score, fuzz.partial_ratio(search_text, cat.lower()))
+                        for cat in app["categories"]:
+                            cat_score = max(
+                                cat_score, fuzz.partial_ratio(search_text, cat.lower())
+                            )
 
                         # Use the best score
                         max_score = max(name_score, desc_score, cat_score)
@@ -3240,36 +3567,52 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     filtered_apps = [app for app, score in fuzzy_matches]
                 else:
                     # First, try to find matches in app names only
-                    name_matches = [app for app in filtered_apps if search_text in app['app_name'].lower()]
+                    name_matches = [
+                        app
+                        for app in filtered_apps
+                        if search_text in app["app_name"].lower()
+                    ]
 
                     # If no matches in names, try descriptions and categories
                     if not name_matches:
-                        desc_matches = [app for app in filtered_apps
-                                       if search_text in app['description'].lower()]
-                        cat_matches = [app for app in filtered_apps
-                                      if any(search_text in cat.lower() for cat in app['categories'])]
+                        desc_matches = [
+                            app
+                            for app in filtered_apps
+                            if search_text in app["description"].lower()
+                        ]
+                        cat_matches = [
+                            app
+                            for app in filtered_apps
+                            if any(
+                                search_text in cat.lower() for cat in app["categories"]
+                            )
+                        ]
 
                         # Combine description and category matches, ensuring no duplicates
-                        filtered_apps = list({app['app_name']: app for app in desc_matches + cat_matches}.values())
+                        filtered_apps = list(
+                            {
+                                app["app_name"]: app
+                                for app in desc_matches + cat_matches
+                            }.values()
+                        )
                     else:
                         # Use the name matches
                         filtered_apps = name_matches
                 # print(f"Search filtered {original_count} -> {len(filtered_apps)} apps")
 
-            # Add filtered apps to the list using idle_add
             if filtered_apps:
                 # print(f"Displaying {len(filtered_apps)} apps")
                 for app in filtered_apps:
                     GLib.idle_add(lambda a=app: self.add_app_card(a))
             else:
                 # print("No apps match the current filters")
-                # Show a message that no apps match
                 GLib.idle_add(self._show_no_apps_message, search_text)
 
             GLib.idle_add(self.app_list_box.show_all)
         except Exception as e:
             print(f"Error in show_apps: {e}")
             import traceback
+
             traceback.print_exc()
 
     def _show_no_apps_message(self, search_text):
@@ -3278,22 +3621,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         message_box.set_valign(Gtk.Align.CENTER)
         message_box.set_halign(Gtk.Align.CENTER)
 
-        # Add an icon
         icon = Gtk.Image.new_from_icon_name("system-search", Gtk.IconSize.DIALOG)
         message_box.pack_start(icon, False, False, 0)
 
-        # Add message
         if search_text:
             message = Gtk.Label()
-            message.set_markup(f"<span size='larger'>No apps match: <i>{GLib.markup_escape_text(search_text)}</i></span>")
+            message.set_markup(
+                f"<span size='larger'>No apps match: <i>{GLib.markup_escape_text(search_text)}</i></span>"
+            )
             message_box.pack_start(message, False, False, 0)
 
-            # Add explanation about how search works
             explanation = Gtk.Label()
-            explanation.set_markup("<span>We've searched in app names, descriptions, and categories.</span>")
+            explanation.set_markup(
+                "<span>We've searched in app names, descriptions, and categories.</span>"
+            )
             message_box.pack_start(explanation, False, False, 0)
 
-            # Add suggestion
             suggestion = Gtk.Label()
             suggestion.set_markup("<span>Try a different search term</span>")
             message_box.pack_start(suggestion, False, False, 10)
@@ -3306,17 +3649,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def clear_app_list_box(self):
         """Clear the app list box, removing all children"""
-        # Safety check - if app_list_box doesn't exist yet, just return
-        if not hasattr(self, 'app_list_box'):
+        if not hasattr(self, "app_list_box"):
             print("Warning: app_list_box not initialized yet in clear_app_list_box")
             return False
 
         try:
-            # Print the current number of children for debugging
-            children_count = len(self.app_list_box.get_children())
+            # print(f"Clearing app list box children")
             # print(f"Clearing app list box with {children_count} children")
 
-            # Remove all children
             for child in self.app_list_box.get_children():
                 self.app_list_box.remove(child)
 
@@ -3329,29 +3669,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def add_app_card(self, app):
         """Add a single app card to the list box"""
         try:
-            # Create app card
             app_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            app_card.get_style_context().add_class('app-card')
+            app_card.get_style_context().add_class("app-card")
 
-            # Create card content
             card_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
             card_box.set_margin_start(12)
             card_box.set_margin_end(12)
             card_box.set_margin_top(12)
             card_box.set_margin_bottom(12)
 
-            # Check if this app is a result of description search
-            search_text = self.search_entry.get_text().lower()
-            found_in_description = False
-            if search_text and search_text not in app['app_name'].lower() and search_text in app['description'].lower():
-                found_in_description = True
-
             # App logo with error handling
             logo_path = None
             # Try PNG first
-            png_path = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'], 'logo.png')
+            png_path = os.path.join(APPSTORE_LOGO_DIR, app["folder_name"], "logo.png")
             # Try SVG if PNG doesn't exist
-            svg_path = os.path.join(APPSTORE_LOGO_DIR, app['folder_name'], 'logo.svg')
+            svg_path = os.path.join(APPSTORE_LOGO_DIR, app["folder_name"], "logo.svg")
 
             if os.path.exists(png_path):
                 logo_path = png_path
@@ -3360,14 +3692,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             if logo_path:
                 try:
-                    # Load image in a safer way
                     pixbuf = None
                     try:
-                        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(logo_path, 64, 64, True)
+                        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                            logo_path, 64, 64, True
+                        )
                     except GLib.Error as e:
                         print(f"Error loading logo for {app['app_name']}: {e}")
                     except Exception as e:
-                        print(f"Unexpected error loading logo for {app['app_name']}: {e}")
+                        print(
+                            f"Unexpected error loading logo for {app['app_name']}: {e}"
+                        )
 
                     if pixbuf:
                         logo_image = Gtk.Image.new_from_pixbuf(pixbuf)
@@ -3393,7 +3728,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Source type label
             source_label = Gtk.Label()
-            source_type = app.get('app_type', 'unknown').capitalize()
+            source_type = app.get("app_type", "unknown").capitalize()
             source_label.set_markup(f"Source: {GLib.markup_escape_text(source_type)}")
             source_label.get_style_context().add_class("metadata-label")
             source_label.set_size_request(120, -1)
@@ -3404,7 +3739,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             info_box.pack_start(top_row, False, False, 0)
 
             # App description with proper escaping
-            desc_text = app['description'][:100] + "..." if len(app['description']) > 100 else app['description']
+            desc_text = (
+                app["description"][:100] + "..."
+                if len(app["description"]) > 100
+                else app["description"]
+            )
             desc_label = Gtk.Label(label=GLib.markup_escape_text(desc_text))
             desc_label.set_line_wrap(True)
             desc_label.set_halign(Gtk.Align.START)
@@ -3419,36 +3758,34 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Version label (right side of bottom row)
             version_label = Gtk.Label()
-            version = app.get('version', '')
+            version = app.get("version", "")
             if version and isinstance(version, str):
-                if version in ['termux_local_version', 'distro_local_version']:
-                    version = 'Unavailable'
+                if version in ["termux_local_version", "distro_local_version"]:
+                    version = "Unavailable"
                 else:
-                    version = version.split(',')[0].strip()
+                    version = version.split(",")[0].strip()
                     version = version.split()[0].strip()
-                    # Remove leading 'v' if present
-                    if version.startswith('v'):
+                    if version.startswith("v"):
                         version = version[1:]
             else:
-                version = 'Unavailable'
+                version = "Unavailable"
             version_label.set_text(GLib.markup_escape_text(version))
             version_label.get_style_context().add_class("metadata-label")
             version_label.set_size_request(120, -1)
             version_label.set_halign(Gtk.Align.CENTER)
             version_label.set_margin_end(6)
 
-            # Add buttons based on installation status
-            is_installed = app['folder_name'] in self.installed_apps
+            is_installed = app["folder_name"] in self.installed_apps
 
             if is_installed:
-                has_update = app['folder_name'] in self.pending_updates
-                if has_update and app.get('install_url'):
+                has_update = app["folder_name"] in self.pending_updates
+                if has_update and app.get("install_url"):
                     update_button = Gtk.Button(label="Update")
                     update_button.get_style_context().add_class("update-button")
                     update_button.connect("clicked", self.on_update_clicked, app)
                     update_button.set_size_request(120, -1)
                     button_box.pack_start(update_button, False, False, 0)
-                elif app.get('run_cmd') and app.get('run_cmd').strip():  # Check if run_cmd exists and is not empty
+                elif app.get("run_cmd") and app.get("run_cmd").strip():
                     open_button = Gtk.Button(label="Open")
                     open_button.get_style_context().add_class("open-button")
                     open_button.connect("clicked", self.on_open_clicked, app)
@@ -3479,39 +3816,39 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error adding app card for {app['app_name']}: {e}")
             import traceback
+
             traceback.print_exc()
             return False
 
     def on_search_changed(self, entry):
         """Handle search entry changes"""
-        # Get the current search text
         search_text = entry.get_text().lower()
         # print(f"Search changed: '{search_text}'")
 
-        # Remove any existing timeout
-        if hasattr(self, 'search_timeout_id') and self.search_timeout_id:
+        if hasattr(self, "search_timeout_id") and self.search_timeout_id:
             GLib.source_remove(self.search_timeout_id)
             self.search_timeout_id = None
 
-        # Add a small delay to avoid unnecessary refreshes while typing
         self.search_timeout_id = GLib.timeout_add(300, self._do_search, search_text)
 
     def on_search_entry_activate(self, entry):
         """Handle Enter key in search entry - give focus back to the app list"""
-        if hasattr(self, 'app_list_box'):
+        if hasattr(self, "app_list_box"):
             self.app_list_box.grab_focus()
 
     def _do_search(self, search_text):
         """Process the search after delay"""
-        self.search_timeout_id = None  # Clear the timeout ID
+        self.search_timeout_id = None
 
-        # Check all potential classes for tab selection
-        explorer_selected = (self.explore_button.get_style_context().has_class('selected') or
-                            self.explore_button.get_style_context().has_class('active'))
-        installed_selected = (self.installed_button.get_style_context().has_class('selected') or
-                             self.installed_button.get_style_context().has_class('active'))
-        updates_selected = (self.updates_button.get_style_context().has_class('selected') or
-                           self.updates_button.get_style_context().has_class('active'))
+        explorer_selected = self.explore_button.get_style_context().has_class(
+            "selected"
+        ) or self.explore_button.get_style_context().has_class("active")
+        installed_selected = self.installed_button.get_style_context().has_class(
+            "selected"
+        ) or self.installed_button.get_style_context().has_class("active")
+        updates_selected = self.updates_button.get_style_context().has_class(
+            "selected"
+        ) or self.updates_button.get_style_context().has_class("active")
 
         # Log all tab states for debugging
         # print(f"Tab states - Explore: {explorer_selected}, Installed: {installed_selected}, Updates: {updates_selected}")
@@ -3531,12 +3868,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # print(f"Selected section: {selected_section}")
 
-        # Update the appropriate view
         if selected_section == "explore":
-            # Get the currently selected category
             selected_category = None
             for button in self.category_buttons:
-                if button.get_style_context().has_class('selected'):
+                if button.get_style_context().has_class("selected"):
                     selected_category = button.get_label()
                     break
             if selected_category == "All Apps":
@@ -3554,19 +3889,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_delete_event(self, widget, event):
         """Handle window close event"""
         try:
-            # Check if an update is in progress
-            if hasattr(self, 'update_in_progress') and self.update_in_progress:
-                # Create a warning dialog
+            if hasattr(self, "update_in_progress") and self.update_in_progress:
                 dialog = Gtk.MessageDialog(
                     transient_for=self,
                     flags=0,
                     message_type=Gtk.MessageType.WARNING,
                     buttons=Gtk.ButtonsType.NONE,
-                    text="Update In Progress"
+                    text="Update In Progress",
                 )
-                dialog.format_secondary_text("An update is currently in progress. It's recommended to wait until the update completes to avoid potential issues.")
+                dialog.format_secondary_text(
+                    "An update is currently in progress. It's recommended to wait until the update completes to avoid potential issues."
+                )
 
-                # Add "Wait" and "Force Quit" buttons
                 dialog.add_button("Wait", Gtk.ResponseType.CANCEL)
                 dialog.add_button("Force Quit", Gtk.ResponseType.OK)
 
@@ -3580,7 +3914,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 else:
                     # User chose to force quit, forcefully terminate the process
                     print("Force quitting application during update...")
-                    # Run the exit in a separate thread to ensure it can complete
+
                     # even if the main thread is blocked
                     def force_exit():
                         # Give the dialog time to be destroyed
@@ -3591,14 +3925,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     threading.Thread(target=force_exit, daemon=True).start()
                     return False
 
-            # Stop background tasks
             self.stop_background_tasks = True
 
             # Shutdown thread pool
-            if hasattr(self, 'thread_pool'):
+            if hasattr(self, "thread_pool"):
                 self.thread_pool.shutdown(wait=False)
 
-            # Save any pending state
             self.save_installed_apps()
             self.save_pending_updates()
 
@@ -3617,21 +3949,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Reset the refreshing flag
         self.is_refreshing = False
 
-        # Hide the loading indicators
         self.spinner.stop()
         self.spinner.hide()
         self.loading_label.hide()
         # self.refresh_button.set_sensitive(True)
 
-        # Show the header bar again in case of error
         header_bar = self.get_titlebar()
         if header_bar:
             header_bar.show()
 
-        # Show error dialog
         self.show_error_dialog(f"Refresh failed: {error_message}")
 
-        # Setup UI with existing data
         self.setup_app_list_ui()
 
     def download_apps(self):
@@ -3642,21 +3970,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_open_clicked(self, button, app):
         """Handle open button click"""
         try:
-            run_cmd = app.get('run_cmd')
+            run_cmd = app.get("run_cmd")
             if not run_cmd:
                 self.show_error_dialog("No run command specified for this app")
                 return
 
             # Prefix pdrun for distro apps
-            if app.get('app_type') == 'distro':
+            if app.get("app_type") == "distro":
                 run_cmd = f"pdrun {run_cmd}"
 
-            # Check if we should show command output
             if self.get_setting("show_command_output", False):
-                self.show_command_output_window(app.get('name', 'Application'), run_cmd)
+                self.show_command_output_window(app.get("name", "Application"), run_cmd)
             else:
                 # Just run the command
-                subprocess.Popen(['bash', '-c', run_cmd])
+                subprocess.Popen(["bash", "-c", run_cmd])
         except Exception as e:
             self.show_error_dialog(f"Error opening app: {e}")
 
@@ -3695,7 +4022,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def on_destroy(self, *args):
         """Clean up when window is closed"""
         # Close any open log files
-        if hasattr(self, 'log_file') and self.log_file:
+        if hasattr(self, "log_file") and self.log_file:
             try:
                 self.log_file.write("\n--- Application closed ---\n")
                 self.log_file.close()
@@ -3723,7 +4050,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         try:
             if os.path.exists(self.updates_tracking_file):
                 print(f"Loading updates from {self.updates_tracking_file}")
-                with open(self.updates_tracking_file, 'r') as f:
+                with open(self.updates_tracking_file, "r") as f:
                     updates = json.load(f)
                     print(f"Loaded updates: {updates}")
                     return updates
@@ -3740,12 +4067,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # APPSTORE_DIR is already created in setup_directories
             print(f"Saving updates to {self.updates_tracking_file}")
             print(f"Updates to save: {self.pending_updates}")
-            with open(self.updates_tracking_file, 'w') as f:
+            with open(self.updates_tracking_file, "w") as f:
                 json.dump(self.pending_updates, f, indent=2)
             print("Successfully saved updates")
         except Exception as e:
             print(f"Error saving updates tracking: {e}")
             import traceback
+
             traceback.print_exc()
 
     def compare_versions(self, old_data, new_data):
@@ -3753,16 +4081,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         updates = {}
         print("\nComparing versions:")
         for new_app in new_data:
-            app_name = new_app['folder_name']
-            new_version = new_app.get('version')
+            app_name = new_app["folder_name"]
+            new_version = new_app.get("version")
 
             # Find corresponding app in old data
-            old_app = next((app for app in old_data if app['folder_name'] == app_name), None)
+            old_app = next(
+                (app for app in old_data if app["folder_name"] == app_name), None
+            )
             if old_app:
-                old_version = old_app.get('version')
+                old_version = old_app.get("version")
                 print(f"Comparing {app_name}: old={old_version}, new={new_version}")
                 if new_version and old_version != new_version:
-                    print(f"Update found for {app_name}: {old_version} -> {new_version}")
+                    print(
+                        f"Update found for {app_name}: {old_version} -> {new_version}"
+                    )
                     updates[app_name] = new_version
 
         print(f"Total updates found: {len(updates)}")
@@ -3771,45 +4103,40 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def create_update_dialog(self, title="Updating...", allow_cancel=True):
         """Create a dialog for update progress with terminal view"""
-        # Create dialog
         update_dialog = Gtk.Dialog(
-            title=title,
-            parent=self,
-            modal=True,
-            destroy_with_parent=True
+            title=title, parent=self, modal=True, destroy_with_parent=True
         )
 
         # Variables for continuous logging are already set at the class level
 
-        # Create and set custom header bar
         header_bar = Gtk.HeaderBar()
         header_bar.set_show_close_button(False)
         header_bar.set_title(title)
 
-        # Add terminal toggle button to header bar
-        terminal_button = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic", Gtk.IconSize.BUTTON)
+        terminal_button = Gtk.Button.new_from_icon_name(
+            "utilities-terminal-symbolic", Gtk.IconSize.BUTTON
+        )
         terminal_button.set_tooltip_text("Toggle Terminal View")
         header_bar.pack_end(terminal_button)
 
-        # Add save button to header bar
-        save_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
+        save_button = Gtk.Button.new_from_icon_name(
+            "document-save-symbolic", Gtk.IconSize.BUTTON
+        )
         save_button.set_tooltip_text("Save Log to File")
         header_bar.pack_end(save_button)
 
-        # Add log control button to header bar
-        log_control_button = Gtk.Button.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON)
+        log_control_button = Gtk.Button.new_from_icon_name(
+            "media-record-symbolic", Gtk.IconSize.BUTTON
+        )
         log_control_button.set_tooltip_text("Start Continuous Logging")
         header_bar.pack_end(log_control_button)
 
-        # Set the header bar
         update_dialog.set_titlebar(header_bar)
 
-        # Add close button if cancellation is allowed
         if allow_cancel:
             cancel_button = update_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            cancel_button.get_style_context().add_class('destructive-action')
+            cancel_button.get_style_context().add_class("destructive-action")
 
-        # Create stack for switching between progress and terminal views
         stack = Gtk.Stack()
         stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         stack.set_transition_duration(150)
@@ -3829,7 +4156,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         status_label.set_halign(Gtk.Align.START)
         status_label.set_text("Starting update...")
 
-        # Create a scrolled window for status label that expands
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.set_size_request(-1, 60)
@@ -3855,19 +4181,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         terminal_scroll.set_vexpand(True)
         terminal_scroll.set_hexpand(True)
 
-        # Get the terminal view from the terminal emulator
         terminal_view = terminal_emulator.text_view
 
         terminal_box.pack_start(terminal_scroll, True, True, 0)
 
-        # Add button box
         terminal_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         terminal_button_box.set_halign(Gtk.Align.END)
         terminal_button_box.set_margin_top(5)
 
-        # Add clear button
         clear_button = Gtk.Button()
-        clear_icon = Gtk.Image.new_from_icon_name("edit-clear-symbolic", Gtk.IconSize.SMALL_TOOLBAR)
+        clear_icon = Gtk.Image.new_from_icon_name(
+            "edit-clear-symbolic", Gtk.IconSize.SMALL_TOOLBAR
+        )
         clear_button.set_image(clear_icon)
         clear_button.set_tooltip_text("Clear Terminal")
         terminal_button_box.pack_end(clear_button, False, False, 0)
@@ -3877,18 +4202,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         terminal_box.pack_start(terminal_button_box, False, False, 0)
 
-        # Add views to stack
         stack.add_named(progress_box, "progress")
         stack.add_named(terminal_box, "terminal")
 
-        # Set initial view
         stack.set_visible_child_name("progress")
 
-        # Add stack to dialog content area
         content_area = update_dialog.get_content_area()
         content_area.add(stack)
 
-        # Set dialog size
         update_dialog.set_default_size(500, 300)
         update_dialog.set_resizable(True)
 
@@ -3904,13 +4225,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         terminal_button.connect("clicked", toggle_terminal)
 
-        # Show dialog
         update_dialog.show_all()
 
         def on_log_control_clicked(button):
             """Handle log control button click (start/stop logging)"""
             if self.logging_active and self.log_file:
-                # Stop logging
                 try:
                     self.log_file.write("\n--- Logging stopped ---\n")
                     self.log_file.close()
@@ -3919,48 +4238,60 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.log_file = None
                 self.logging_active = False
 
-                # Update button appearance
                 button.set_tooltip_text("Start Continuous Logging")
-                button.set_image(Gtk.Image.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON))
+                button.set_image(
+                    Gtk.Image.new_from_icon_name(
+                        "media-record-symbolic", Gtk.IconSize.BUTTON
+                    )
+                )
 
                 # Notify in terminal
                 self.update_terminal(terminal_view, "\nContinuous logging stopped.\n")
             else:
-                # Start logging - create file chooser dialog
                 file_dialog = Gtk.FileChooserDialog(
                     title="Save Continuous Log",
                     parent=update_dialog,
-                    action=Gtk.FileChooserAction.SAVE
+                    action=Gtk.FileChooserAction.SAVE,
                 )
                 file_dialog.add_buttons(
-                    Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                    Gtk.STOCK_SAVE, Gtk.ResponseType.OK
+                    Gtk.STOCK_CANCEL,
+                    Gtk.ResponseType.CANCEL,
+                    Gtk.STOCK_SAVE,
+                    Gtk.ResponseType.OK,
                 )
 
-                # Set default filename
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 default_filename = f"appstore_update_log_{timestamp}.txt"
                 file_dialog.set_current_name(default_filename)
 
-                # Show the dialog
                 response = file_dialog.run()
 
                 if response == Gtk.ResponseType.OK:
                     self.log_file_path = file_dialog.get_filename()
                     try:
                         # Open file for writing
-                        self.log_file = open(self.log_file_path, 'w')
-                        self.log_file.write(f"--- Continuous logging started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n\n")
+                        self.log_file = open(self.log_file_path, "w")
+                        self.log_file.write(
+                            f"--- Continuous logging started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n\n"
+                        )
                         self.logging_active = True
 
-                        # Update button appearance
                         button.set_tooltip_text("Stop Continuous Logging")
-                        button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic", Gtk.IconSize.BUTTON))
+                        button.set_image(
+                            Gtk.Image.new_from_icon_name(
+                                "media-playback-stop-symbolic", Gtk.IconSize.BUTTON
+                            )
+                        )
 
                         # Notify in terminal
-                        self.update_terminal(terminal_view, f"\nContinuous logging started - saving to {self.log_file_path}\n")
+                        self.update_terminal(
+                            terminal_view,
+                            f"\nContinuous logging started - saving to {self.log_file_path}\n",
+                        )
                     except Exception as e:
-                        self.update_terminal(terminal_view, f"\nError setting up logging: {e}\n")
+                        self.update_terminal(
+                            terminal_view, f"\nError setting up logging: {e}\n"
+                        )
                         self.log_file = None
                         self.logging_active = False
 
@@ -3971,10 +4302,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Function to save log content
         def on_save_log_clicked(button):
-            # Get current log content
-            buf = terminal_view.get_buffer()
-            start_iter, end_iter = buf.get_bounds()
-            text = buf.get_text(start_iter, end_iter, False)
 
             terminal_emulator.save_terminal_output(update_dialog, "Update")
 
@@ -3991,30 +4318,30 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 flags=0,
                 message_type=Gtk.MessageType.QUESTION,
                 buttons=Gtk.ButtonsType.YES_NO,
-                text=f"Update {app['app_name']}?"
+                text=f"Update {app['app_name']}?",
             )
             response = dialog.run()
             dialog.destroy()
 
             if response == Gtk.ResponseType.YES:
-                # Create update dialog with terminal functionality
-                update_dialog, status_label, progress_bar, terminal_view = self.create_update_dialog(
-                    title=f"Updating {app['app_name']}...",
-                    allow_cancel=True
+                update_dialog, status_label, progress_bar, terminal_view = (
+                    self.create_update_dialog(
+                        title=f"Updating {app['app_name']}...", allow_cancel=True
+                    )
                 )
 
-                # Initialize variables for nonlocal access
                 update_process = None
                 update_cancelled = False
                 script_file = None
 
-                # Get cancel button using the dialog's action area
                 cancel_button = None
                 # Modern approach to find buttons in a dialog
                 for widget in update_dialog.get_content_area().get_children():
                     if isinstance(widget, Gtk.ButtonBox):
                         for button in widget.get_children():
-                            if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                            if isinstance(
+                                button, Gtk.Button
+                            ) and button.get_label() in ["Cancel", "_Cancel"]:
                                 cancel_button = button
                                 break
                         if cancel_button:
@@ -4024,15 +4351,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 if not cancel_button:
                     try:
                         for button in update_dialog.get_action_area().get_children():
-                            if isinstance(button, Gtk.Button) and button.get_label() in ["Cancel", "_Cancel"]:
+                            if isinstance(
+                                button, Gtk.Button
+                            ) and button.get_label() in ["Cancel", "_Cancel"]:
                                 cancel_button = button
                                 break
                     except (AttributeError, TypeError):
-                        # get_action_area is deprecated, so it might not be available
                         pass
 
                 def on_cancel_clicked(*args):
-                    nonlocal update_process, update_cancelled, update_dialog, script_file
+                    nonlocal \
+                        update_process, \
+                        update_cancelled, \
+                        update_dialog, \
+                        script_file
                     update_cancelled = True
 
                     # Properly terminate the process if it exists
@@ -4041,17 +4373,27 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             # First try SIGTERM
                             os.killpg(os.getpgid(update_process.pid), signal.SIGTERM)
 
-                            # Wait a second for process to terminate
                             start_time = time.time()
-                            while time.time() - start_time < 1 and update_process.poll() is None:
+                            while (
+                                time.time() - start_time < 1
+                                and update_process.poll() is None
+                            ):
                                 time.sleep(0.1)
 
                             # If process still running, use SIGKILL
                             if update_process.poll() is None:
-                                os.killpg(os.getpgid(update_process.pid), signal.SIGKILL)
+                                os.killpg(
+                                    os.getpgid(update_process.pid), signal.SIGKILL
+                                )
 
-                            terminal_update = "Update cancelled by user. Terminating process..."
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, terminal_update))
+                            terminal_update = (
+                                "Update cancelled by user. Terminating process..."
+                            )
+                            GLib.idle_add(
+                                lambda: self.update_terminal(
+                                    terminal_view, terminal_update
+                                )
+                            )
                         except Exception as e:
                             print(f"Error terminating process: {e}")
 
@@ -4062,12 +4404,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         except Exception as e:
                             print(f"Error removing script file: {e}")
 
-                    # Add a small delay before destroying the dialog
-                    GLib.timeout_add(500, lambda: update_dialog.destroy() if update_dialog else None)
+                    GLib.timeout_add(
+                        500, lambda: update_dialog.destroy() if update_dialog else None
+                    )
                     return True
 
                 # Connect the response signal
-                update_dialog.connect('response', on_cancel_clicked)
+                update_dialog.connect("response", on_cancel_clicked)
 
                 if cancel_button:
                     cancel_button.connect("clicked", on_cancel_clicked)
@@ -4078,22 +4421,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if not status_text:
                         return False
 
-                    # Check if dialog is still valid
                     if not update_dialog or not update_dialog.get_window():
                         return False
 
-                    # Update both progress view and terminal view
-                    if '[#' in status_text and ']' in status_text:
-                        # Extract progress details from aria2c output
-                        progress_part = status_text[status_text.find('['):status_text.find(']')+1]
-                        file_part = status_text[status_text.find(']')+1:].strip()
+                    if "[#" in status_text and "]" in status_text:
+                        progress_part = status_text[
+                            status_text.find("[") : status_text.find("]") + 1
+                        ]
+                        file_part = status_text[status_text.find("]") + 1 :].strip()
 
-                        # Format the status text to show both progress and file
                         status_label.set_text(f"{progress_part}\n{file_part}")
                     elif isinstance(status_text, str) and status_text.strip():
                         status_label.set_text(status_text)
 
-                    # Get the stack widget from the progress dialog
                     stack = None
                     try:
                         for child in update_dialog.get_content_area().get_children():
@@ -4104,19 +4444,34 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         return False
 
                     # Always update terminal view
-                    GLib.idle_add(lambda: self.update_terminal(terminal_view, status_text))
+                    GLib.idle_add(
+                        lambda: self.update_terminal(terminal_view, status_text)
+                    )
 
                     # Make sure terminal view is shown if setting is enabled
                     if stack and self.get_setting("use_terminal_for_progress", False):
-                        GLib.idle_add(lambda s=stack: s.set_visible_child_name("terminal"))
+                        GLib.idle_add(
+                            lambda s=stack: s.set_visible_child_name("terminal")
+                        )
 
                     # Disable cancel button if installation is near completion (80% or more)
                     if fraction >= 0.8 and cancel_button:
-                        GLib.idle_add(lambda b=cancel_button: b.set_sensitive(False) if b else None)
-                        if not hasattr(cancel_button, 'tooltip_set'):
-                            cancel_button.set_tooltip_text("Update is almost complete and cannot be cancelled")
-                            setattr(cancel_button, 'tooltip_set', True)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view, "\nUpdate is almost complete and cannot be cancelled\n"))
+                        GLib.idle_add(
+                            lambda b=cancel_button: (
+                                b.set_sensitive(False) if b else None
+                            )
+                        )
+                        if not hasattr(cancel_button, "tooltip_set"):
+                            cancel_button.set_tooltip_text(
+                                "Update is almost complete and cannot be cancelled"
+                            )
+                            setattr(cancel_button, "tooltip_set", True)
+                            GLib.idle_add(
+                                lambda: self.update_terminal(
+                                    terminal_view,
+                                    "\nUpdate is almost complete and cannot be cancelled\n",
+                                )
+                            )
 
                     progress_bar.set_fraction(fraction)
                     progress_bar.set_text(f"{int(fraction * 100)}%")
@@ -4126,8 +4481,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     nonlocal script_file, update_process
                     try:
                         # Download script (20%)
-                        GLib.idle_add(update_progress, 0.2, "Downloading update script...")
-                        script_file = self.download_script(app['install_url'])
+                        GLib.idle_add(
+                            update_progress, 0.2, "Downloading update script..."
+                        )
+                        script_file = self.download_script(app["install_url"])
                         if not script_file or update_cancelled:
                             if script_file and os.path.exists(script_file):
                                 os.remove(script_file)
@@ -4136,7 +4493,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                         # Make script executable (30%)
                         GLib.idle_add(update_progress, 0.3, "Preparing update...")
-                        os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
+                        os.chmod(
+                            script_file, os.stat(script_file).st_mode | stat.S_IEXEC
+                        )
 
                         # Count the number of significant lines in the script to track progress
                         total_lines = 0
@@ -4147,24 +4506,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             "package_install_and_check",
                             "package_remove_and_check",
                             "install_appimage",
-                            "distro_run"
+                            "distro_run",
                         ]
                         # Track heavyweight operations for weighting
                         heavyweight_ops_count = 0
                         total_ops_count = 0
 
                         try:
-                            with open(script_file, 'r') as f:
+                            with open(script_file, "r") as f:
                                 for line in f:
                                     # Skip empty lines and comments
                                     line = line.strip()
-                                    if line and not line.startswith('#'):
+                                    if line and not line.startswith("#"):
                                         total_lines += 1
                                         significant_lines.append(line)
                                         total_ops_count += 1
 
-
-                                        # Check if the line contains any heavyweight function
                                         for func in heavyweight_functions:
                                             if func in line:
                                                 heavyweight_ops_count += 1
@@ -4172,8 +4529,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                             # Ensure we have at least one line
                             total_lines = max(1, total_lines)
-                            GLib.idle_add(lambda: self.update_terminal(terminal_view,
-                                  f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n"))
+                            GLib.idle_add(
+                                lambda: self.update_terminal(
+                                    terminal_view,
+                                    f"Script contains {total_lines} executable steps with {heavyweight_ops_count} heavyweight operations\n",
+                                )
+                            )
                         except Exception as e:
                             print(f"Error counting script lines: {e}")
                             # Default to a reasonable number if counting fails
@@ -4188,34 +4549,45 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         # - 40% for heavyweight operations
                         # - 20% for other operations
                         heavyweight_weight = 0.4 if heavyweight_ops_count > 0 else 0
-                        normal_ops_weight = 0.6 - heavyweight_weight if total_ops_count - heavyweight_ops_count > 0 else 0.6
+                        normal_ops_weight = (
+                            0.6 - heavyweight_weight
+                            if total_ops_count - heavyweight_ops_count > 0
+                            else 0.6
+                        )
 
                         # Calculate progress weights for each type of line
-                        heavyweight_progress_per_op = heavyweight_weight / max(1, heavyweight_ops_count)
-                        normal_progress_per_op = normal_ops_weight / max(1, total_ops_count - heavyweight_ops_count)
+                        heavyweight_progress_per_op = heavyweight_weight / max(
+                            1, heavyweight_ops_count
+                        )
+                        normal_progress_per_op = normal_ops_weight / max(
+                            1, total_ops_count - heavyweight_ops_count
+                        )
 
-                        # Process state tracking
                         current_line = 0
                         processed_heavyweight_ops = 0
                         processed_normal_ops = 0
 
                         # Execute script with better progress tracking
-                        GLib.idle_add(update_progress, base_progress, "Starting update...")
+                        GLib.idle_add(
+                            update_progress, base_progress, "Starting update..."
+                        )
                         update_process = subprocess.Popen(
-                            ['bash', script_file],
+                            ["bash", script_file],
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT,
                             universal_newlines=True,
                             bufsize=1,
-                            preexec_fn=os.setsid
+                            preexec_fn=os.setsid,
                         )
 
                         while True:
                             if update_cancelled:
                                 try:
-                                    os.killpg(os.getpgid(update_process.pid), signal.SIGTERM)
+                                    os.killpg(
+                                        os.getpgid(update_process.pid), signal.SIGTERM
+                                    )
                                     update_process.wait(timeout=2)
-                                except:
+                                except Exception:
                                     pass
                                 GLib.idle_add(update_dialog.destroy)
                                 return
@@ -4231,15 +4603,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             if not line:
                                 continue
 
-                            # Update current line
                             current_line += 1
 
-                            # Check for PROGRESS marker output from inbuild_functions
                             if line.startswith("PROGRESS:"):
                                 try:
-                                    # Parse progress data in format PROGRESS:percent:message
-                                    _, percent_str, progress_message = line.split(":", 2)
-                                    percent = float(percent_str) / 100  # Convert to 0-1 range
+                                    _, percent_str, progress_message = line.split(
+                                        ":", 2
+                                    )
+                                    percent = (
+                                        float(percent_str) / 100
+                                    )  # Convert to 0-1 range
 
                                     # Use a much more conservative mapping approach
                                     # Map the progress more gradually with stronger emphasis on early stages
@@ -4258,11 +4631,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     # Cap at 0.8 (80%) to reserve the final 20% for completion
                                     current_progress = min(0.8, mapped_progress)
 
-                                    # Update progress with the extracted message
-                                    GLib.idle_add(update_progress, current_progress, progress_message)
+                                    GLib.idle_add(
+                                        update_progress,
+                                        current_progress,
+                                        progress_message,
+                                    )
 
                                     # Also update terminal
-                                    GLib.idle_add(lambda m=progress_message: self.update_terminal(terminal_view, m + "\n"))
+                                    GLib.idle_add(
+                                        lambda m=progress_message: self.update_terminal(
+                                            terminal_view, m + "\n"
+                                        )
+                                    )
 
                                     # Don't skip processing this line for logging
                                 except Exception as e:
@@ -4277,32 +4657,38 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                                     processed_heavyweight_ops += 1
                                     break
 
-                            # Update appropriate counter based on operation type
                             if not is_heavyweight:
                                 processed_normal_ops += 1
 
                             # Calculate current progress
                             # Base progress + heavyweight progress + normal progress
-                            heavyweight_progress = processed_heavyweight_ops * heavyweight_progress_per_op
-                            normal_progress = processed_normal_ops * normal_progress_per_op
-                            current_progress = base_progress + heavyweight_progress + normal_progress
+                            heavyweight_progress = (
+                                processed_heavyweight_ops * heavyweight_progress_per_op
+                            )
+                            normal_progress = (
+                                processed_normal_ops * normal_progress_per_op
+                            )
+                            current_progress = (
+                                base_progress + heavyweight_progress + normal_progress
+                            )
 
                             # Cap progress at 80% - the final 20% is reserved for completion tasks
                             current_progress = min(0.8, current_progress)
 
-                            # Update progress
                             GLib.idle_add(update_progress, current_progress, line)
 
-                            # Update terminal
-                            GLib.idle_add(lambda l=line: self.update_terminal(terminal_view, l + "\n"))
+                            GLib.idle_add(
+                                lambda log_line=line: self.update_terminal(
+                                    terminal_view, log_line + "\n"
+                                )
+                            )
 
                         update_process.wait()
                         if update_process.returncode == 0 and not update_cancelled:
                             GLib.idle_add(update_progress, 0.95, "Finalizing update...")
 
-                            # Remove from pending updates
-                            if app['folder_name'] in self.pending_updates:
-                                del self.pending_updates[app['folder_name']]
+                            if app["folder_name"] in self.pending_updates:
+                                del self.pending_updates[app["folder_name"]]
                                 self.save_pending_updates()
                                 print(f"Removed {app['app_name']} from pending updates")
 
@@ -4314,10 +4700,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             # Refresh both the main app list and updates list
                             def refresh_ui():
                                 self.load_app_metadata()  # Reload app data
-                                if self.updates_button.get_style_context().has_class('selected'):
+                                if self.updates_button.get_style_context().has_class(
+                                    "selected"
+                                ):
                                     self.show_update_apps()  # Refresh updates view if we're in it
                                 else:
                                     self.show_apps()  # Otherwise refresh main view
+
                             GLib.idle_add(refresh_ui)
                         else:
                             GLib.idle_add(update_progress, 1.0, "Update failed!")
@@ -4333,8 +4722,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     finally:
                         if update_process:
                             try:
-                                os.killpg(os.getpgid(update_process.pid), signal.SIGTERM)
-                            except:
+                                os.killpg(
+                                    os.getpgid(update_process.pid), signal.SIGTERM
+                                )
+                            except Exception:
                                 pass
                         update_process = None
                         if script_file and os.path.exists(script_file):
@@ -4352,56 +4743,50 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error in update process: {e}")
             import traceback
+
             traceback.print_exc()
 
     def on_update_system(self, button):
         """Handle check for updates button click"""
         print("\n=== Starting Update Check Process ===")
         button.set_sensitive(False)
-        button.get_style_context().add_class('updating')
+        button.get_style_context().add_class("updating")
 
-        # Set update in progress flag
         self.update_in_progress = True
 
         # Store the current active section when starting the update
         self.update_started_section = "updates"
 
-        # Create spinner for version check
         version_check_spinner = Gtk.Spinner()
         version_check_spinner.set_size_request(16, 16)
         version_check_spinner.start()
 
-        # Create box for button content
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         button_box.pack_start(version_check_spinner, False, False, 0)
         button_box.pack_start(Gtk.Label(label="Checking versions..."), False, False, 0)
-        button.remove(button.get_children()[0])  # Remove current label
+        button.remove(button.get_children()[0])
         button.add(button_box)
         button.show_all()
 
-        # Add a timer to continuously check button visibility during update
-        self.button_visibility_timer_id = GLib.timeout_add(100, self.ensure_correct_update_button_visibility)
+        self.button_visibility_timer_id = GLib.timeout_add(
+            100, self.ensure_correct_update_button_visibility
+        )
 
         # Ensure correct button visibility
         self.ensure_correct_update_button_visibility()
 
-        # Initialize logging for system updates
         self.log_file_path = None
         self.logging_active = False
         self.log_file = None
 
-        # Set up automatic logging for system updates
         try:
-            # Create a timestamp for the log filename
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            # Create logs directory if it doesn't exist
             log_dir = os.path.expanduser("~/.appstore/logs")
             os.makedirs(log_dir, exist_ok=True)
-            # Set up log file path
+
             self.log_file_path = os.path.join(log_dir, f"system_update_{timestamp}.log")
-            self.log_file = open(self.log_file_path, 'w')
+            self.log_file = open(self.log_file_path, "w")
             self.logging_active = True
-            # Write initial log entry
             self.log_file.write(f"=== System Update Log - {timestamp} ===\n\n")
             self.log_file.flush()
             print(f"Continuous logging started - saving to {self.log_file_path}")
@@ -4418,12 +4803,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     if "Checking versions" in label:
                         # Keep spinner and label during version check
                         if not isinstance(button.get_child(), Gtk.Box):
-                            # Create spinner box if not already present
                             button.remove(button.get_child())
                             spinner = Gtk.Spinner()
                             spinner.set_size_request(16, 16)
                             spinner.start()
-                            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                            box = Gtk.Box(
+                                orientation=Gtk.Orientation.HORIZONTAL, spacing=6
+                            )
                             box.pack_start(spinner, False, False, 0)
                             box.pack_start(Gtk.Label(label=label), False, False, 0)
                             button.add(box)
@@ -4467,7 +4853,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 update_progress_safe(0)
 
                 cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && echo $TERMUX_APP_PACKAGE_MANAGER"
-                result = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True)
+                result = subprocess.run(
+                    ["bash", "-c", cmd], capture_output=True, text=True
+                )
                 pkg_manager = result.stdout.strip()
                 print(f"Detected package manager: {pkg_manager}")
 
@@ -4483,12 +4871,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     print("Running apt update...")
                     cmd = "apt update -y"
                     try:
-                        process = subprocess.Popen(['bash', '-c', cmd],
-                                                    stdout=subprocess.PIPE,
-                                                    stderr=subprocess.STDOUT,
-                                                    universal_newlines=True)
-                        # Set a timeout for the command
-                        output, _ = process.communicate(timeout=30)  # 30 seconds timeout
+                        process = subprocess.Popen(
+                            ["bash", "-c", cmd],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            universal_newlines=True,
+                        )
+
+                        output, _ = process.communicate(
+                            timeout=30
+                        )  # 30 seconds timeout
                         print(output.strip())
                     except subprocess.TimeoutExpired:
                         if process:
@@ -4500,17 +4892,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 elif pkg_manager == "pacman":
                     print("Running pacman update...")
                     cmd = "pacman -Sy --noconfirm"
-                    process = subprocess.Popen(['bash', '-c', cmd],
-                                            stdout=subprocess.PIPE,
-                                            stderr=subprocess.STDOUT,
-                                            universal_newlines=True)
+                    process = subprocess.Popen(
+                        ["bash", "-c", cmd],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        universal_newlines=True,
+                    )
 
                     if process.stdout:
                         for line in process.stdout:
                             print(line.strip())
                     process.wait()
 
-                # Check and update distro repositories if available
                 print("\n=== Checking Distro Repositories ===")
                 update_progress_safe(20, "Checking distro repositories...")
 
@@ -4520,81 +4913,122 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 if os.path.exists(termux_desktop_config):
                     try:
-                        with open(termux_desktop_config, 'r') as f:
+                        with open(termux_desktop_config, "r") as f:
                             for line in f:
                                 line = line.strip()
-                                if line.startswith('distro_add_answer='):
-                                    value = line.split('=')[1].strip().strip('"').strip("'").lower()
-                                    distro_enabled = value in ['y', 'yes']
-                                elif line.startswith('selected_distro='):
-                                    selected_distro = line.split('=')[1].strip().strip('"').strip("'").lower()
+                                if line.startswith("distro_add_answer="):
+                                    value = (
+                                        line.split("=")[1]
+                                        .strip()
+                                        .strip('"')
+                                        .strip("'")
+                                        .lower()
+                                    )
+                                    distro_enabled = value in ["y", "yes"]
+                                elif line.startswith("selected_distro="):
+                                    selected_distro = (
+                                        line.split("=")[1]
+                                        .strip()
+                                        .strip('"')
+                                        .strip("'")
+                                        .lower()
+                                    )
 
-                        print(f"Distro enabled: {distro_enabled}, Selected distro: {selected_distro}")
+                        print(
+                            f"Distro enabled: {distro_enabled}, Selected distro: {selected_distro}"
+                        )
 
                         if distro_enabled and selected_distro:
                             # Test if distro is working
                             test_cmd = f"{self.get_distro_command(selected_distro)} 'echo test'"
                             try:
-                                test_result = subprocess.run(['bash', '-c', test_cmd],
-                                                          capture_output=True,
-                                                          text=True,
-                                                          timeout=10)
+                                test_result = subprocess.run(
+                                    ["bash", "-c", test_cmd],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=10,
+                                )
                                 if test_result.returncode == 0:
-                                    print(f"Distro test successful for {selected_distro}")
-                                    update_progress_safe(25, f"Updating {selected_distro} repositories...")
+                                    print(
+                                        f"Distro test successful for {selected_distro}"
+                                    )
+                                    update_progress_safe(
+                                        25,
+                                        f"Updating {selected_distro} repositories...",
+                                    )
 
-                                    # Create distro update command based on distro type
                                     distro_update_cmd = ""
                                     base_cmd = self.get_distro_command(selected_distro)
-                                    if selected_distro in ['ubuntu', 'debian']:
-                                        distro_update_cmd = f"{base_cmd} 'apt update -y'"
-                                    elif selected_distro == 'fedora':
-                                        distro_update_cmd = f"{base_cmd} 'dnf check-update -y || true'"
-                                    elif selected_distro == 'archlinux':
-                                        distro_update_cmd = f"{base_cmd} 'pacman -Sy --noconfirm'"
+                                    if selected_distro in ["ubuntu", "debian"]:
+                                        distro_update_cmd = (
+                                            f"{base_cmd} 'apt update -y'"
+                                        )
+                                    elif selected_distro == "fedora":
+                                        distro_update_cmd = (
+                                            f"{base_cmd} 'dnf check-update -y || true'"
+                                        )
+                                    elif selected_distro == "archlinux":
+                                        distro_update_cmd = (
+                                            f"{base_cmd} 'pacman -Sy --noconfirm'"
+                                        )
 
                                     if distro_update_cmd:
-                                        print(f"Running {selected_distro} update command: {distro_update_cmd}")
+                                        print(
+                                            f"Running {selected_distro} update command: {distro_update_cmd}"
+                                        )
                                         try:
-                                            update_process = subprocess.Popen(['bash', '-c', distro_update_cmd],
-                                                                stdout=subprocess.PIPE,
-                                                                stderr=subprocess.STDOUT,
-                                                                universal_newlines=True)
+                                            update_process = subprocess.Popen(
+                                                ["bash", "-c", distro_update_cmd],
+                                                stdout=subprocess.PIPE,
+                                                stderr=subprocess.STDOUT,
+                                                universal_newlines=True,
+                                            )
 
-                                            # Read and display the output from the distro update command
                                             if update_process.stdout:
                                                 for line in update_process.stdout:
                                                     print(line.strip())
                                                     # Log update output if logging is active
-                                                    if self.logging_active and self.log_file:
+                                                    if (
+                                                        self.logging_active
+                                                        and self.log_file
+                                                    ):
                                                         try:
-                                                            self.log_file.write(f"[{selected_distro} update] {line}")
+                                                            self.log_file.write(
+                                                                f"[{selected_distro} update] {line}"
+                                                            )
                                                             self.log_file.flush()
                                                         except Exception:
                                                             pass
 
                                             update_process.wait()
-                                            print(f"{selected_distro} repository update completed with return code: {update_process.returncode}")
+                                            print(
+                                                f"{selected_distro} repository update completed with return code: {update_process.returncode}"
+                                            )
                                         except Exception as e:
-                                            print(f"Error updating {selected_distro} repositories: {e}")
+                                            print(
+                                                f"Error updating {selected_distro} repositories: {e}"
+                                            )
                                 else:
-                                    print(f"Distro test failed for {selected_distro}: {test_result.stderr}")
+                                    print(
+                                        f"Distro test failed for {selected_distro}: {test_result.stderr}"
+                                    )
                             except Exception as e:
                                 print(f"Error during distro test: {e}")
                     except Exception as e:
                         print(f"Error reading termux desktop config: {e}")
                 else:
-                    print("Termux desktop config not found. Skipping distro repository update.")
+                    print(
+                        "Termux desktop config not found. Skipping distro repository update."
+                    )
 
                 # Step 2: Download new app data (35-70%)
                 print("\n=== Downloading App Updates ===")
                 update_progress_safe(35, "Downloading updates...")
 
-                # Load old apps.json data before backing up
-                old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, 'apps.json')
+                old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, "apps.json")
                 old_apps_data = []
                 if os.path.exists(old_json_path):
-                    with open(old_json_path, 'r') as f:
+                    with open(old_json_path, "r") as f:
                         old_apps_data = json.load(f)
 
                 # Backup old apps.json
@@ -4607,124 +5041,167 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 command = f"aria2c -x 16 -s 16 {GITHUB_APPS_JSON} -d {APPSTORE_DIR} -o apps.json"
                 subprocess.run(command, shell=True, check=True)
 
-                # Load new apps.json data
-                with open(APPSTORE_JSON, 'r') as f:
+                with open(APPSTORE_JSON, "r") as f:
                     new_apps_data = json.load(f)
 
                 # First update versions for native apps
                 print("\n=== Getting Native App Versions ===")
                 for app in new_apps_data:
-                    if (app.get('app_type') == 'native' and
-                        app.get('version') == 'termux_local_version' and
-                        app.get('package_name')):
+                    if (
+                        app.get("app_type") == "native"
+                        and app.get("version") == "termux_local_version"
+                        and app.get("package_name")
+                    ):
                         cmd = "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
-                        cmd += "if [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"apt\" ]]; then "
+                        cmd += 'if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then '
                         cmd += f"apt-cache policy {app['package_name']} | grep 'Candidate:' | awk '{{print $2}}'; "
-                        cmd += "elif [[ \"$TERMUX_APP_PACKAGE_MANAGER\" == \"pacman\" ]]; then "
+                        cmd += 'elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then '
                         cmd += f"pacman -Si {app['package_name']} 2>/dev/null | grep 'Version' | awk '{{print $3}}'; fi"
 
                         try:
-                            result = subprocess.run(['bash', '-c', cmd],
-                                                 capture_output=True,
-                                                 text=True,
-                                                 timeout=10)
+                            result = subprocess.run(
+                                ["bash", "-c", cmd],
+                                capture_output=True,
+                                text=True,
+                                timeout=10,
+                            )
                             if result.returncode == 0 and result.stdout.strip():
-                                app['version'] = result.stdout.strip()
-                                print(f"Got version for {app['app_name']}: {app['version']}")
+                                app["version"] = result.stdout.strip()
+                                print(
+                                    f"Got version for {app['app_name']}: {app['version']}"
+                                )
                             else:
-                                app['version'] = 'Unavailable'
-                                print(f"Could not get version for {app['app_name']}, setting to Unavailable")
+                                app["version"] = "Unavailable"
+                                print(
+                                    f"Could not get version for {app['app_name']}, setting to Unavailable"
+                                )
                         except Exception as e:
-                            app['version'] = 'Unavailable'
+                            app["version"] = "Unavailable"
                             print(f"Error getting version for {app['app_name']}: {e}")
 
                 # Then update versions for distro apps if distro is enabled
                 print("\n=== Getting Distro App Versions ===")
                 termux_desktop_config = "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
-                distro_enabled = False  # Initialize the variable
-                selected_distro = None  # Initialize the variable
+                distro_enabled = False
+
+                selected_distro = None
 
                 if os.path.exists(termux_desktop_config):
                     try:
-                        with open(termux_desktop_config, 'r') as f:
+                        with open(termux_desktop_config, "r") as f:
                             for line in f:
                                 line = line.strip()
-                                if line.startswith('distro_add_answer='):
-                                    value = line.split('=')[1].strip().strip('"').strip("'").lower()
-                                    distro_enabled = value in ['y', 'yes']
-                                elif line.startswith('selected_distro='):
-                                    selected_distro = line.split('=')[1].strip().strip('"').strip("'").lower()
+                                if line.startswith("distro_add_answer="):
+                                    value = (
+                                        line.split("=")[1]
+                                        .strip()
+                                        .strip('"')
+                                        .strip("'")
+                                        .lower()
+                                    )
+                                    distro_enabled = value in ["y", "yes"]
+                                elif line.startswith("selected_distro="):
+                                    selected_distro = (
+                                        line.split("=")[1]
+                                        .strip()
+                                        .strip('"')
+                                        .strip("'")
+                                        .lower()
+                                    )
                     except Exception as e:
                         print(f"Error reading Termux Desktop config: {e}")
                         return  # Exit the method if there's an error
 
-                # Debugging output
-                print(f"distro_enabled: {distro_enabled}, selected_distro: {selected_distro}")
+                print(
+                    f"distro_enabled: {distro_enabled}, selected_distro: {selected_distro}"
+                )
 
                 if distro_enabled and selected_distro:
                     # First check if distro is working correctly
                     test_cmd = f"{self.get_distro_command(selected_distro)} 'echo test'"
                     try:
-                        test_result = subprocess.run(['bash', '-c', test_cmd],
-                                                  capture_output=True,
-                                                  text=True,
-                                                  timeout=10)
+                        test_result = subprocess.run(
+                            ["bash", "-c", test_cmd],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        )
                         if test_result.returncode == 0:
                             print(f"Distro test successful for {selected_distro}")
 
                             for app in new_apps_data:
-                                if (app.get('app_type') == 'distro' and
-                                    app.get('version') == 'distro_local_version'):
-
-                                    supported_distro = app.get('supported_distro')
-                                    if supported_distro and supported_distro != 'all':
-                                        supported_distros = [d.strip().lower() for d in supported_distro.split(',')]
+                                if (
+                                    app.get("app_type") == "distro"
+                                    and app.get("version") == "distro_local_version"
+                                ):
+                                    supported_distro = app.get("supported_distro")
+                                    if supported_distro and supported_distro != "all":
+                                        supported_distros = [
+                                            d.strip().lower()
+                                            for d in supported_distro.split(",")
+                                        ]
                                         if selected_distro not in supported_distros:
-                                            print(f"Skipping {app['app_name']}: not compatible with {selected_distro}")
+                                            print(
+                                                f"Skipping {app['app_name']}: not compatible with {selected_distro}"
+                                            )
                                             continue
 
-                                    package_name = app.get(f"{selected_distro}_package_name")
+                                    package_name = app.get(
+                                        f"{selected_distro}_package_name"
+                                    )
                                     if not package_name:
-                                        package_name = app.get('package_name')
+                                        package_name = app.get("package_name")
 
                                     if not package_name:
-                                        print(f"Skipping {app['app_name']}: no package name found")
+                                        print(
+                                            f"Skipping {app['app_name']}: no package name found"
+                                        )
                                         continue
 
                                     print(f"Getting version for {app['app_name']}...")
                                     cmd = self.get_distro_command(selected_distro)
 
-                                    if selected_distro in ['ubuntu', 'debian']:
+                                    if selected_distro in ["ubuntu", "debian"]:
                                         cmd += f" 'apt-cache policy {package_name} | grep Candidate: | awk \"{{print \\$2}}\"'"
-                                    elif selected_distro == 'fedora':
-                                        cmd += f" 'dnf info {package_name} 2>/dev/null | awk -F: \"/Version/ {{print \\$2}}\" | tr -d \" \"'"
-                                    elif selected_distro == 'archlinux':
+                                    elif selected_distro == "fedora":
+                                        cmd += f' \'dnf info {package_name} 2>/dev/null | awk -F: "/Version/ {{print \\$2}}" | tr -d " "\''
+                                    elif selected_distro == "archlinux":
                                         cmd += f" 'pacman -Si {package_name} 2>/dev/null | grep Version | awk \"{{print \\$3}}\"'"
 
                                     try:
-                                        result = subprocess.run(['bash', '-c', cmd],
-                                                             capture_output=True,
-                                                             text=True,
-                                                             timeout=30)
-                                        if result.returncode == 0 and result.stdout.strip():
-                                            app['version'] = result.stdout.strip()
-                                            print(f"Got version for {app['app_name']}: {app['version']}")
+                                        result = subprocess.run(
+                                            ["bash", "-c", cmd],
+                                            capture_output=True,
+                                            text=True,
+                                            timeout=30,
+                                        )
+                                        if (
+                                            result.returncode == 0
+                                            and result.stdout.strip()
+                                        ):
+                                            app["version"] = result.stdout.strip()
+                                            print(
+                                                f"Got version for {app['app_name']}: {app['version']}"
+                                            )
                                         else:
-                                            app['version'] = 'Unavailable'
-                                            print(f"Could not get version for {app['app_name']}, setting to Unavailable")
+                                            app["version"] = "Unavailable"
+                                            print(
+                                                f"Could not get version for {app['app_name']}, setting to Unavailable"
+                                            )
                                     except Exception as e:
-                                        app['version'] = 'Unavailable'
-                                        print(f"Error getting version for {app['app_name']}: {e}")
+                                        app["version"] = "Unavailable"
+                                        print(
+                                            f"Error getting version for {app['app_name']}: {e}"
+                                        )
                         else:
                             print(f"proot-distro test failed for {selected_distro}")
                             print(f"Error: {test_result.stderr}")
                     except Exception as e:
                         print(f"Error testing proot-distro: {e}")
 
-                # Save updated versions to new apps.json
                 print("\n=== Saving Updated App Data ===")
                 print("Saving updated versions to apps.json...")
-                with open(APPSTORE_JSON, 'w') as f:
+                with open(APPSTORE_JSON, "w") as f:
                     json.dump(new_apps_data, f, indent=2)
                 print("Successfully saved updated app data")
 
@@ -4734,30 +5211,51 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     print(f"\nChecking app: {app['app_name']}")
                     print(f"Is installed? {app['folder_name'] in self.installed_apps}")
 
-                    if app['folder_name'] in self.installed_apps:  # Only check installed apps
-                        old_app = next((a for a in old_apps_data if a['folder_name'] == app['folder_name']), None)
+                    if (
+                        app["folder_name"] in self.installed_apps
+                    ):  # Only check installed apps
+                        old_app = next(
+                            (
+                                a
+                                for a in old_apps_data
+                                if a["folder_name"] == app["folder_name"]
+                            ),
+                            None,
+                        )
                         print(f"Found old app data? {old_app is not None}")
 
                         if old_app:
-                            old_version = old_app.get('version')
-                            new_version = app.get('version')
+                            old_version = old_app.get("version")
+                            new_version = app.get("version")
                             print(f"Old version: {old_version}")
                             print(f"New version: {new_version}")
 
                             # Skip comparison if either version is unavailable
-                            if old_version in ['termux_local_version', 'distro_local_version', 'Unavailable'] or \
-                               new_version in ['termux_local_version', 'distro_local_version', 'Unavailable']:
-                                print(f"Skipping {app['app_name']}: version unavailable")
+                            if old_version in [
+                                "termux_local_version",
+                                "distro_local_version",
+                                "Unavailable",
+                            ] or new_version in [
+                                "termux_local_version",
+                                "distro_local_version",
+                                "Unavailable",
+                            ]:
+                                print(
+                                    f"Skipping {app['app_name']}: version unavailable"
+                                )
                                 continue
 
                             if old_version != new_version:
-                                print(f"Update found for {app['app_name']}: {old_version} -> {new_version}")
-                                self.pending_updates[app['folder_name']] = new_version
-                                print(f"Added to pending updates. Current updates: {self.pending_updates}")
+                                print(
+                                    f"Update found for {app['app_name']}: {old_version} -> {new_version}"
+                                )
+                                self.pending_updates[app["folder_name"]] = new_version
+                                print(
+                                    f"Added to pending updates. Current updates: {self.pending_updates}"
+                                )
                             else:
                                 print("No update needed - versions match")
 
-                # Save pending updates
                 print("\n=== Saving Updates ===")
                 print(f"Final pending updates: {self.pending_updates}")
                 self.save_pending_updates()
@@ -4772,9 +5270,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 # Step 4: Load new data and check for updates (90-100%)
                 print("\n=== Processing Updates ===")
-                update_progress_safe(90, "Checking versions...")  # Keep spinner during version checks
+                update_progress_safe(
+                    90, "Checking versions..."
+                )  # Keep spinner during version checks
 
-                # Load new app data and check for updates
                 self.load_app_metadata()
 
                 print("\n=== Update Check Complete ===")
@@ -4782,7 +5281,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 # Log update completion
                 if self.logging_active and self.log_file:
-                    self.log_file.write("\n=== System Update Process Completed Successfully ===\n")
+                    self.log_file.write(
+                        "\n=== System Update Process Completed Successfully ===\n"
+                    )
                     self.log_file.flush()
 
                 # Reset button and refresh display
@@ -4793,30 +5294,28 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 # Then refresh the current view
                 def refresh_update_view():
-                    # Get current active section by checking which button is selected
+
                     current_section = None
-                    if self.explore_button.get_style_context().has_class('selected'):
+                    if self.explore_button.get_style_context().has_class("selected"):
                         current_section = "explore"
-                    elif self.installed_button.get_style_context().has_class('selected'):
+                    elif self.installed_button.get_style_context().has_class(
+                        "selected"
+                    ):
                         current_section = "installed"
-                    elif self.updates_button.get_style_context().has_class('selected'):
+                    elif self.updates_button.get_style_context().has_class("selected"):
                         current_section = "updates"
 
-                    # Clear current content to prevent flashing old content
                     self.clear_app_list_box()
 
-                    # Add loading indicator
-                    loading_box = self.show_temporary_loading()
+                    self.show_temporary_loading()
 
                     # Apply the correct UI state for the current tab
                     if current_section == "explore":
                         self.sidebar.show()
                         self.update_button.hide()
 
-                        # Load content on next idle
                         def load_content():
                             self.clear_app_list_box()
-                            # Get the currently selected category
                             selected_category = self._get_selected_category()
                             self.show_apps(selected_category)
                             return False
@@ -4827,7 +5326,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         self.sidebar.hide()
                         self.update_button.hide()
 
-                        # Load content on next idle
                         def load_content():
                             self.clear_app_list_box()
                             self.show_installed_apps()
@@ -4839,7 +5337,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         self.sidebar.hide()
                         self.update_button.show()
 
-                        # Load content on next idle
                         def load_content():
                             self.clear_app_list_box()
                             self.show_update_apps()
@@ -4854,6 +5351,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 print(f"Error: {str(e)}")
                 print("Stack trace:")
                 import traceback
+
                 traceback.print_exc()
 
                 # Log error information
@@ -4868,14 +5366,21 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         pass
 
                 # Reset update state on error
-                GLib.idle_add(lambda: setattr(self, 'update_in_progress', False))
+                GLib.idle_add(lambda: setattr(self, "update_in_progress", False))
 
-                # Remove visibility timer on error
-                if hasattr(self, 'button_visibility_timer_id'):
-                    GLib.idle_add(lambda: GLib.source_remove(self.button_visibility_timer_id))
-                    GLib.idle_add(lambda: setattr(self, 'button_visibility_timer_id', None))
+                if hasattr(self, "button_visibility_timer_id"):
+                    GLib.idle_add(
+                        lambda: GLib.source_remove(self.button_visibility_timer_id)
+                    )
+                    GLib.idle_add(
+                        lambda: setattr(self, "button_visibility_timer_id", None)
+                    )
 
-                GLib.idle_add(lambda: self.show_error_dialog(f"Update check failed: {str(e)}"))
+                GLib.idle_add(
+                    lambda exception=e: self.show_error_dialog(
+                        f"Update check failed: {str(exception)}"
+                    )
+                )
                 GLib.idle_add(self.update_complete)
 
         # Submit the update task to the thread pool
@@ -4884,21 +5389,22 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def update_progress(self, progress):
         """Update the progress bar effect on button"""
         # Mark the button as updating
-        self.update_button.get_style_context().add_class('updating')
+        self.update_button.get_style_context().add_class("updating")
 
-        # Remove any existing progress classes
         for i in range(10, 101, 10):
-            self.update_button.get_style_context().remove_class(f'progress-{i}')
+            self.update_button.get_style_context().remove_class(f"progress-{i}")
 
         # Round progress to nearest 10%
         if progress > 0:
             progress_rounded = int(round(progress / 10.0)) * 10
-            progress_rounded = max(10, min(100, progress_rounded))  # Ensure between 10-100
+            progress_rounded = max(
+                10, min(100, progress_rounded)
+            )  # Ensure between 10-100
 
-            # Add the appropriate progress class
-            self.update_button.get_style_context().add_class(f'progress-{progress_rounded}')
+            self.update_button.get_style_context().add_class(
+                f"progress-{progress_rounded}"
+            )
 
-            # Update the button label
             self.update_button.set_label(f"Updating... {progress}%")
 
         # Keep the UI responsive
@@ -4922,23 +5428,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         self.update_button.set_sensitive(True)
         self.update_button.set_label("Check for Updates")
-        self.update_button.get_style_context().remove_class('updating')
+        self.update_button.get_style_context().remove_class("updating")
 
-        # Remove all progress classes
         for i in range(10, 101, 10):
-            self.update_button.get_style_context().remove_class(f'progress-{i}')
+            self.update_button.get_style_context().remove_class(f"progress-{i}")
 
         # Reset update state
         self.update_in_progress = False
 
-        # Remove the visibility check timer
-        if hasattr(self, 'button_visibility_timer_id'):
+        if hasattr(self, "button_visibility_timer_id"):
             GLib.source_remove(self.button_visibility_timer_id)
             self.button_visibility_timer_id = None
 
         # Ensure update button is only visible on updates tab
-        if not (self.updates_button.get_style_context().has_class('selected') or
-                self.updates_button.get_style_context().has_class('active')):
+        if not (
+            self.updates_button.get_style_context().has_class("selected")
+            or self.updates_button.get_style_context().has_class("active")
+        ):
             self.update_button.hide()
 
         return False
@@ -4949,56 +5455,56 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # Store current section for later reference
             self.current_section = section
 
-            # Update button states - keep both classes for compatibility
-            for btn in [self.explore_button, self.installed_button, self.updates_button]:
+            for btn in [
+                self.explore_button,
+                self.installed_button,
+                self.updates_button,
+            ]:
                 if btn:  # Safety check
-                    btn.get_style_context().remove_class('selected')
-                    btn.get_style_context().remove_class('active')
+                    btn.get_style_context().remove_class("selected")
+                    btn.get_style_context().remove_class("active")
 
-            # Add both classes to clicked button for proper highlighting
             if button:  # Safety check
-                button.get_style_context().add_class('selected')
-                button.get_style_context().add_class('active')
+                button.get_style_context().add_class("selected")
+                button.get_style_context().add_class("active")
 
-            # Hide search box when changing tabs
-            if hasattr(self, 'search_box') and hasattr(self, 'search_button'):
+            if hasattr(self, "search_box") and hasattr(self, "search_button"):
                 self.search_box.hide()
-                self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                self.search_button.set_image(
+                    Gtk.Image.new_from_icon_name(
+                        "system-search-symbolic", Gtk.IconSize.BUTTON
+                    )
+                )
                 self.search_button.set_tooltip_text("Show Search")
 
-            # Safety check for UI initialization
-            if not hasattr(self, 'search_entry') or not hasattr(self, 'app_list_box'):
-                print("Warning: UI not fully initialized yet, deferring section display")
+            if not hasattr(self, "search_entry") or not hasattr(self, "app_list_box"):
+                print(
+                    "Warning: UI not fully initialized yet, deferring section display"
+                )
                 # Schedule another attempt after a short delay
                 GLib.timeout_add(100, lambda: self.on_section_clicked(button, section))
                 return
 
-            # Clear search entry
-            if hasattr(self, 'search_entry'):
+            if hasattr(self, "search_entry"):
                 self.search_entry.set_text("")
 
-            # Clear current content immediately to prevent brief display of previous content
-            if hasattr(self, 'app_list_box'):
+            if hasattr(self, "app_list_box"):
                 self.clear_app_list_box()
 
-                # Add temporary loading indicator
-                loading_box = self.show_temporary_loading()
+                self.show_temporary_loading()
 
-            # Show/hide UI elements based on section
             if section == "explore":
-                # Show categories, hide update button
-                if hasattr(self, 'sidebar'):
+                if hasattr(self, "sidebar"):
                     self.sidebar.show()
-                if hasattr(self, 'update_button'):
+                if hasattr(self, "update_button"):
                     self.update_button.hide()
-                if hasattr(self, 'search_entry'):
+                if hasattr(self, "search_entry"):
                     self.search_entry.show()
 
-                # Get the currently selected category
                 selected_category = None
-                if hasattr(self, 'category_buttons'):
+                if hasattr(self, "category_buttons"):
                     for cat_button in self.category_buttons:
-                        if cat_button.get_style_context().has_class('selected'):
+                        if cat_button.get_style_context().has_class("selected"):
                             selected_category = cat_button.get_label()
                             break
 
@@ -5007,8 +5513,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 # Define function to load content and remove spinner
                 def load_explore_content():
-                    if hasattr(self, 'app_list_box'):
-                        self.clear_app_list_box()  # Clear loading indicator
+                    if hasattr(self, "app_list_box"):
+                        self.clear_app_list_box()
                         self.show_apps(selected_category)
                     return False
 
@@ -5016,37 +5522,35 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 GLib.idle_add(load_explore_content)
 
             elif section == "installed":
-                # Hide categories and update button
-                if hasattr(self, 'sidebar'):
+                if hasattr(self, "sidebar"):
                     self.sidebar.hide()
-                if hasattr(self, 'update_button'):
+                if hasattr(self, "update_button"):
                     self.update_button.hide()
-                if hasattr(self, 'search_entry'):
+                if hasattr(self, "search_entry"):
                     self.search_entry.show()
 
                 # Define function to load content and remove spinner
                 def load_installed_content():
-                    if hasattr(self, 'app_list_box'):
-                        self.clear_app_list_box()  # Clear loading indicator
+                    if hasattr(self, "app_list_box"):
+                        self.clear_app_list_box()
                         self.show_installed_apps()
                     return False
 
                 # Schedule content load on next idle
                 GLib.idle_add(load_installed_content)
 
-            else:  # updates
-                # Hide categories, show update button
-                if hasattr(self, 'sidebar'):
+            else:
+                if hasattr(self, "sidebar"):
                     self.sidebar.hide()
-                if hasattr(self, 'update_button'):
+                if hasattr(self, "update_button"):
                     self.update_button.show()
-                if hasattr(self, 'search_entry'):
+                if hasattr(self, "search_entry"):
                     self.search_entry.show()
 
                 # Define function to load content and remove spinner
                 def load_updates_content():
-                    if hasattr(self, 'app_list_box'):
-                        self.clear_app_list_box()  # Clear loading indicator
+                    if hasattr(self, "app_list_box"):
+                        self.clear_app_list_box()
                         self.show_update_apps()
                     return False
 
@@ -5056,38 +5560,46 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error in on_section_clicked: {e}")
             import traceback
+
             traceback.print_exc()
 
     def show_installed_apps(self):
         """Display installed apps"""
         try:
-            # Clear current list safely
             GLib.idle_add(self.clear_app_list_box)
 
-            # Get search text
             search_text = self.search_entry.get_text().lower()
 
             # Collect all installed apps
-            all_installed_apps = [app for app in self.apps_data if app['folder_name'] in self.installed_apps]
+            all_installed_apps = [
+                app
+                for app in self.apps_data
+                if app["folder_name"] in self.installed_apps
+            ]
 
             # If search text is provided, filter the apps
             if search_text:
-                if self.get_setting("enable_fuzzy_search", False) and (fuzz is not None):
+                if self.get_setting("enable_fuzzy_search", False) and (
+                    fuzz is not None
+                ):
                     # Use fuzzy search
                     fuzzy_threshold = 60  # Minimum score to consider a match
                     fuzzy_matches = []
 
                     for app in all_installed_apps:
-                        # Check app name
-                        name_score = fuzz.partial_ratio(search_text, app['app_name'].lower())
+                        name_score = fuzz.partial_ratio(
+                            search_text, app["app_name"].lower()
+                        )
 
-                        # Check description
-                        desc_score = fuzz.partial_ratio(search_text, app['description'].lower())
+                        desc_score = fuzz.partial_ratio(
+                            search_text, app["description"].lower()
+                        )
 
-                        # Check categories
                         cat_score = 0
-                        for cat in app['categories']:
-                            cat_score = max(cat_score, fuzz.partial_ratio(search_text, cat.lower()))
+                        for cat in app["categories"]:
+                            cat_score = max(
+                                cat_score, fuzz.partial_ratio(search_text, cat.lower())
+                            )
 
                         # Use the best score
                         max_score = max(name_score, desc_score, cat_score)
@@ -5102,10 +5614,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 else:
                     # Use regular search
                     filtered_apps = [
-                        app for app in all_installed_apps
-                        if search_text in app['app_name'].lower() or
-                        search_text in app['description'].lower() or
-                        any(search_text in cat.lower() for cat in app['categories'])
+                        app
+                        for app in all_installed_apps
+                        if search_text in app["app_name"].lower()
+                        or search_text in app["description"].lower()
+                        or any(search_text in cat.lower() for cat in app["categories"])
                     ]
             else:
                 filtered_apps = all_installed_apps
@@ -5113,10 +5626,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # If no apps found, show a message
             if not filtered_apps:
                 if search_text:
-                    # Show the regular no search results message
                     GLib.idle_add(self._show_no_apps_message, search_text)
                 else:
-                    # Show a specific "no installed apps" message
                     GLib.idle_add(self._show_no_installed_apps_message)
             else:
                 # Display the filtered apps
@@ -5127,6 +5638,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error in show_installed_apps: {e}")
             import traceback
+
             traceback.print_exc()
 
     def _show_no_installed_apps_message(self):
@@ -5135,18 +5647,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         message_box.set_valign(Gtk.Align.CENTER)
         message_box.set_halign(Gtk.Align.CENTER)
 
-        # Add an icon
-        icon = Gtk.Image.new_from_icon_name("system-software-install", Gtk.IconSize.DIALOG)
+        icon = Gtk.Image.new_from_icon_name(
+            "system-software-install", Gtk.IconSize.DIALOG
+        )
         message_box.pack_start(icon, False, False, 0)
 
-        # Add message
         message = Gtk.Label()
         message.set_markup("<span size='larger'>No Applications Installed</span>")
         message_box.pack_start(message, False, False, 0)
 
-        # Add suggestion
         suggestion = Gtk.Label()
-        suggestion.set_markup("<span>Go to the Explore tab to install applications</span>")
+        suggestion.set_markup(
+            "<span>Go to the Explore tab to install applications</span>"
+        )
         message_box.pack_start(suggestion, False, False, 10)
 
         self.app_list_box.pack_start(message_box, True, True, 0)
@@ -5154,33 +5667,40 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def show_update_apps(self):
         """Display apps that have updates available"""
         try:
-            # Clear current list safely
             GLib.idle_add(self.clear_app_list_box)
 
-            # Get search text
             search_text = self.search_entry.get_text().lower()
 
             # Collect all apps with updates
-            all_update_apps = [app for app in self.apps_data if app['folder_name'] in self.pending_updates]
+            all_update_apps = [
+                app
+                for app in self.apps_data
+                if app["folder_name"] in self.pending_updates
+            ]
 
             # If search text is provided, filter the apps
             if search_text:
-                if self.get_setting("enable_fuzzy_search", False) and (fuzz is not None):
+                if self.get_setting("enable_fuzzy_search", False) and (
+                    fuzz is not None
+                ):
                     # Use fuzzy search
                     fuzzy_threshold = 60  # Minimum score to consider a match
                     fuzzy_matches = []
 
                     for app in all_update_apps:
-                        # Check app name
-                        name_score = fuzz.partial_ratio(search_text, app['app_name'].lower())
+                        name_score = fuzz.partial_ratio(
+                            search_text, app["app_name"].lower()
+                        )
 
-                        # Check description
-                        desc_score = fuzz.partial_ratio(search_text, app['description'].lower())
+                        desc_score = fuzz.partial_ratio(
+                            search_text, app["description"].lower()
+                        )
 
-                        # Check categories
                         cat_score = 0
-                        for cat in app['categories']:
-                            cat_score = max(cat_score, fuzz.partial_ratio(search_text, cat.lower()))
+                        for cat in app["categories"]:
+                            cat_score = max(
+                                cat_score, fuzz.partial_ratio(search_text, cat.lower())
+                            )
 
                         # Use the best score
                         max_score = max(name_score, desc_score, cat_score)
@@ -5195,10 +5715,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 else:
                     # Use regular search
                     filtered_apps = [
-                        app for app in all_update_apps
-                        if search_text in app['app_name'].lower() or
-                        search_text in app['description'].lower() or
-                        any(search_text in cat.lower() for cat in app['categories'])
+                        app
+                        for app in all_update_apps
+                        if search_text in app["app_name"].lower()
+                        or search_text in app["description"].lower()
+                        or any(search_text in cat.lower() for cat in app["categories"])
                     ]
             else:
                 filtered_apps = all_update_apps
@@ -5206,10 +5727,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             # If no updates found, show a message
             if not filtered_apps:
                 if search_text:
-                    # Show the regular no search results message
                     GLib.idle_add(self._show_no_apps_message, search_text)
                 else:
-                    # Show a specific "no updates available" message
                     GLib.idle_add(self._show_no_updates_message)
             else:
                 # Display the filtered apps
@@ -5220,6 +5739,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error in show_update_apps: {e}")
             import traceback
+
             traceback.print_exc()
 
     def _show_no_updates_message(self):
@@ -5228,16 +5748,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         message_box.set_valign(Gtk.Align.CENTER)
         message_box.set_halign(Gtk.Align.CENTER)
 
-        # Add an icon
-        icon = Gtk.Image.new_from_icon_name("software-update-available", Gtk.IconSize.DIALOG)
+        icon = Gtk.Image.new_from_icon_name(
+            "software-update-available", Gtk.IconSize.DIALOG
+        )
         message_box.pack_start(icon, False, False, 0)
 
-        # Add message
         message = Gtk.Label()
         message.set_markup("<span size='larger'>No Updates Available</span>")
         message_box.pack_start(message, False, False, 0)
 
-        # Add suggestion
         suggestion = Gtk.Label()
         suggestion.set_markup("<span>All your applications are up to date</span>")
         message_box.pack_start(suggestion, False, False, 10)
@@ -5281,15 +5800,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Only refresh UI if not in the middle of cancellation
         # This prevents double UI refreshes when cancelling
-        if not hasattr(self, 'cancellation_in_progress') or not self.cancellation_in_progress:
+        if (
+            not hasattr(self, "cancellation_in_progress")
+            or not self.cancellation_in_progress
+        ):
             GLib.idle_add(self.refresh_complete)
 
             # Use a small delay for showing apps to ensure proper UI state
-            if hasattr(self, 'current_section') and self.current_section == "explore":
+            if hasattr(self, "current_section") and self.current_section == "explore":
                 # Keep the same category selection
-                GLib.timeout_add(100, lambda: self.show_apps(self._get_selected_category()))
-            elif hasattr(self, 'current_section'):
-                # Handle other sections
+                GLib.timeout_add(
+                    100, lambda: self.show_apps(self._get_selected_category())
+                )
+            elif hasattr(self, "current_section"):
                 if self.current_section == "installed":
                     GLib.timeout_add(100, self.show_installed_apps)
                 elif self.current_section == "updates":
@@ -5301,9 +5824,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def _get_selected_category(self):
         """Helper to get the currently selected category"""
-        if hasattr(self, 'category_buttons'):
+        if hasattr(self, "category_buttons"):
             for cat_button in self.category_buttons:
-                if cat_button.get_style_context().has_class('selected'):
+                if cat_button.get_style_context().has_class("selected"):
                     category = cat_button.get_label()
                     return None if category == "All Apps" else category
         return None
@@ -5313,22 +5836,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         if not text:
             return
 
-        # Create a terminal emulator for the text view if it doesn't exist yet
-        if not hasattr(terminal_view, 'terminal_emulator'):
-            # Initialize the terminal emulator
+        if not hasattr(terminal_view, "terminal_emulator"):
             if TerminalEmulator:
                 terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
             else:
                 terminal_view.terminal_emulator = None
-                
-        # Handle case where terminal_emulator might theoretically be None
-        if hasattr(terminal_view, 'terminal_emulator') and terminal_view.terminal_emulator:
-             # Process and append the text
+
+        if (
+            hasattr(terminal_view, "terminal_emulator")
+            and terminal_view.terminal_emulator
+        ):
             terminal_view.terminal_emulator.append_text(text)
         else:
-            pass # Or fallback logging
+            pass  # Or fallback logging
 
-        # Append to log file if continuous logging is active
         if self.logging_active and self.log_file:
             try:
                 # Strip ANSI codes when writing to log file
@@ -5337,14 +5858,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 else:
                     clean_text = text
 
-                # Write to log file
                 self.log_file.write(clean_text)
                 self.log_file.flush()  # Ensure it's written immediately
             except Exception as e:
                 # If there's an error writing to the log file, disable logging
                 try:
-                    error_msg = f"\nError writing to log file: {str(e)}\nLogging disabled.\n"
-                    if hasattr(terminal_view, 'terminal_emulator') and terminal_view.terminal_emulator:
+                    error_msg = (
+                        f"\nError writing to log file: {str(e)}\nLogging disabled.\n"
+                    )
+                    if (
+                        hasattr(terminal_view, "terminal_emulator")
+                        and terminal_view.terminal_emulator
+                    ):
                         terminal_view.terminal_emulator.append_text(error_msg)
                     self.log_file.close()
                 except Exception:
@@ -5357,12 +5882,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def create_progress_dialog(self, title="Installing...", allow_cancel=True):
         """Create an enhanced progress dialog with advanced terminal integration"""
-        # Create dialog
         progress_dialog = Gtk.Dialog(
-            title=title,
-            parent=self,
-            modal=True,
-            destroy_with_parent=True
+            title=title, parent=self, modal=True, destroy_with_parent=True
         )
 
         # Variables for continuous logging
@@ -5370,37 +5891,38 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.logging_active = False
         self.log_file = None
 
-        # Create and set custom header bar
         header_bar = Gtk.HeaderBar()
         header_bar.set_show_close_button(False)
         header_bar.set_title(title)
 
-        # Add terminal toggle button to header bar with enhanced styling
-        terminal_button = Gtk.Button.new_from_icon_name("utilities-terminal-symbolic", Gtk.IconSize.BUTTON)
+        terminal_button = Gtk.Button.new_from_icon_name(
+            "utilities-terminal-symbolic", Gtk.IconSize.BUTTON
+        )
         terminal_button.set_tooltip_text("Toggle Terminal View")
         terminal_button.get_style_context().add_class("suggested-action")
         header_bar.pack_end(terminal_button)
 
-        # Add save button to header bar
-        save_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
+        save_button = Gtk.Button.new_from_icon_name(
+            "document-save-symbolic", Gtk.IconSize.BUTTON
+        )
         save_button.set_tooltip_text("Save Log to File")
         header_bar.pack_end(save_button)
 
-        # Add log control button to header bar (start/stop logging)
-        log_control_button = Gtk.Button.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON)
+        log_control_button = Gtk.Button.new_from_icon_name(
+            "media-record-symbolic", Gtk.IconSize.BUTTON
+        )
         log_control_button.set_tooltip_text("Start Continuous Logging")
         log_control_button.get_style_context().add_class("destructive-action")
         header_bar.pack_end(log_control_button)
 
-        # Set the header bar
         progress_dialog.set_titlebar(header_bar)
 
-        # Add close button if cancellation is allowed
         if allow_cancel:
-            cancel_button = progress_dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-            cancel_button.get_style_context().add_class('destructive-action')
+            cancel_button = progress_dialog.add_button(
+                "Cancel", Gtk.ResponseType.CANCEL
+            )
+            cancel_button.get_style_context().add_class("destructive-action")
 
-        # Create stack for switching between progress and terminal views
         stack = Gtk.Stack()
         stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         stack.set_transition_duration(150)
@@ -5420,7 +5942,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         status_label.set_halign(Gtk.Align.START)
         status_label.set_text("Starting...")
 
-        # Create a scrolled window for status label that expands
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.set_size_request(-1, 60)
@@ -5451,19 +5972,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         terminal_scroll.set_vexpand(True)
         terminal_scroll.set_hexpand(True)
 
-        # Get the terminal view from the terminal emulator
         terminal_view = terminal_emulator.text_view
 
         terminal_box.pack_start(terminal_scroll, True, True, 0)
 
-        # Add enhanced terminal control buttons
         terminal_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         terminal_button_box.set_halign(Gtk.Align.END)
         terminal_button_box.set_margin_top(5)
 
-        # Clear terminal button
         clear_button = Gtk.Button()
-        clear_icon = Gtk.Image.new_from_icon_name("edit-clear-symbolic", Gtk.IconSize.SMALL_TOOLBAR)
+        clear_icon = Gtk.Image.new_from_icon_name(
+            "edit-clear-symbolic", Gtk.IconSize.SMALL_TOOLBAR
+        )
         clear_button.set_image(clear_icon)
         clear_button.set_tooltip_text("Clear Terminal")
         terminal_button_box.pack_end(clear_button, False, False, 0)
@@ -5473,23 +5993,20 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         terminal_box.pack_start(terminal_button_box, False, False, 0)
 
-        # Add views to stack
         stack.add_named(progress_box, "progress")
         stack.add_named(terminal_box, "terminal")
 
-        # Set the initial view based on user preference
         use_terminal = self.get_setting("use_terminal_for_progress", False)
         initial_view = "terminal" if use_terminal else "progress"
         stack.set_visible_child_name(initial_view)
 
-        # Update button styling based on initial view
         if use_terminal:
             terminal_button.get_style_context().remove_class("suggested-action")
 
-        # Update tooltip based on initial view
-        terminal_button.set_tooltip_text("Show Progress" if use_terminal else "Show Terminal")
+        terminal_button.set_tooltip_text(
+            "Show Progress" if use_terminal else "Show Terminal"
+        )
 
-        # Add stack to dialog's content area with margins
         content_area = progress_dialog.get_content_area()
         content_area.add(stack)
 
@@ -5503,7 +6020,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             new_view = "terminal" if current == "progress" else "progress"
             stack.set_visible_child_name(new_view)
 
-            # Update button appearance based on active view
             if new_view == "terminal":
                 button.set_tooltip_text("Show Progress")
                 button.get_style_context().remove_class("suggested-action")
@@ -5513,7 +6029,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         terminal_button.connect("clicked", toggle_terminal)
 
-        # Show all widgets
         progress_dialog.show_all()
 
         def on_dialog_response(dialog, response_id):
@@ -5530,7 +6045,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
             # Only handle the dialog destruction if not already being handled by on_cancel_clicked
             if response_id == Gtk.ResponseType.CANCEL:
-                if not hasattr(self, 'cancellation_in_progress') or not self.cancellation_in_progress:
+                if (
+                    not hasattr(self, "cancellation_in_progress")
+                    or not self.cancellation_in_progress
+                ):
                     dialog.destroy()
 
         # Connect response signal
@@ -5538,34 +6056,33 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         # Function to save log content
         def on_save_log_clicked(button):
-            # Get current log content
+
             buf = terminal_view.get_buffer()
             start_iter, end_iter = buf.get_bounds()
             text = buf.get_text(start_iter, end_iter, False)
 
-            # Create file chooser dialog
             file_dialog = Gtk.FileChooserDialog(
                 title="Save Log File",
                 parent=progress_dialog,
-                action=Gtk.FileChooserAction.SAVE
+                action=Gtk.FileChooserAction.SAVE,
             )
             file_dialog.add_buttons(
-                Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                Gtk.STOCK_SAVE, Gtk.ResponseType.OK
+                Gtk.STOCK_CANCEL,
+                Gtk.ResponseType.CANCEL,
+                Gtk.STOCK_SAVE,
+                Gtk.ResponseType.OK,
             )
 
-            # Set default filename with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             default_filename = f"appstore_log_{timestamp}.txt"
             file_dialog.set_current_name(default_filename)
 
-            # Show the dialog
             response = file_dialog.run()
 
             if response == Gtk.ResponseType.OK:
                 filename = file_dialog.get_filename()
                 try:
-                    with open(filename, 'w') as f:
+                    with open(filename, "w") as f:
                         # Strip ANSI codes when saving to file
                         if TerminalAnsiColorParser:
                             clean_text = TerminalAnsiColorParser().strip_ansi(text)
@@ -5573,7 +6090,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                             clean_text = text
                         f.write(clean_text)
 
-                    # Update status label with success message
                     current_text = status_label.get_text()
                     status_label.set_text(f"{current_text}\nLog saved to: {filename}")
                 except Exception as e:
@@ -5589,7 +6105,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # Function to handle log control (start/stop logging)
         def on_log_control_clicked(button):
             if self.logging_active and self.log_file:
-                # Stop logging
                 try:
                     self.log_file.write("\n--- Logging stopped ---\n")
                     self.log_file.close()
@@ -5598,52 +6113,63 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 self.log_file = None
                 self.logging_active = False
 
-                # Update button appearance
                 button.set_tooltip_text("Start Continuous Logging")
-                button.set_image(Gtk.Image.new_from_icon_name("media-record-symbolic", Gtk.IconSize.BUTTON))
+                button.set_image(
+                    Gtk.Image.new_from_icon_name(
+                        "media-record-symbolic", Gtk.IconSize.BUTTON
+                    )
+                )
                 button.get_style_context().add_class("destructive-action")
                 button.get_style_context().remove_class("suggested-action")
 
                 # Notify in terminal
                 terminal_emulator.append_text("\n--- Continuous logging stopped ---\n")
             else:
-                # Start logging - create file chooser dialog
                 file_dialog = Gtk.FileChooserDialog(
                     title="Save Continuous Log",
                     parent=progress_dialog,
-                    action=Gtk.FileChooserAction.SAVE
+                    action=Gtk.FileChooserAction.SAVE,
                 )
                 file_dialog.add_buttons(
-                    Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                    Gtk.STOCK_SAVE, Gtk.ResponseType.OK
+                    Gtk.STOCK_CANCEL,
+                    Gtk.ResponseType.CANCEL,
+                    Gtk.STOCK_SAVE,
+                    Gtk.ResponseType.OK,
                 )
 
-                # Set default filename with timestamp
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 default_filename = f"appstore_continuous_log_{timestamp}.txt"
                 file_dialog.set_current_name(default_filename)
 
-                # Show the dialog
                 response = file_dialog.run()
 
                 if response == Gtk.ResponseType.OK:
                     self.log_file_path = file_dialog.get_filename()
                     try:
                         # Open file for writing
-                        self.log_file = open(self.log_file_path, 'w')
-                        self.log_file.write(f"--- Continuous logging started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n\n")
+                        self.log_file = open(self.log_file_path, "w")
+                        self.log_file.write(
+                            f"--- Continuous logging started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n\n"
+                        )
                         self.logging_active = True
 
-                        # Update button appearance
                         button.set_tooltip_text("Stop Continuous Logging")
-                        button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic", Gtk.IconSize.BUTTON))
+                        button.set_image(
+                            Gtk.Image.new_from_icon_name(
+                                "media-playback-stop-symbolic", Gtk.IconSize.BUTTON
+                            )
+                        )
                         button.get_style_context().remove_class("destructive-action")
                         button.get_style_context().add_class("suggested-action")
 
                         # Notify in terminal
-                        terminal_emulator.append_text(f"\n--- Continuous logging started - saving to {self.log_file_path} ---\n")
+                        terminal_emulator.append_text(
+                            f"\n--- Continuous logging started - saving to {self.log_file_path} ---\n"
+                        )
                     except Exception as e:
-                        terminal_emulator.append_text(f"\n--- Error setting up logging: {e} ---\n")
+                        terminal_emulator.append_text(
+                            f"\n--- Error setting up logging: {e} ---\n"
+                        )
                         self.log_file = None
                         self.logging_active = False
 
@@ -5656,9 +6182,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def ensure_correct_update_button_visibility(self):
         """Ensure update button is only visible on updates tab"""
-        # Check for either 'selected' or 'active' class for compatibility
-        if (self.updates_button.get_style_context().has_class('selected') or
-            self.updates_button.get_style_context().has_class('active')):
+
+        if self.updates_button.get_style_context().has_class(
+            "selected"
+        ) or self.updates_button.get_style_context().has_class("active"):
             self.update_button.show()
         else:
             self.update_button.hide()
@@ -5666,28 +6193,23 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def show_temporary_loading(self):
         """Show a temporary loading spinner in the app list box"""
-        # Safety check - if app_list_box doesn't exist yet, just return
-        if not hasattr(self, 'app_list_box'):
+        if not hasattr(self, "app_list_box"):
             print("Warning: app_list_box not initialized yet in show_temporary_loading")
             return None
 
         try:
-            # Create a centered box for the spinner
             loading_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
             loading_box.set_valign(Gtk.Align.CENTER)
             loading_box.set_halign(Gtk.Align.CENTER)
 
-            # Create and start spinner
             spinner = Gtk.Spinner()
             spinner.set_size_request(32, 32)
             spinner.start()
             loading_box.pack_start(spinner, False, False, 0)
 
-            # Add loading label
             label = Gtk.Label(label="Loading...")
             loading_box.pack_start(label, False, False, 0)
 
-            # Add to app list box
             self.app_list_box.pack_start(loading_box, True, True, 0)
             loading_box.show_all()
 
@@ -5698,19 +6220,19 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def load_explore_content(self):
         """Load content for the explore section"""
-        self.clear_app_list_box()  # Clear loading indicator
+        self.clear_app_list_box()
         self.show_apps()
         return False
 
     def load_installed_content(self):
         """Load content for the installed section"""
-        self.clear_app_list_box()  # Clear loading indicator
+        self.clear_app_list_box()
         self.show_installed_apps()
         return False
 
     def load_updates_content(self):
         """Load content for the updates section"""
-        self.clear_app_list_box()  # Clear loading indicator
+        self.clear_app_list_box()
         self.show_update_apps()
         return False
 
@@ -5724,19 +6246,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 # Migrate installed apps data
                 old_installed_apps = os.path.join(old_dir, "installed_apps.json")
                 if os.path.exists(old_installed_apps):
-                    print(f"Migrating installed apps data from {old_installed_apps} to {INSTALLED_APPS_FILE}")
+                    print(
+                        f"Migrating installed apps data from {old_installed_apps} to {INSTALLED_APPS_FILE}"
+                    )
                     shutil.copy2(old_installed_apps, INSTALLED_APPS_FILE)
 
                 # Migrate updates tracking data
                 old_updates = os.path.join(old_dir, "updates.json")
                 if os.path.exists(old_updates):
-                    print(f"Migrating updates data from {old_updates} to {UPDATES_TRACKING_FILE}")
+                    print(
+                        f"Migrating updates data from {old_updates} to {UPDATES_TRACKING_FILE}"
+                    )
                     shutil.copy2(old_updates, UPDATES_TRACKING_FILE)
 
                 # Migrate last version check data
                 old_version_check = os.path.join(old_dir, "last_version_check")
                 if os.path.exists(old_version_check):
-                    print(f"Migrating version check data from {old_version_check} to {LAST_VERSION_CHECK_FILE}")
+                    print(
+                        f"Migrating version check data from {old_version_check} to {LAST_VERSION_CHECK_FILE}"
+                    )
                     shutil.copy2(old_version_check, LAST_VERSION_CHECK_FILE)
 
                 # Migrate settings if they exist
@@ -5747,7 +6275,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 print("Migration completed successfully.")
 
-                # Remove the old directory without creating a backup
                 print(f"Removing old data directory: {old_dir}")
                 try:
                     shutil.rmtree(old_dir)
@@ -5759,15 +6286,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Error during data migration: {e}")
             import traceback
+
             traceback.print_exc()
 
     def load_settings(self):
         """Load user settings from settings.json"""
         try:
             if os.path.exists(SETTINGS_FILE):
-                with open(SETTINGS_FILE, 'r') as f:
+                with open(SETTINGS_FILE, "r") as f:
                     self.settings = json.load(f)
-                    # Add any keys that might be missing in old settings files
                     if "use_terminal_for_progress" not in self.settings:
                         self.settings["use_terminal_for_progress"] = False
                     if "enable_auto_refresh" not in self.settings:
@@ -5778,19 +6305,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         self.settings["show_command_output"] = False
                     if "enable_fuzzy_search" not in self.settings:
                         self.settings["enable_fuzzy_search"] = False
-                    # Save the updated settings
                     self.save_settings()
             else:
-                # Create default settings
                 self.settings = {
                     "use_terminal_for_progress": False,
                     "enable_auto_refresh": True,
                     "last_category": "All Apps",
                     "show_command_output": False,
-                    "enable_fuzzy_search": False
-                    # Add more default settings as needed
+                    "enable_fuzzy_search": False,
                 }
-                # Save default settings
                 self.save_settings()
                 print("Created default settings")
         except Exception as e:
@@ -5801,13 +6324,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 "enable_auto_refresh": True,
                 "last_category": "All Apps",
                 "show_command_output": False,
-                "enable_fuzzy_search": False
+                "enable_fuzzy_search": False,
             }
 
     def save_settings(self):
         """Save user settings to settings.json"""
         try:
-            with open(SETTINGS_FILE, 'w') as f:
+            with open(SETTINGS_FILE, "w") as f:
                 json.dump(self.settings, f, indent=2)
                 print(f"Settings saved: {self.settings}")
         except Exception as e:
@@ -5824,10 +6347,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def ensure_spinner_visible(self):
         """Helper method to ensure spinner is visible and active"""
+
         def update_spinner():
             self.spinner.set_property("visible", True)
             self.spinner.set_property("active", True)
-            self.spinner.start()  # Add this explicit call to start the animation
+            self.spinner.start()
+
             self.spinner.show_all()
             self.loading_label.set_property("visible", True)
             self.loading_label.show_all()
@@ -5838,7 +6363,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 parent.set_property("visible", True)
                 parent.show_all()
 
-            # Process events to update UI immediately
             while Gtk.events_pending():
                 Gtk.main_iteration()
             return False
@@ -5865,46 +6389,53 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 try:
                     # Fall back to HTTP request to Google
                     urllib.request.urlopen("https://www.google.com", timeout=3)
-                    print("Internet connection check successful: Connected to google.com")
+                    print(
+                        "Internet connection check successful: Connected to google.com"
+                    )
                     return True
                 except Exception as e:
                     print(f"Connection to google.com failed: {e}")
                     try:
                         # Try one more fallback to GitHub (where app data is hosted)
                         urllib.request.urlopen("https://github.com", timeout=3)
-                        print("Internet connection check successful: Connected to github.com")
+                        print(
+                            "Internet connection check successful: Connected to github.com"
+                        )
                         return True
                     except Exception as e:
                         print(f"Connection to github.com failed: {e}")
-                        print("All connection attempts failed, no internet connectivity detected")
+                        print(
+                            "All connection attempts failed, no internet connectivity detected"
+                        )
                         return False
 
     def _ensure_search_box_hidden(self):
         """Make sure the search box stays hidden during UI initialization"""
-        if hasattr(self, 'search_box'):
+        if hasattr(self, "search_box"):
             self.search_box.hide()
         return False  # Don't repeat this callback
 
     def on_scroll_value_changed(self, adjustment):
         """Handle scroll event to hide search box when scrolling"""
-        # Check if scroll position changed significantly (to avoid minor adjustments)
         if abs(adjustment.get_value() - self.last_scroll_position) > 5:
             # Only hide if it's currently visible
-            if hasattr(self, 'search_box') and self.search_box.get_visible():
+            if hasattr(self, "search_box") and self.search_box.get_visible():
                 self.search_box.hide()
-                # Update search button icon and tooltip
-                if hasattr(self, 'search_button'):
-                    self.search_button.set_image(Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON))
+                if hasattr(self, "search_button"):
+                    self.search_button.set_image(
+                        Gtk.Image.new_from_icon_name(
+                            "system-search-symbolic", Gtk.IconSize.BUTTON
+                        )
+                    )
                     self.search_button.set_tooltip_text("Show Search")
 
-        # Update last position
         self.last_scroll_position = adjustment.get_value()
 
     def _refresh_current_view(self):
         """Refresh only the current view without rebuilding the UI"""
         try:
             # Just refresh the content in the current section
-            if hasattr(self, 'current_section'):
+            if hasattr(self, "current_section"):
                 if self.current_section == "explore":
                     # Keep the same category selection and refresh
                     selected_category = self._get_selected_category()
@@ -5918,26 +6449,26 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     self.show_update_apps()
 
             # Make sure the UI elements for the current section are properly shown/hidden
-            if hasattr(self, 'current_section'):
-                # Handle UI elements based on section
+            if hasattr(self, "current_section"):
                 if self.current_section == "explore":
-                    if hasattr(self, 'sidebar'):
+                    if hasattr(self, "sidebar"):
                         self.sidebar.show()
-                    if hasattr(self, 'update_button'):
+                    if hasattr(self, "update_button"):
                         self.update_button.hide()
                 elif self.current_section == "installed":
-                    if hasattr(self, 'sidebar'):
+                    if hasattr(self, "sidebar"):
                         self.sidebar.hide()
-                    if hasattr(self, 'update_button'):
+                    if hasattr(self, "update_button"):
                         self.update_button.hide()
                 elif self.current_section == "updates":
-                    if hasattr(self, 'sidebar'):
+                    if hasattr(self, "sidebar"):
                         self.sidebar.hide()
-                    if hasattr(self, 'update_button'):
+                    if hasattr(self, "update_button"):
                         self.update_button.show()
         except Exception as e:
             print(f"Error in _refresh_current_view: {e}")
             import traceback
+
             traceback.print_exc()
         return False
 
@@ -5946,13 +6477,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         if not run_cmd or not selected_distro:
             return False
 
-        # Extract path from run command
-        path_match = re.search(r'/[^ ]+', run_cmd)
+        path_match = re.search(r"/[^ ]+", run_cmd)
         if not path_match:
             return False
 
-        # Get the path
-        path = path_match.group(0).strip()
+        path_match.group(0).strip()
 
 
 def show_command_output(command, app_name=None, parent=None):
@@ -5960,8 +6489,7 @@ def show_command_output(command, app_name=None, parent=None):
     # Use the imported function
     if CommandOutputWindow:
         return CommandOutputWindow(
-            title=f"Running {app_name}" if app_name else "Command Output",
-            parent=parent
+            title=f"Running {app_name}" if app_name else "Command Output", parent=parent
         ).run_command(command, app_name)
     return None
 
@@ -5985,15 +6513,18 @@ def main():
                 Gtk.DialogFlags.MODAL,
                 Gtk.MessageType.ERROR,
                 Gtk.ButtonsType.OK,
-                "Application Error"
+                "Application Error",
             )
-            dialog.format_secondary_text(f"Error: {str(e)}\n\nSee terminal for details.")
+            dialog.format_secondary_text(
+                f"Error: {str(e)}\n\nSee terminal for details."
+            )
             dialog.run()
             dialog.destroy()
         except Exception:
             pass
 
         return 1
+
 
 if __name__ == "__main__":
     try:

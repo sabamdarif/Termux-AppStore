@@ -1,72 +1,76 @@
 #!/usr/bin/env python3
-import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, Pango
-import re
-import subprocess
-import threading
+import fcntl
 import os
 import pty
-import fcntl
+import re
 import signal
-import time
-import termios
 import struct
+import subprocess
+import termios
+import threading
+import time
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk, Pango  # type: ignore # noqa: E402
+
 
 class AnsiColorParser:
     """Class to parse ANSI escape sequences and apply formatting to a GTK TextView"""
 
     # ANSI escape sequence regex
-    ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[((?:\d+;)*\d+)?([A-Za-z])')
+    ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[((?:\d+;)*\d+)?([A-Za-z])")
 
     # Basic ANSI color codes
     COLORS = {
         # Foreground colors
-        '30': (0.0, 0.0, 0.0),      # Black
-        '31': (0.8, 0.0, 0.0),      # Red
-        '32': (0.0, 0.8, 0.0),      # Green
-        '33': (0.8, 0.8, 0.0),      # Yellow
-        '34': (0.0, 0.0, 0.8),      # Blue
-        '35': (0.8, 0.0, 0.8),      # Magenta
-        '36': (0.0, 0.8, 0.8),      # Cyan
-        '37': (0.8, 0.8, 0.8),      # White
-        '90': (0.5, 0.5, 0.5),      # Bright Black (Gray)
-        '91': (1.0, 0.0, 0.0),      # Bright Red
-        '92': (0.0, 1.0, 0.0),      # Bright Green
-        '93': (1.0, 1.0, 0.0),      # Bright Yellow
-        '94': (0.0, 0.0, 1.0),      # Bright Blue
-        '95': (1.0, 0.0, 1.0),      # Bright Magenta
-        '96': (0.0, 1.0, 1.0),      # Bright Cyan
-        '97': (1.0, 1.0, 1.0),      # Bright White
+        "30": (0.0, 0.0, 0.0),  # Black
+        "31": (0.8, 0.0, 0.0),  # Red
+        "32": (0.0, 0.8, 0.0),  # Green
+        "33": (0.8, 0.8, 0.0),  # Yellow
+        "34": (0.0, 0.0, 0.8),  # Blue
+        "35": (0.8, 0.0, 0.8),  # Magenta
+        "36": (0.0, 0.8, 0.8),  # Cyan
+        "37": (0.8, 0.8, 0.8),  # White
+        "90": (0.5, 0.5, 0.5),  # Bright Black (Gray)
+        "91": (1.0, 0.0, 0.0),  # Bright Red
+        "92": (0.0, 1.0, 0.0),  # Bright Green
+        "93": (1.0, 1.0, 0.0),  # Bright Yellow
+        "94": (0.0, 0.0, 1.0),  # Bright Blue
+        "95": (1.0, 0.0, 1.0),  # Bright Magenta
+        "96": (0.0, 1.0, 1.0),  # Bright Cyan
+        "97": (1.0, 1.0, 1.0),  # Bright White
         # Background colors
-        '40': (0.0, 0.0, 0.0),      # Black
-        '41': (0.8, 0.0, 0.0),      # Red
-        '42': (0.0, 0.8, 0.0),      # Green
-        '43': (0.8, 0.8, 0.0),      # Yellow
-        '44': (0.0, 0.0, 0.8),      # Blue
-        '45': (0.8, 0.0, 0.8),      # Magenta
-        '46': (0.0, 0.8, 0.8),      # Cyan
-        '47': (0.8, 0.8, 0.8),      # White
-        '100': (0.5, 0.5, 0.5),     # Bright Black (Gray)
-        '101': (1.0, 0.0, 0.0),     # Bright Red
-        '102': (0.0, 1.0, 0.0),     # Bright Green
-        '103': (1.0, 1.0, 0.0),     # Bright Yellow
-        '104': (0.0, 0.0, 1.0),     # Bright Blue
-        '105': (1.0, 0.0, 1.0),     # Bright Magenta
-        '106': (0.0, 1.0, 1.0),     # Bright Cyan
-        '107': (1.0, 1.0, 1.0),     # Bright White
+        "40": (0.0, 0.0, 0.0),  # Black
+        "41": (0.8, 0.0, 0.0),  # Red
+        "42": (0.0, 0.8, 0.0),  # Green
+        "43": (0.8, 0.8, 0.0),  # Yellow
+        "44": (0.0, 0.0, 0.8),  # Blue
+        "45": (0.8, 0.0, 0.8),  # Magenta
+        "46": (0.0, 0.8, 0.8),  # Cyan
+        "47": (0.8, 0.8, 0.8),  # White
+        "100": (0.5, 0.5, 0.5),  # Bright Black (Gray)
+        "101": (1.0, 0.0, 0.0),  # Bright Red
+        "102": (0.0, 1.0, 0.0),  # Bright Green
+        "103": (1.0, 1.0, 0.0),  # Bright Yellow
+        "104": (0.0, 0.0, 1.0),  # Bright Blue
+        "105": (1.0, 0.0, 1.0),  # Bright Magenta
+        "106": (0.0, 1.0, 1.0),  # Bright Cyan
+        "107": (1.0, 1.0, 1.0),  # Bright White
     }
 
     # Text attributes
     ATTRIBUTES = {
-        '0': {'name': 'reset', 'tags': []},
-        '1': {'name': 'bold', 'tags': ['bold']},
-        '2': {'name': 'dim', 'tags': ['dim']},
-        '3': {'name': 'italic', 'tags': ['italic']},
-        '4': {'name': 'underline', 'tags': ['underline']},
-        '5': {'name': 'blink', 'tags': ['blink']},
-        '7': {'name': 'reverse', 'tags': ['reverse']},
-        '9': {'name': 'strikethrough', 'tags': ['strikethrough']},
+        "0": {"name": "reset", "tags": []},
+        "1": {"name": "bold", "tags": ["bold"]},
+        "2": {"name": "dim", "tags": ["dim"]},
+        "3": {"name": "italic", "tags": ["italic"]},
+        "4": {"name": "underline", "tags": ["underline"]},
+        "5": {"name": "blink", "tags": ["blink"]},
+        "7": {"name": "reverse", "tags": ["reverse"]},
+        "9": {"name": "strikethrough", "tags": ["strikethrough"]},
     }
 
     def __init__(self):
@@ -86,8 +90,6 @@ class AnsiColorParser:
             return
 
         # Starting position for insertion
-        end_iter = buffer.get_end_iter()
-
         # Process text character by character, applying tags when needed
         i = 0
         last_text_pos = 0
@@ -104,14 +106,14 @@ class AnsiColorParser:
 
             # Insert any text before the escape sequence
             if match.start() > last_text_pos:
-                plain_text = text[last_text_pos:match.start()]
+                plain_text = text[last_text_pos : match.start()]
                 self._insert_with_active_tags(buffer, plain_text)
 
             # Process the ANSI code
             codes = match.group(1)
             command = match.group(2)
 
-            if command == 'm':  # SGR (Select Graphic Rendition)
+            if command == "m":  # SGR (Select Graphic Rendition)
                 if codes:
                     self._process_sgr_codes(buffer, codes)
                 else:
@@ -146,67 +148,87 @@ class AnsiColorParser:
 
     def _process_sgr_codes(self, buffer, codes_str):
         """Process SGR (Select Graphic Rendition) codes"""
-        codes = codes_str.split(';')
+        codes = codes_str.split(";")
 
         for code in codes:
             if not code:
                 continue
 
             # Handle reset
-            if code == '0':
+            if code == "0":
                 self.active_tags = []
                 continue
 
             # Text attribute
-            if code in self.ATTRIBUTES and code != '0':
-                for tag_type in self.ATTRIBUTES[code]['tags']:
+            if code in self.ATTRIBUTES and code != "0":
+                for tag_type in self.ATTRIBUTES[code]["tags"]:
                     tag_name = f"ansi_{tag_type}"
 
-                    if tag_type == 'bold':
-                        self.ensure_tag(buffer, tag_name, {'weight': Pango.Weight.BOLD})
-                    elif tag_type == 'dim':
-                        self.ensure_tag(buffer, tag_name, {'weight': Pango.Weight.LIGHT})
-                    elif tag_type == 'italic':
-                        self.ensure_tag(buffer, tag_name, {'style': Pango.Style.ITALIC})
-                    elif tag_type == 'underline':
-                        self.ensure_tag(buffer, tag_name, {'underline': Pango.Underline.SINGLE})
-                    elif tag_type == 'blink':
+                    if tag_type == "bold":
+                        self.ensure_tag(buffer, tag_name, {"weight": Pango.Weight.BOLD})
+                    elif tag_type == "dim":
+                        self.ensure_tag(
+                            buffer, tag_name, {"weight": Pango.Weight.LIGHT}
+                        )
+                    elif tag_type == "italic":
+                        self.ensure_tag(buffer, tag_name, {"style": Pango.Style.ITALIC})
+                    elif tag_type == "underline":
+                        self.ensure_tag(
+                            buffer, tag_name, {"underline": Pango.Underline.SINGLE}
+                        )
+                    elif tag_type == "blink":
                         # Blinking is not directly supported, use background instead
-                        self.ensure_tag(buffer, tag_name, {'background': 'lightgray'})
-                    elif tag_type == 'reverse':
+                        self.ensure_tag(buffer, tag_name, {"background": "lightgray"})
+                    elif tag_type == "reverse":
                         # Swap foreground and background colors
-                        self.ensure_tag(buffer, tag_name, {'background': 'white', 'foreground': 'black'})
-                    elif tag_type == 'strikethrough':
-                        self.ensure_tag(buffer, tag_name, {'strikethrough': True})
+                        self.ensure_tag(
+                            buffer,
+                            tag_name,
+                            {"background": "white", "foreground": "black"},
+                        )
+                    elif tag_type == "strikethrough":
+                        self.ensure_tag(buffer, tag_name, {"strikethrough": True})
 
                     if tag_name not in self.active_tags:
                         self.active_tags.append(tag_name)
 
             # Foreground color
-            elif code.startswith('3') or code.startswith('9'):
+            elif code.startswith("3") or code.startswith("9"):
                 if code in self.COLORS:
                     r, g, b = self.COLORS[code]
                     tag_name = f"ansi_fg_{code}"
-                    self.ensure_tag(buffer, tag_name, {'foreground-rgba': Gdk.RGBA(r, g, b, 1.0)})
+                    self.ensure_tag(
+                        buffer, tag_name, {"foreground-rgba": Gdk.RGBA(r, g, b, 1.0)}
+                    )
 
                     # Replace any existing foreground color
-                    self.active_tags = [tag for tag in self.active_tags if not tag.startswith('ansi_fg_')]
+                    self.active_tags = [
+                        tag
+                        for tag in self.active_tags
+                        if not tag.startswith("ansi_fg_")
+                    ]
                     self.active_tags.append(tag_name)
 
             # Background color
-            elif code.startswith('4') or code.startswith('10'):
+            elif code.startswith("4") or code.startswith("10"):
                 if code in self.COLORS:
                     r, g, b = self.COLORS[code]
                     tag_name = f"ansi_bg_{code}"
-                    self.ensure_tag(buffer, tag_name, {'background-rgba': Gdk.RGBA(r, g, b, 1.0)})
+                    self.ensure_tag(
+                        buffer, tag_name, {"background-rgba": Gdk.RGBA(r, g, b, 1.0)}
+                    )
 
                     # Replace any existing background color
-                    self.active_tags = [tag for tag in self.active_tags if not tag.startswith('ansi_bg_')]
+                    self.active_tags = [
+                        tag
+                        for tag in self.active_tags
+                        if not tag.startswith("ansi_bg_")
+                    ]
                     self.active_tags.append(tag_name)
 
     def strip_ansi(self, text):
         """Remove ANSI escape sequences from text"""
-        return self.ANSI_ESCAPE_PATTERN.sub('', text)
+        return self.ANSI_ESCAPE_PATTERN.sub("", text)
 
 
 class TerminalEmulator:
@@ -223,7 +245,9 @@ class TerminalEmulator:
         self.text_view.set_monospace(True)
 
         # Set initial terminal colors (will be overridden by CSS)
-        self.text_view.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1))
+        self.text_view.override_background_color(
+            Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1)
+        )
         self.text_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
 
         # Add terminal view style class
@@ -236,16 +260,19 @@ class TerminalEmulator:
 
         # Handle special control codes
         # Convert CR+LF to just LF
-        text = text.replace('\r\n', '\n')
+        text = text.replace("\r\n", "\n")
 
         # Filter out common warning messages if they appear as complete lines
-        if '\n' in text:
+        if "\n" in text:
             filtered_lines = []
             for line in text.splitlines(True):  # Keep line endings
-                if not any(warning in line for warning in [
-                    "proot warning: can't sanitize binding",
-                    "WARNING: apt does not have a stable CLI interface"
-                ]):
+                if not any(
+                    warning in line
+                    for warning in [
+                        "proot warning: can't sanitize binding",
+                        "WARNING: apt does not have a stable CLI interface",
+                    ]
+                ):
                     filtered_lines.append(line)
 
             # If all lines were filtered out, just return
@@ -253,16 +280,19 @@ class TerminalEmulator:
                 return
 
             # Use the filtered text instead
-            text = ''.join(filtered_lines)
-        elif any(warning in text for warning in [
-            "proot warning: can't sanitize binding",
-            "WARNING: apt does not have a stable CLI interface"
-        ]):
+            text = "".join(filtered_lines)
+        elif any(
+            warning in text
+            for warning in [
+                "proot warning: can't sanitize binding",
+                "WARNING: apt does not have a stable CLI interface",
+            ]
+        ):
             # Skip the text entirely if it's just a warning
             return
 
         # Special handling for carriage returns
-        if '\r' in text:
+        if "\r" in text:
             # Process animations
             self._handle_carriage_returns(text, with_ansi)
         else:
@@ -272,7 +302,7 @@ class TerminalEmulator:
     def _handle_carriage_returns(self, text, with_ansi):
         """Handle text with carriage returns (animations)"""
         self.last_line_was_animation = True
-        lines = text.split('\r')
+        lines = text.split("\r")
 
         # Process all but the last part normally (if there are multiple carriage returns)
         for i in range(len(lines) - 1):
@@ -306,31 +336,31 @@ class TerminalEmulator:
             self.line_buffer = ""
 
         # Check if we need a newline after an animation
-        if self.last_line_was_animation and not text.startswith('\n'):
-            if '\n' in text:
+        if self.last_line_was_animation and not text.startswith("\n"):
+            if "\n" in text:
                 # If text contains newlines, animation is done
                 self.last_line_was_animation = False
 
             # Ensure there's a line break between animation and new content
             # but only if we're starting a new logical line
-            if not text.strip().startswith('\n'):
+            if not text.strip().startswith("\n"):
                 end_iter = self.buffer.get_end_iter()
-                self.buffer.insert(end_iter, '\n')
+                self.buffer.insert(end_iter, "\n")
 
         # Process each line separately for better control
-        lines = text.split('\n')
+        lines = text.split("\n")
 
         # Handle all complete lines
         for i in range(len(lines) - 1):
             line = lines[i]
-            self._append_segment(line + '\n', with_ansi)
+            self._append_segment(line + "\n", with_ansi)
             self.last_line_was_animation = False
 
         # Handle the last line (might be incomplete)
         if lines[-1]:
             # If the original text ended with a newline, add it
-            if text.endswith('\n'):
-                self._append_segment(lines[-1] + '\n', with_ansi)
+            if text.endswith("\n"):
+                self._append_segment(lines[-1] + "\n", with_ansi)
                 self.last_line_was_animation = False
             else:
                 # This is a partial line, save it for later
@@ -345,14 +375,17 @@ class TerminalEmulator:
             return
 
         # Filter out common warning messages line by line
-        if '\n' in text:
+        if "\n" in text:
             # For multiline text, filter line by line
             filtered_lines = []
             for line in text.splitlines(True):  # Keep line endings
-                if not any(warning in line for warning in [
-                    "proot warning: can't sanitize binding",
-                    "WARNING: apt does not have a stable CLI interface"
-                ]):
+                if not any(
+                    warning in line
+                    for warning in [
+                        "proot warning: can't sanitize binding",
+                        "WARNING: apt does not have a stable CLI interface",
+                    ]
+                ):
                     filtered_lines.append(line)
 
             # If all lines were filtered out, just return
@@ -360,13 +393,16 @@ class TerminalEmulator:
                 return
 
             # Use the filtered text instead
-            text = ''.join(filtered_lines)
+            text = "".join(filtered_lines)
         else:
             # For single line, check if it should be filtered
-            if any(warning in text for warning in [
-                "proot warning: can't sanitize binding",
-                "WARNING: apt does not have a stable CLI interface"
-            ]):
+            if any(
+                warning in text
+                for warning in [
+                    "proot warning: can't sanitize binding",
+                    "WARNING: apt does not have a stable CLI interface",
+                ]
+            ):
                 return
 
         # Check if we need to add a newline before the new text
@@ -375,20 +411,20 @@ class TerminalEmulator:
         # 2. We're not in an animation sequence
         # 3. The last character is not a newline
         # 4. The new text doesn't start with a newline
-        if (self.buffer.get_char_count() > 0 and
-            not self.last_line_was_animation):
-
+        if self.buffer.get_char_count() > 0 and not self.last_line_was_animation:
             # Get the last character in the buffer
             end_iter = self.buffer.get_end_iter()
             start_iter = end_iter.copy()
-            if start_iter.backward_char():  # This returns False if we can't move back (empty buffer)
+            if (
+                start_iter.backward_char()
+            ):  # This returns False if we can't move back (empty buffer)
                 last_char = self.buffer.get_text(start_iter, end_iter, False)
 
                 # If the last character isn't a newline and the new text doesn't start with one,
                 # add a newline before the new text
-                if last_char != '\n' and not text.startswith('\n'):
+                if last_char != "\n" and not text.startswith("\n"):
                     # Insert a newline first
-                    self.buffer.insert(end_iter, '\n')
+                    self.buffer.insert(end_iter, "\n")
 
         # Process text with ANSI escape sequences
         if with_ansi:
@@ -460,7 +496,9 @@ class TerminalEmulator:
 
             # Simple and reliable approach: just set the value to the upper limit
             # This avoids the need for creating and managing marks
-            GLib.idle_add(lambda: vadj.set_value(vadj.get_upper() - vadj.get_page_size()))
+            GLib.idle_add(
+                lambda: vadj.set_value(vadj.get_upper() - vadj.get_page_size())
+            )
             return False
         except Exception:
             # Silently catch all exceptions during scrolling
@@ -490,17 +528,23 @@ class TerminalEmulator:
         file_dialog = Gtk.FileChooserDialog(
             title="Save Terminal Output",
             parent=parent_window,
-            action=Gtk.FileChooserAction.SAVE
+            action=Gtk.FileChooserAction.SAVE,
         )
         file_dialog.add_buttons(
-            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_SAVE, Gtk.ResponseType.OK
+            Gtk.STOCK_CANCEL,
+            Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_SAVE,
+            Gtk.ResponseType.OK,
         )
 
         # Set default filename and location
         home_dir = os.path.expanduser("~")
         file_dialog.set_current_folder(home_dir)
-        default_filename = f"{app_name.lower().replace(' ', '_')}_output.log" if app_name else "terminal_output.log"
+        default_filename = (
+            f"{app_name.lower().replace(' ', '_')}_output.log"
+            if app_name
+            else "terminal_output.log"
+        )
         file_dialog.set_current_name(default_filename)
 
         # Add file filters
@@ -524,7 +568,7 @@ class TerminalEmulator:
             filename = file_dialog.get_filename()
             try:
                 # Save current content
-                with open(filename, 'w') as f:
+                with open(filename, "w") as f:
                     # Write the clean text without ANSI codes
                     f.write(self.ansi_parser.strip_ansi(text))
                 self.append_text(f"\nOutput saved to {filename}\n")
@@ -553,7 +597,9 @@ class CommandRunner:
     def run_command(self, command, on_complete=None):
         """Run a shell command and display its output in the terminal"""
         if self.is_running:
-            self.terminal.append_text("A command is already running. Please wait for it to complete.\n")
+            self.terminal.append_text(
+                "A command is already running. Please wait for it to complete.\n"
+            )
             return False
 
         self.is_running = True
@@ -566,9 +612,9 @@ class CommandRunner:
             self.master_fd, self.slave_fd = pty.openpty()
 
             # Configure terminal size to match a standard terminal
-            fcntl.ioctl(self.slave_fd,
-                        termios.TIOCSWINSZ,
-                        struct.pack("HHHH", 24, 80, 0, 0))
+            fcntl.ioctl(
+                self.slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0)
+            )
 
             # Make the master file descriptor non-blocking
             flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
@@ -576,21 +622,21 @@ class CommandRunner:
 
             # Set up environment variables for a proper interactive terminal
             env = os.environ.copy()
-            env['TERM'] = 'xterm-256color'
-            env['COLUMNS'] = '80'
-            env['LINES'] = '24'
-            env['APT_FORCE_CLI_PROMPT'] = '1'
-            env['PYTHONUTF8'] = '1'  # Ensure Python uses UTF-8
+            env["TERM"] = "xterm-256color"
+            env["COLUMNS"] = "80"
+            env["LINES"] = "24"
+            env["APT_FORCE_CLI_PROMPT"] = "1"
+            env["PYTHONUTF8"] = "1"  # Ensure Python uses UTF-8
 
             # Start the process attached to the slave end of the pty
             self.process = subprocess.Popen(
-                ['bash', '-c', command],
+                ["bash", "-c", command],
                 stdin=self.slave_fd,
                 stdout=self.slave_fd,
                 stderr=self.slave_fd,
                 universal_newlines=False,  # Using binary mode for pty
                 env=env,
-                preexec_fn=os.setsid  # Create a new process group
+                preexec_fn=os.setsid,  # Create a new process group
             )
 
             # Close the slave end of the pty in the parent process
@@ -602,11 +648,13 @@ class CommandRunner:
                 self.master_fd,
                 GLib.PRIORITY_DEFAULT,
                 GLib.IOCondition.IN | GLib.IOCondition.HUP,
-                self._on_pty_output
+                self._on_pty_output,
             )
 
             # Start a thread to monitor the process completion
             def monitor_process():
+                if self.process is None:
+                    return
                 return_code = self.process.wait()
 
                 # Ensure we've processed all the output before marking as complete
@@ -658,7 +706,7 @@ class CommandRunner:
         # Find any complete lines in the buffer
         try:
             # Decode as much as possible
-            text = self.output_buffer.decode('utf-8', errors='replace')
+            text = self.output_buffer.decode("utf-8", errors="replace")
 
             # Update the terminal
             GLib.idle_add(self._update_terminal, text)
@@ -675,7 +723,7 @@ class CommandRunner:
         """Flush any remaining data in the output buffer"""
         if self.output_buffer:
             try:
-                text = self.output_buffer.decode('utf-8', errors='replace')
+                text = self.output_buffer.decode("utf-8", errors="replace")
                 GLib.idle_add(self._update_terminal, text)
                 self.output_buffer = bytearray()
             except Exception:
@@ -691,7 +739,9 @@ class CommandRunner:
         # Only show the completion message if we've received all the output
         if self.final_output_received:
             # Add a blank line to separate from previous output
-            self.terminal.append_text("\n\nCommand completed with return code: " + str(return_code) + "\n")
+            self.terminal.append_text(
+                "\n\nCommand completed with return code: " + str(return_code) + "\n"
+            )
             self._cleanup()
 
             if on_complete:
@@ -825,7 +875,7 @@ class TerminalWindow(Gtk.Window):
             Gtk.StyleContext.add_provider_for_screen(
                 Gdk.Screen.get_default(),
                 css_provider,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
             )
         except Exception as e:
             print(f"Error loading CSS: {e}")
@@ -892,10 +942,13 @@ def find_terminal_css_path():
     """Find the terminal CSS file path with two fallback options"""
     possible_paths = [
         # Current directory with style subfolder (development)
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "terminal_style.css"),
-
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "style", "terminal_style.css"
+        ),
         # Termux-specific path
-        os.path.join("/data/data/com.termux/files/usr/opt/appstore/style/terminal_style.css"),
+        os.path.join(
+            "/data/data/com.termux/files/usr/opt/appstore/style/terminal_style.css"
+        ),
     ]
 
     # Try each possible path
@@ -905,11 +958,15 @@ def find_terminal_css_path():
             return path
 
     # If not found, return the default path (will fall back to inline CSS)
-    default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style", "terminal_style.css")
+    default_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "style", "terminal_style.css"
+    )
     print(f"Terminal CSS not found, using default path: {default_path}")
     return default_path
 
+
 TERMINAL_CSS_PATH = find_terminal_css_path()
+
 
 def apply_terminal_css(widget):
     """Apply terminal CSS styles to a widget"""
@@ -944,10 +1001,7 @@ def apply_terminal_css(widget):
         """)
 
     style_context = widget.get_style_context()
-    style_context.add_provider(
-        css_provider,
-        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-    )
+    style_context.add_provider(css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
 def show_command_output(command, app_name=None, parent=None):
@@ -965,8 +1019,7 @@ def show_command_output(command, app_name=None, parent=None):
         CommandOutputWindow: The command output window
     """
     window = CommandOutputWindow(
-        title=f"Running {app_name}" if app_name else "Command Output",
-        parent=parent
+        title=f"Running {app_name}" if app_name else "Command Output", parent=parent
     )
     window.run_command(command, app_name)
     return window
@@ -1007,7 +1060,9 @@ class CommandOutputWindow(Gtk.Window):
         self.add(self.main_box)
 
         # Create terminal widget
-        self.scrolled_window, self.terminal_emulator, self.command_runner = create_terminal_widget()
+        self.scrolled_window, self.terminal_emulator, self.command_runner = (
+            create_terminal_widget()
+        )
         self.main_box.pack_start(self.scrolled_window, True, True, 0)
 
         # Create button box
@@ -1019,7 +1074,9 @@ class CommandOutputWindow(Gtk.Window):
         # Create clear button
         self.clear_button = Gtk.Button()
         self.clear_button.set_tooltip_text("Clear terminal output")
-        clear_icon = Gtk.Image.new_from_icon_name("edit-clear-symbolic", Gtk.IconSize.BUTTON)
+        clear_icon = Gtk.Image.new_from_icon_name(
+            "edit-clear-symbolic", Gtk.IconSize.BUTTON
+        )
         self.clear_button.set_image(clear_icon)
         self.clear_button.get_style_context().add_class("command-output-clear-button")
         self.button_box.pack_start(self.clear_button, False, False, 0)
@@ -1027,7 +1084,9 @@ class CommandOutputWindow(Gtk.Window):
         # Create save button
         self.save_button = Gtk.Button()
         self.save_button.set_tooltip_text("Save terminal output to file")
-        save_icon = Gtk.Image.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
+        save_icon = Gtk.Image.new_from_icon_name(
+            "document-save-symbolic", Gtk.IconSize.BUTTON
+        )
         self.save_button.set_image(save_icon)
         self.save_button.get_style_context().add_class("command-output-save-button")
         self.button_box.pack_start(self.save_button, False, False, 0)
@@ -1036,7 +1095,9 @@ class CommandOutputWindow(Gtk.Window):
         self.clear_button.connect("clicked", lambda b: self.terminal_emulator.clear())
 
         # Connect save button
-        self.save_button.connect("clicked", lambda b: self.terminal_emulator.save_terminal_output(self))
+        self.save_button.connect(
+            "clicked", lambda b: self.terminal_emulator.save_terminal_output(self)
+        )
 
         # Connect window close event
         self.connect("delete-event", self.on_window_close)

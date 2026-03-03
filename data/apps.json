@@ -1412,5 +1412,23 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen/logo.png"
+  },
+  {
+    "app_name": "ytdlp gui",
+    "folder_name": "ytdlp-gui",
+    "description": "Simple Gui app to download videos using yd-dlp",
+    "categories": [
+      "Internet",
+      "Multimedia",
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "yt-dlp-gui",
+    "supported_arch": "aarch64,arm",
+    "version": "3.5",
+    "package_name": "ytdlp-gui",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/ytdlp-gui/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/ytdlp-gui/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/ytdlp-gui/logo.png"
   }
 ]

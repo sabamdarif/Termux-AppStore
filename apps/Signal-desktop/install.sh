@@ -2,7 +2,7 @@
 
 supported_arch="aarch64"
 run_cmd="/opt/Signal-Unofficial/signal-desktop-unofficial --no-sandbox"
-version="v8.3.0"
+version="v8.4.1"
 app_type="distro"
 supported_distro="all"
 page_url="https://github.com/dennisameling/Signal-Desktop"

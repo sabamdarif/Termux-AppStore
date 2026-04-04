@@ -763,6 +763,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/icon-64.png"
   },
   {
+    "app_name": "Librewolf",
+    "folder_name": "Librewolf",
+    "description": "A custom version of Firefox, focused on privacy, security and freedom.",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "run_cmd": "librewolf",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "librewolf",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Librewolf/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Librewolf/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Librewolf/logo.png"
+  },
+  {
     "app_name": "Linuxthemestore",
     "folder_name": "Linuxthemestore",
     "description": "Theme and icon store for linux",

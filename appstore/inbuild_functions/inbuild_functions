@@ -1,0 +1,1101 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+# shellcheck disable=SC2154
+if [ -t 1 ] && [ -n "${TERM:-}" ]; then
+	R="$(printf '\033[0m\033[1m\033[31m')" # RST + bold + red
+	G="$(printf '\033[0m\033[32m')"        # RST + green
+	Y="$(printf '\033[0m\033[33m')"        # RST + yellow
+	B="$(printf '\033[0m\033[34m')"        # RST + blue
+	C="$(printf '\033[0m\033[36m')"        # RST + cyan
+	NC="$(printf '\033[0m')"               # RST
+	BOLD="$(printf '\033[1m')"             # bold
+else
+	R=""
+	G=""
+	Y=""
+	B=""
+	C=""
+	NC=""
+	BOLD=""
+fi
+
+cd "$HOME" || exit 1
+############### Define basic initial values ######################
+TERMUX_DESKTOP_PATH="$PREFIX/etc/termux-desktop"
+CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
+##################################################################
+
+function check_termux() {
+	if [ ! -f /system/build.prop ]; then
+		echo "${R}[${R}☓${R}]${R}${BOLD} Not running on Android."
+		exit 1
+	fi
+
+	local tracer_pid
+	tracer_pid=$(grep TracerPid "/proc/$$/status" | cut -d $'\t' -f 2)
+	if [ "$tracer_pid" != "0" ]; then
+		local tracer_name
+		tracer_name=$(grep Name "/proc/${tracer_pid}/status" | cut -d $'\t' -f 2)
+		if [ "$tracer_name" = "proot" ]; then
+			echo "${R}[${R}☓${R}]${R}${BOLD} Must not be executed under PRoot."
+			exit 1
+		fi
+	fi
+
+	if [[ -z "$PREFIX" || "$PREFIX" != *"/com.termux/"* ]]; then
+		echo "${R}[${R}☓${R}]${R}${BOLD} Please run this script inside Termux."
+		exit 1
+	fi
+}
+
+function log_warn() {
+	local timestamp
+	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local message="$1"
+}
+
+function log_error() {
+	local timestamp
+	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local message="$1"
+}
+
+function log_debug() {
+	local timestamp
+	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local message="$1"
+}
+
+function print_success() {
+	local msg
+	msg="$1"
+	echo "${R}[${G}✓${R}]${G} $msg ${NC}"
+	log_debug "$msg"
+}
+
+function print_failed() {
+	local msg
+	msg="$1"
+	echo "${R}[${R}☓${R}]${R} $msg ${NC}"
+	log_debug "$msg"
+}
+
+function print_warn() {
+	local msg
+	msg="$1"
+	echo "${R}[${Y}!${R}]${Y} $msg ${NC}"
+	log_debug "$msg"
+}
+
+function print_msg() {
+	local msg
+	msg="$1"
+	echo "${R}[${C}-${R}]${B} $msg ${NC}"
+	log_debug "$msg"
+
+}
+
+function wait_for_keypress() {
+	read -n1 -s -r -p "${R}[${C}-${R}]${G} Press any key to continue, CTRL+c to cancel...${NC}"
+	echo
+}
+
+function check_and_create_directory() {
+	if [[ -n "$1" && ! -d "$1" ]]; then
+		mkdir -p "$1" 2>/dev/null || {
+			log_error "Failed to create directory: $1"
+			return 1
+		}
+		log_debug "Created directory: $1"
+	fi
+}
+
+# first check then delete
+function check_and_delete() {
+	local files_folders
+	for files_folders in "$@"; do
+		if [[ -e "$files_folders" ]]; then
+			rm -rf "$files_folders" >/dev/null 2>&1 || {
+				log_error "Failed to delete: $files_folders"
+				continue
+			}
+			log_debug "Deleted: $files_folders"
+		fi
+	done
+}
+
+# first check then backup
+function check_and_backup() {
+	log_debug "Starting backup for: $*"
+	# shellcheck disable=SC2206
+	local files_folders_list=($@)
+	local files_folders
+	local date_str
+	date_str=$(date +"%d-%m-%Y")
+
+	for files_folders in "${files_folders_list[@]}"; do
+		if [[ -e "$files_folders" ]]; then
+			local backup="${files_folders}-${date_str}.bak"
+
+			if [[ -e "$backup" ]]; then
+				print_msg "Backup $backup already exists"
+			else
+				print_msg "Backing up $files_folders"
+				mv "$files_folders" "$backup"
+				log_debug "$files_folders $backup"
+			fi
+		else
+			print_msg "Path $files_folders does not exist"
+		fi
+	done
+}
+
+# find a backup file which end with a number pattern and restore it
+function check_and_restore() {
+	log_debug "Starting restore for: $*"
+	# shellcheck disable=SC2206
+	local files_folders_list=($@)
+	local files_folders
+
+	for files_folders in "${files_folders_list[@]}"; do
+		local latest_backup
+		latest_backup=$(find "$(dirname "$files_folders")" -maxdepth 1 -name "$(basename "$files_folders")-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9].bak" 2>/dev/null | sort | tail -n 1)
+
+		if [[ -z "$latest_backup" ]]; then
+			print_msg "No backup found for $files_folders"
+			continue
+		fi
+
+		if [[ -e "$files_folders" ]]; then
+			print_msg "File $files_folders already exists"
+		else
+			print_msg "Restoring $files_folders"
+			mv "$latest_backup" "$files_folders"
+			log_debug "$latest_backup $files_folders"
+		fi
+	done
+}
+
+function download_file() {
+	local dest url dest_dir dest_file
+	local max_retries=5
+	local attempt=1
+	local successful_attempt=0
+
+	if [[ -z "$2" ]]; then
+		url="$1"
+		dest="$(basename "$url")"
+	else
+		dest="$1"
+		url="$2"
+	fi
+
+	if [[ -z "$url" ]]; then
+		print_failed "No URL provided!"
+		return 1
+	fi
+
+	dest="$(realpath -m "$dest")"
+	dest_dir="$(dirname "$dest")"
+	dest_file="$(basename "$dest")"
+
+	while [[ $attempt -le $max_retries ]]; do
+		print_msg "Downloading $dest_file..."
+		echo "PROGRESS:DOWNLOAD:0:Starting download of $dest_file"
+		if [[ ! -s "$dest" ]]; then
+			check_and_delete "$dest"
+		fi
+
+		if command -v aria2c &>/dev/null; then
+			# Use aria2c with progress parsing
+			aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 \
+				--dir="$dest_dir" -o "$dest_file" "$url" 2>&1 | while IFS= read -r line; do
+				echo "$line"
+				# Parse aria2c progress: looks for patterns like "(45%)" or "[#.... 45%]"
+				if [[ "$line" =~ \(([0-9]+)% ]]; then
+					percent="${BASH_REMATCH[1]}"
+					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
+				elif [[ "$line" =~ \[#.*[[:space:]]([0-9]+)% ]]; then
+					percent="${BASH_REMATCH[1]}"
+					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
+				fi
+			done
+			# Get exit code from aria2c
+			download_status=${PIPESTATUS[0]}
+		elif command -v wget &>/dev/null; then
+			# Use wget with progress parsing
+			wget --tries=5 --timeout=15 --retry-connrefused --progress=bar:force \
+				-O "$dest" "$url" 2>&1 | while IFS= read -r line; do
+				echo "$line"
+				# Parse wget progress: looks for patterns like "45%" in progress bar
+				if [[ "$line" =~ [[:space:]]([0-9]+)%[[:space:]] ]]; then
+					percent="${BASH_REMATCH[1]}"
+					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
+				fi
+			done
+			download_status=${PIPESTATUS[0]}
+		else
+			# Use curl with progress parsing
+			curl -# -L "$url" -o "$dest" 2>&1 | while IFS= read -r line; do
+				echo "$line"
+				# Parse curl progress: looks for "#" characters in progress bar
+				# Curl shows progress as: ######## 50.0%
+				if [[ "$line" =~ ([0-9]+\.[0-9]+)% ]]; then
+					percent_float="${BASH_REMATCH[1]}"
+					percent="${percent_float%.*}" # Remove decimal part
+					echo "PROGRESS:DOWNLOAD:$percent:Downloading $dest_file... $percent%"
+				fi
+			done
+			download_status=${PIPESTATUS[0]}
+		fi
+
+		if [[ -f "$dest" && -s "$dest" ]]; then
+			successful_attempt=$attempt
+			echo "PROGRESS:DOWNLOAD:100:Download complete"
+			break
+		else
+			print_failed "Download failed. Retrying... ($attempt/$max_retries)"
+		fi
+		((attempt++))
+	done
+
+	if [[ -f "$dest" ]]; then
+		if [[ $successful_attempt -eq 1 ]]; then
+			print_success "File downloaded successfully."
+		else
+			print_success "File downloaded successfully on attempt $successful_attempt."
+		fi
+		return 0
+	fi
+
+	print_failed "Failed to download the file after $max_retries attempts. Exiting."
+	return 1
+}
+
+function detact_package_manager() {
+	# shellcheck disable=SC1091
+	if [[ -f "/data/data/com.termux/files/usr/bin/termux-setup-package-manager" ]]; then
+		source "/data/data/com.termux/files/usr/bin/termux-setup-package-manager"
+	fi
+
+	if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then
+		PACKAGE_MANAGER="apt"
+	elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then
+		PACKAGE_MANAGER="pacman"
+	else
+		PACKAGE_MANAGER="pkg"
+		print_failed "${C} Could not detect your package manager, Switching To ${C}pkg ${NC}"
+	fi
+	log_debug "Package manager: $PACKAGE_MANAGER"
+}
+
+# will check if the package is already installed or not, if it installed then reinstall and print success/failed message
+function package_install_and_check {
+	log_debug "Starting package installation for: $*"
+	local packs_list
+	# Properly splits on spaces
+	IFS=' ' read -r -a packs_list <<<"$*"
+
+	# Count total packages for progress tracking
+	local total_packages=0
+	local current_package=0
+
+	# pacman part
+	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+		# First, expand wildcards and count total packages
+		local all_packages=()
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				local packages
+				packages=$(pacman -Ssq 2>/dev/null | grep -E "^${package_name//\*/.*}$")
+				for package in $packages; do
+					all_packages+=("$package")
+				done
+			else
+				all_packages+=("$package_name")
+			fi
+		done
+		total_packages=${#all_packages[@]}
+		echo "PROGRESS:PACKAGE:0/$total_packages:Preparing to install $total_packages package(s)..."
+
+		# Install each package
+		for package in "${all_packages[@]}"; do
+			current_package=$((current_package + 1))
+			local retry_count=0
+			local max_retries=5
+			local install_success=false
+
+			echo "PROGRESS:PACKAGE:$current_package/$total_packages:Installing $package ($current_package/$total_packages)..."
+
+			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+				retry_count=$((retry_count + 1))
+				check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+				print_msg "Installing Package : ${C}$package"
+
+				# Use a pipe to capture and parse pacman output
+				# Note: pacman might strip progress bars when piped, so we look for text markers
+				pacman -S --noconfirm "$package" 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "$line" == *"downloading"* ]]; then
+						# Downloading phase (0-30%)
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 10 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Downloading $package..."
+					elif [[ "$line" == *"checking"* ]]; then
+						# Checking phase (30-50%)
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 40 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Checking $package..."
+					elif [[ "$line" == *"installing"* ]]; then
+						# Installing phase (50-90%)
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 70 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Installing $package..."
+					fi
+				done
+
+				# Check install status via return code of pipe (requires pipefail or check explicitly)
+				# Since we piped, we check status after.
+
+				if pacman -Qi "$package" >/dev/null 2>&1; then
+					print_success "Successfully install package: ${C}$package"
+					install_success=true
+					local percent=$((current_package * 100 / total_packages))
+					echo "PROGRESS:PACKAGE:$percent:Installed $package ($current_package/$total_packages)"
+				else
+					print_warn "Failed to install package: ${C}${package}. ${Y}Trying again... ($retry_count)"
+				fi
+			done
+		done
+	else
+		#apt part
+		# First, expand wildcards and count total packages
+		local all_packages=()
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				local packages
+				packages=$(apt-cache pkgnames 2>/dev/null | grep -E "^${package_name//\*/.*}$" | sort -u)
+				for package in $packages; do
+					all_packages+=("$package")
+				done
+			else
+				all_packages+=("$package_name")
+			fi
+		done
+		total_packages=${#all_packages[@]}
+		echo "PROGRESS:PACKAGE:0/$total_packages:Preparing to install $total_packages package(s)..."
+
+		# Install each package
+		for package in "${all_packages[@]}"; do
+			current_package=$((current_package + 1))
+			local retry_count=0
+			local max_retries=5
+			local install_success=false
+
+			echo "PROGRESS:PACKAGE:$current_package/$total_packages:Installing $package ($current_package/$total_packages)..."
+
+			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+				retry_count=$((retry_count + 1))
+				print_msg "Installing package: ${C}$package"
+
+				# Clean up locks before attempting install
+				rm -f "$PREFIX/var/lib/dpkg/lock"
+				rm -f "$PREFIX/var/lib/dpkg/lock-frontend"
+				rm -f "$PREFIX/var/cache/apt/archives/lock"
+				dpkg --configure -a >/dev/null 2>&1
+
+				# Use a pipe to capture and parse apt output
+				apt install "$package" -y 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "$line" == *"Get:"* ]]; then
+						# Downloading markers
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 20 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Downloading $package..."
+					elif [[ "$line" == *"Unpacking"* ]]; then
+						# Unpacking markers
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 50 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Unpacking $package..."
+					elif [[ "$line" == *"Setting up"* ]]; then
+						# Setting up markers
+						local sub_percent=$(((current_package - 1) * 100 / total_packages + 80 / total_packages))
+						echo "PROGRESS:PACKAGE:$sub_percent:Setting up $package..."
+					fi
+				done
+
+				if dpkg -s "$package" >/dev/null 2>&1; then
+					print_success "Successfully install package: ${C}$package"
+					install_success=true
+					local percent=$((current_package * 100 / total_packages))
+					echo "PROGRESS:PACKAGE:$percent:Installed $package ($current_package/$total_packages)"
+				else
+					print_warn "Failed to install package: ${C}${package}. ${Y}Trying again... ($retry_count)"
+					# Only run recovery commands on failure
+					dpkg --configure -a 2>/dev/null
+					apt --fix-broken install -y 2>/dev/null
+					apt install --fix-missing -y 2>/dev/null
+				fi
+			done
+		done
+	fi
+	echo "PROGRESS:PACKAGE:100:Package installation complete"
+}
+
+# will check the package is installed or not then remove it
+function package_remove_and_check {
+	log_debug "Starting package removal for: $*"
+	local packs_list
+	# Properly splits on spaces
+	IFS=' ' read -r -a packs_list <<<"$*"
+
+	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				log_debug "Processing wildcard pattern: $package_name"
+				local packages
+				packages=$(pacman -Qsq 2>/dev/null | grep -E "^${package_name//\*/.*}$")
+				if [[ -z "$packages" ]]; then
+					print_success "No installed packages found matching: ${C}$package_name"
+					continue
+				fi
+				log_debug "matched packages: $packages"
+				for package in $packages; do
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+						print_msg "Removing Package : ${C}$package"
+
+						pacman -Rnds --noconfirm "$package" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							echo "PROGRESS:PACKAGE:50:Removing $package..."
+						done
+
+						if ! pacman -Qi "$package" >/dev/null 2>&1; then
+							print_success "Successfully removed package: ${C}$package"
+							remove_success=true
+						else
+							print_warn "Failed to remove package: ${C}${package}. ${Y}Trying again...($retry_count)"
+						fi
+					done
+				done
+			else
+				if pacman -Qi "$package_name" >/dev/null 2>&1; then
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+						print_msg "Removing Package : ${C}$package_name"
+
+						pacman -Rnds --noconfirm "$package_name" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							echo "PROGRESS:PACKAGE:50:Removing $package_name..."
+						done
+
+						if ! pacman -Qi "$package_name" >/dev/null 2>&1; then
+							print_success "Successfully removed package: ${C}$package_name"
+							remove_success=true
+						else
+							print_warn "Failed to remove package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
+						fi
+					done
+				else
+					print_success "Package ${C}$package_name${G} is not installed.${NC}"
+				fi
+			fi
+		done
+	else
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				log_debug "Processing wildcard pattern: $package_name"
+				local packages
+				packages=$(dpkg-query -W -f='${binary:Package}\n' "${package_name}" 2>/dev/null | grep -v ' ')
+
+				if [[ -z "$packages" ]]; then
+					print_success "No installed packages found matching: ${C}$package_name"
+					continue
+				fi
+
+				log_debug "matched packages: $packages"
+				for package in $packages; do
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						print_msg "Removing package: ${C}$package"
+						dpkg --configure -a >/dev/null 2>&1
+
+						apt autoremove "$package" -y 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							echo "PROGRESS:PACKAGE:50:Removing $package..."
+						done
+
+						if ! dpkg -s "$package" >/dev/null 2>&1; then
+							print_success "Successfully removed package: ${C}$package"
+							remove_success=true
+						else
+							print_warn "Failed to remove package: ${C}${package}. ${Y}Trying again...($retry_count)"
+						fi
+					done
+				done
+			else
+				if dpkg -s "$package_name" >/dev/null 2>&1; then
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						print_msg "Removing package: ${C}$package_name"
+						dpkg --configure -a >/dev/null 2>&1
+
+						apt autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							echo "PROGRESS:PACKAGE:50:Removing $package_name..."
+						done
+
+						if ! dpkg -s "$package_name" >/dev/null 2>&1; then
+							print_success "Successfully removed package: ${C}$package_name"
+							remove_success=true
+						else
+							print_warn "Failed to remove package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
+						fi
+					done
+				else
+					print_success "Package ${C}$package_name${G} is not installed.${NC}"
+				fi
+			fi
+		done
+	fi
+}
+
+function get_file_name_number() {
+	local current_file
+	current_file=$(basename "$0")
+	local folder_name="${current_file%.sh}"
+	local theme_number
+	theme_number=$(echo "$folder_name" | grep -oE '[1-9][0-9]*')
+	log_debug "Theme number: $theme_number"
+	echo "$theme_number"
+}
+
+function extract() {
+	local archive="$1"
+	if [[ ! -f "$archive" ]]; then
+		print_failed "$archive doesn't exist"
+		return 1
+	fi
+
+	echo "PROGRESS:EXTRACT:0:Starting extraction of $archive..."
+
+	case "$archive" in
+	*.tar.gz | *.tgz)
+		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting tar.gz archive..."
+		tar xzvf "$archive" 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*.tar.xz)
+		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting tar.xz archive..."
+		tar xJvf "$archive" 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*.tar.bz2 | *.tbz2)
+		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting tar.bz2 archive..."
+		tar xjvf "$archive" 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*.tar)
+		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting tar archive..."
+		tar xvf "$archive" 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*.bz2)
+		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting bz2 archive..."
+		bunzip2 -v "$archive" 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*.gz)
+		print_success "Extracting ${C}$archive${NC}"
+		echo "PROGRESS:EXTRACT:50:Extracting gz archive..."
+		gunzip -v "$archive" 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*.7z)
+		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting 7z archive..."
+		7z x "$archive" -y 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*.zip)
+		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting zip archive..."
+		unzip "${archive}" 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*.rar)
+		print_success "Extracting ${C}$archive"
+		echo "PROGRESS:EXTRACT:50:Extracting rar archive..."
+		unrar x "$archive" 2>/dev/null || {
+			print_failed "Failed to extract ${C}$archive"
+			return 1
+		}
+		;;
+	*)
+		print_failed "Unsupported archive format: ${C}$archive"
+		return 1
+		;;
+	esac
+	echo "PROGRESS:EXTRACT:100:Extraction complete"
+	print_success "Successfully extracted ${C}$archive"
+	log_debug "Extracted: $archive"
+}
+
+# download a archive file and extract it in a folder
+function download_and_extract() {
+	local url="$1"
+	local target_dir="$2"
+	local filename="${url##*/}"
+
+	if [[ -n "$target_dir" ]]; then
+		check_and_create_directory "$target_dir"
+		cd "$target_dir" || return 1
+	fi
+
+	if download_file "$filename" "$url"; then
+		if [[ -f "$filename" ]]; then
+			echo
+			extract_archive "$filename"
+			check_and_delete "$filename"
+		fi
+	else
+		print_failed "Failed to download ${C}${filename}"
+		print_msg "${C}Please check your internet connection"
+	fi
+	log_debug "Downloaded and extracted: $url to $target_dir"
+}
+
+count_subfolders() {
+	local owner="$1"
+	local repo="$2"
+	local path="$3"
+	local branch="$4"
+	local response
+	response=$(curl -s "https://api.github.com/repos/$owner/$repo/contents/$path?ref=$branch" 2>/dev/null)
+	# Use jq to extract directories and count them; if none found then set to 0
+	local subfolder_count
+	subfolder_count=$(echo "$response" | jq -r '[.[] | select(.type == "dir")] | length' 2>/dev/null)
+	echo "${subfolder_count:-0}"
+	log_debug "Subfolder count: ${subfolder_count:-0}"
+}
+
+# get the latest version from a github releases
+# ex. latest_tag=$(get_latest_release "$repo_owner" "$repo_name")
+function get_latest_release() {
+	local repo_owner="$1"
+	local repo_name="$2"
+	curl --silent \
+		--location \
+		--retry 5 \
+		--retry-delay 1 \
+		-H "Accept: application/vnd.github.v3+json" \
+		"https://api.github.com/repos/${repo_owner}/${repo_name}/releases/latest" | jq -r '.tag_name'
+}
+
+function install_font_for_style() {
+	local style_number="$1"
+	print_msg "Installing Fonts..."
+	check_and_create_directory "$HOME/.fonts"
+	download_and_extract "https://raw.githubusercontent.com/sabamdarif/termux-desktop/refs/heads/setup-files/setup-files/$de_name/look_${style_number}/font.tar.gz" "$HOME/.fonts"
+	fc-cache -f 2>/dev/null
+	cd "$HOME" || return 1
+}
+
+# Use:- select_an_option 8 1 variable_name
+function select_an_option() {
+	local max_options=$1
+	local default_option=${2:-1}
+	local response_var=$3
+	local response
+
+	while true; do
+		read -r -p "${Y}select an option (Default ${default_option}): ${NC}" response
+		response=${response:-$default_option}
+
+		if [[ $response =~ ^[0-9]+$ ]] && ((response >= 1 && response <= max_options)); then
+			echo
+			print_success "Continuing with answer: $response"
+			sleep 0.2
+			eval "$response_var=$response"
+			break
+		else
+			echo
+			print_failed " Invalid input, Please enter a number between 1 and $max_options"
+		fi
+	done
+}
+
+function read_conf() {
+	if [[ ! -f "$CONFIG_FILE" ]]; then
+		print_failed " Configuration file $CONFIG_FILE not found"
+		exit 1
+	fi
+	# shellcheck disable=SC1090
+	source "$CONFIG_FILE"
+	print_success "Configuration variables loaded"
+}
+
+# Use atomic write pattern to prevent background execution issues
+function print_to_config() {
+	local var_name="$1"
+	local var_value="${2:-${!var_name}}"
+	local IFS=$' \t\n'
+	local temp_file="${CONFIG_FILE}.tmp.$$"
+
+	# Ensure config file exists
+	if [[ ! -f "$CONFIG_FILE" ]]; then
+		touch "$CONFIG_FILE" 2>/dev/null || {
+			log_error "Cannot access $CONFIG_FILE"
+			return 1
+		}
+	fi
+
+	if grep -q "^${var_name}=" "$CONFIG_FILE" 2>/dev/null; then
+		# Atomic write: write to temp file then move
+		sed "s|^${var_name}=.*|${var_name}=${var_value}|" "$CONFIG_FILE" >"$temp_file" && mv "$temp_file" "$CONFIG_FILE"
+	else
+		echo "${var_name}=${var_value}" >>"$CONFIG_FILE"
+	fi
+
+	log_debug "$var_name = $var_value"
+}
+
+function update_sys() {
+	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+		pacman -Syu --noconfirm
+	else
+		apt-get update -y -o Dpkg::Options::="--force-confnew"
+		apt-get upgrade -y -o Dpkg::Options::="--force-confnew"
+	fi
+}
+
+function fix_exec() {
+	local file="/data/data/com.termux/files/usr/share/applications/$1"
+	sed -i -E "/^Exec=/ {
+        /pdrun/ {
+            s/\$/ $2/; b
+        }
+        s|^Exec=([^ ]+)(.*)|Exec=pdrun \1\2 $2|
+    }" "$file"
+}
+
+function install_appimage() {
+	local appimage_file_name="$1"
+	local appimage_directory_name="$2"
+	distro_run "
+check_and_create_directory '/opt/AppImageLauncher/'
+check_and_delete '/opt/AppImageLauncher/$appimage_directory_name'
+"
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		sudo mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
+	else
+		mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
+	fi
+	distro_run "
+cd /opt/AppImageLauncher
+ldconfig
+chmod +x '${appimage_file_name}'
+APPIMAGE_EXTRACT_AND_RUN=1 ./${appimage_file_name} --appimage-extract
+mv -f squashfs-root '$appimage_directory_name'
+check_and_delete '${appimage_file_name}'
+"
+}
+
+function get_latest_version() {
+	local package_name
+	local latest_version
+	package_name=$1
+	if [[ "$PACKAGE_MANAGER" == "apt" ]]; then
+		latest_version=$(apt-cache policy "$package_name" | grep 'Candidate:' | awk '{print $2}')
+	elif [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+		latest_version=$(pacman -Si "$package_name" 2>/dev/null | grep 'Version' | awk '{print $3}')
+	fi
+	# print version if get
+	if [[ -n "$latest_version" ]]; then
+		echo "$latest_version"
+	fi
+}
+
+function pd_package_install_and_check() {
+	# Check for --root flag
+	local use_sudo=true
+	if [[ "$1" == "--root" ]]; then
+		use_sudo=false
+		shift
+	fi
+
+	# shellcheck disable=SC2206
+	packs_list=($@)
+
+	# Get distro id
+	# shellcheck disable=SC1091
+	if [ -f /etc/os-release ]; then
+		. /etc/os-release
+	fi
+
+	# Install package
+	for package_name in "${packs_list[@]}"; do
+		print_msg "${BOLD}Installing package: ${C}$package_name"
+
+		# Install package and handle errors
+		install_failed=false
+		if [[ "$ID" == "debian" ]] || [[ "$ID" == "ubuntu" ]]; then
+			if $use_sudo; then
+				if ! sudo apt install "$package_name" -y; then
+					install_failed=true
+				fi
+			else
+				if ! apt install "$package_name" -y; then
+					install_failed=true
+				fi
+			fi
+		elif [[ "$ID" == arch* ]]; then
+			if $use_sudo; then
+				if ! sudo pacman -Sy --noconfirm "$package_name"; then
+					install_failed=true
+				fi
+			else
+				if ! pacman -Sy --noconfirm "$package_name"; then
+					install_failed=true
+				fi
+			fi
+		elif [[ "$ID" == "fedora" ]]; then
+			if $use_sudo; then
+				if ! sudo dnf install "$package_name" -y; then
+					install_failed=true
+				fi
+			else
+				if ! dnf install "$package_name" -y; then
+					install_failed=true
+				fi
+			fi
+		fi
+
+		# Handle error in installation
+		if $install_failed; then
+			print_failed "${BOLD} Error detected during installation of: ${C}$package_name${NC}"
+			if [[ "$ID" == "debian" ]] || [[ "$ID" == "ubuntu" ]]; then
+				if $use_sudo; then
+					sudo apt --fix-broken install -y
+					sudo dpkg --configure -a
+					sudo apt install "$package_name" -y
+				else
+					apt --fix-broken install -y
+					dpkg --configure -a
+					apt install "$package_name" -y
+				fi
+			elif [[ "$ID" == arch* ]]; then
+				if $use_sudo; then
+					sudo pacman -Syu --noconfirm
+					sudo pacman -Sy --noconfirm "$package_name"
+				else
+					pacman -Syu --noconfirm
+					pacman -Sy --noconfirm "$package_name"
+				fi
+			elif [[ "$ID" == "fedora" ]]; then
+				if $use_sudo; then
+					sudo dnf --refresh install -y
+					sudo rpm --rebuilddb
+					sudo dnf install "$package_name" -y
+				else
+					dnf --refresh install -y
+					rpm --rebuilddb
+					dnf install "$package_name" -y
+				fi
+			fi
+		fi
+
+		# Reinstall if necessary
+		if [[ "$ID" == "debian" ]] || [[ "$ID" == "ubuntu" ]]; then
+			if ! dpkg -s "$package_name" >/dev/null 2>&1; then
+				if $use_sudo; then
+					sudo apt install "$package_name" -y
+				else
+					apt install "$package_name" -y
+				fi
+			fi
+		elif [[ "$ID" == arch* ]]; then
+			if ! pacman -Qi "$package_name" >/dev/null 2>&1; then
+				if $use_sudo; then
+					sudo pacman -Sy --noconfirm "$package_name"
+				else
+					pacman -Sy --noconfirm "$package_name"
+				fi
+			fi
+		elif [[ "$ID" == "fedora" ]]; then
+			if ! rpm -q "$package_name" >/dev/null 2>&1; then
+				if $use_sudo; then
+					sudo dnf install "$package_name" -y
+				else
+					dnf install "$package_name" -y
+				fi
+			fi
+		fi
+
+		# Check installation
+		if [[ "$ID" == "debian" ]] || [[ "$ID" == "ubuntu" ]]; then
+			if dpkg -s "$package_name" >/dev/null 2>&1; then
+				print_success "$package_name ${G}installed successfully"
+			else
+				if command -v wget &>/dev/null || ls "$PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
+					print_success "$package_name ${G}installed successfully"
+				fi
+			fi
+		elif [[ "$ID" == arch* ]]; then
+			if pacman -Qi "$package_name" >/dev/null 2>&1; then
+				print_success "$package_name ${G}installed successfully"
+			else
+				if command -v wget &>/dev/null || ls "$PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
+					print_success "$package_name ${G}installed successfully"
+				fi
+			fi
+		elif [[ "$ID" == "fedora" ]]; then
+			if rpm -q "$package_name" >/dev/null 2>&1; then
+				print_success "$package_name ${G}installed successfully"
+			else
+				if command -v wget &>/dev/null || ls "$PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
+					print_success "$package_name ${G}installed successfully"
+				fi
+			fi
+		fi
+	done
+	echo ""
+}
+
+function create_shell_script() {
+	local script_path="$1"
+	local shell_setup_content="$2"
+	# Create directory if it doesn't exist
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		sudo mkdir -p "$(dirname "$script_path")"
+	else
+		mkdir -p "$(dirname "$script_path")"
+	fi
+
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		sudo tee "$script_path" >/dev/null <<'EOF'
+#!/bin/bash
+
+if [ -t 1 ] && [ -n "${TERM:-}" ]; then
+    R="$(printf '\033[0m\033[1m\033[31m')" # RST + bold + red
+    G="$(printf '\033[0m\033[32m')"        # RST + green
+    Y="$(printf '\033[0m\033[33m')"        # RST + yellow
+    B="$(printf '\033[0m\033[34m')"        # RST + blue
+    C="$(printf '\033[0m\033[36m')"        # RST + cyan
+    NC="$(printf '\033[0m')"               # RST
+    BOLD="$(printf '\033[1m')"             # bold
+else
+    R=""
+    G=""
+    Y=""
+    B=""
+    C=""
+    NC=""
+    BOLD=""
+fi
+
+TERMUX_DESKTOP_PATH="/data/data/com.termux/files/usr/etc/termux-desktop"
+CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
+EOF
+	else
+		cat <<'EOF' >"$script_path"
+#!/bin/bash
+
+if [ -t 1 ] && [ -n "${TERM:-}" ]; then
+    R="$(printf '\033[0m\033[1m\033[31m')" # RST + bold + red
+    G="$(printf '\033[0m\033[32m')"        # RST + green
+    Y="$(printf '\033[0m\033[33m')"        # RST + yellow
+    B="$(printf '\033[0m\033[34m')"        # RST + blue
+    C="$(printf '\033[0m\033[36m')"        # RST + cyan
+    NC="$(printf '\033[0m')"               # RST
+    BOLD="$(printf '\033[1m')"             # bold
+else
+    R=""
+    G=""
+    Y=""
+    B=""
+    C=""
+    NC=""
+    BOLD=""
+fi
+
+TERMUX_DESKTOP_PATH="/data/data/com.termux/files/usr/etc/termux-desktop"
+CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
+EOF
+	fi
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		typeset -f check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths | sudo tee -a "$script_path" >/dev/null
+		echo "$shell_setup_content" | sudo tee -a "$script_path" >/dev/null
+	else
+		typeset -f check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths >>"$script_path"
+		echo "$shell_setup_content" >>"$script_path"
+	fi
+	# Make script executable
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		sudo chmod +x "$script_path"
+	else
+		chmod +x "$script_path"
+	fi
+	# Verify script was created
+	if [[ "$selected_distro_type" == "chroot" ]]; then
+		if ! su -c "ls '$script_path'" >/dev/null 2>&1; then
+			print_failed "Failed to create script at $script_path"
+		fi
+	else
+		if [[ ! -f "$script_path" ]]; then
+			print_failed "Failed to create script at $script_path"
+		fi
+	fi
+}
+
+function distro_run() {
+	local command="$1"
+	pd_setup_content="${command}"
+
+	create_shell_script "$distro_path/root/pd_setup.sh" "$pd_setup_content"
+	"${selected_distro_type}"-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh
+}
+
+function set_distro_paths {
+	if [[ "$selected_distro_type" == "proot" ]]; then
+		distro_path="$PREFIX/var/lib/proot-distro/installed-rootfs/$selected_distro"
+	elif [[ "$selected_distro_type" == "chroot" ]]; then
+		distro_path="/data/local/chroot-distro/installed-rootfs/$selected_distro"
+	else
+		print_failed "Unable to get distro type..."
+		exit 1
+	fi
+}
+
+read_conf
+set_distro_paths

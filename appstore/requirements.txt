@@ -1,0 +1,16 @@
+# GTK dependencies - Should be installed via system package manager
+# PyGObject>=3.42.0
+
+# Python packages
+# Pillow>=9.0.0
+requests>=2.28.0
+urllib3>=1.26.0
+PyYAML>=6.0
+
+# Fuzzy search (only one is needed)
+fuzzywuzzy>=0.18.0
+# Optional: For better performance with fuzzywuzzy
+# python-Levenshtein>=0.20.9
+
+# Alternative to fuzzywuzzy (uncomment if using this instead)
+# thefuzz>=0.19.0

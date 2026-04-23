@@ -32,15 +32,14 @@ from termux_appstore.terminal.emulator import TerminalEmulator
 def find_terminal_css_path():
     """Find the terminal CSS file path with fallback options."""
     possible_paths = [
-        # Current directory with style subfolder (development)
+        # Inside the package (meson-installed)
         os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
-            "..",
             "..",
             "style",
             "terminal_style.css",
         ),
-        # Termux-specific path
+        # Termux-specific path (legacy)
         "/data/data/com.termux/files/usr/opt/appstore/style/terminal_style.css",
     ]
 
@@ -53,7 +52,6 @@ def find_terminal_css_path():
     default_path = os.path.normpath(
         os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
-            "..",
             "..",
             "style",
             "terminal_style.css",

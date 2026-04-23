@@ -84,11 +84,12 @@ py_installation.install_sources(
   subdir: 'termux_appstore' / 'tasks',
 )
 
-# Install style files
+# Install style files alongside the Python package so they are found
+# relative to __file__ at runtime.
 install_data(
   'style/style.css',
   'style/terminal_style.css',
-  install_dir: get_option('prefix') / 'opt' / 'appstore' / 'style',
+  install_dir: pkgdir / 'style',
 )
 
 # Install desktop file

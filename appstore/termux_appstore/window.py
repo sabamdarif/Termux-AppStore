@@ -11,6 +11,12 @@ import queue
 import subprocess
 import sys
 import threading
+import json
+import shutil
+import time
+import signal
+import stat
+import time
 
 import gi
 
@@ -151,10 +157,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def _load_css(self):
         screen = Gdk.Screen.get_default()
         css_provider = Gtk.CssProvider()
+        # Look inside the package first, then fallback to Termux opt path
         css_file = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..", "style", "style.css"
+            os.path.dirname(os.path.abspath(__file__)), "style", "style.css"
         )
         css_file = os.path.normpath(css_file)
+        if not os.path.isfile(css_file):
+            css_file = "/data/data/com.termux/files/usr/opt/appstore/style/style.css"
         try:
             css_provider.load_from_path(css_file)
             Gtk.StyleContext.add_provider_for_screen(
@@ -293,6 +302,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         # System update button (hidden by default)
         self.update_button = Gtk.Button(label="Check for Updates")
         self.update_button.get_style_context().add_class("system-update-button")
+        self.update_button.connect("clicked", self.on_update_system)
         self.update_button.set_margin_top(10)
         self.update_button.set_margin_start(10)
         self.update_button.set_margin_end(10)
@@ -630,6 +640,245 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         """Handle update button — re-installs the app."""
         self.on_install_clicked(button, app)
 
+    def on_update_system(self, button):
+        """Handle 'Check for Updates' button — runs the full update pipeline.
+
+        Shows progress percentage and a gradient fill on the button via
+        CSS ``progress-{N}`` classes, matching the old gtk_app_store
+        behaviour.  During "Checking versions" phases a spinner is shown
+        instead of the percentage label.
+        """
+        from termux_appstore.constants import (
+            APPSTORE_DIR,
+            APPSTORE_JSON,
+            APPSTORE_LOGO_DIR,
+            APPSTORE_OLD_JSON_DIR,
+            GITHUB_APPS_JSON,
+            GITHUB_LOGOS_ZIP,
+            LAST_VERSION_CHECK_FILE,
+        )
+        from termux_appstore.backend.refresh import (
+            _check_native_packages,
+            _check_distro_packages,
+        )
+
+        button.set_sensitive(False)
+        button.get_style_context().add_class("updating")
+
+        # Replace button label with spinner for initial phase
+        spinner = Gtk.Spinner()
+        spinner.set_size_request(16, 16)
+        spinner.start()
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_box.pack_start(spinner, False, False, 0)
+        btn_box.pack_start(Gtk.Label(label="Checking versions..."), False, False, 0)
+        button.remove(button.get_children()[0])
+        button.add(btn_box)
+        button.show_all()
+
+        def _apply_progress_css(progress):
+            """Apply CSS progress-N gradient class to button."""
+            ctx = button.get_style_context()
+            # Remove all existing progress classes
+            for i in range(10, 101, 10):
+                ctx.remove_class(f"progress-{i}")
+            if progress > 0:
+                rounded = max(10, min(100, int(round(progress / 10.0)) * 10))
+                ctx.add_class(f"progress-{rounded}")
+
+        def update_progress_safe(progress, label=None):
+            """Update button progress — spinner for version-checks, percentage for rest."""
+            def _do():
+                if label:
+                    if "Checking versions" in label:
+                        # Keep spinner + label during version-check phases
+                        child = button.get_child()
+                        if not isinstance(child, Gtk.Box):
+                            button.remove(child)
+                            sp = Gtk.Spinner()
+                            sp.set_size_request(16, 16)
+                            sp.start()
+                            box = Gtk.Box(
+                                orientation=Gtk.Orientation.HORIZONTAL, spacing=6
+                            )
+                            box.pack_start(sp, False, False, 0)
+                            box.pack_start(Gtk.Label(label=label), False, False, 0)
+                            button.add(box)
+                            button.show_all()
+                        else:
+                            children = child.get_children()
+                            if len(children) > 1:
+                                children[1].set_text(label)
+                    else:
+                        # Show progress percentage on button
+                        child = button.get_child()
+                        if child:
+                            button.remove(child)
+                        button.add(Gtk.Label(label=label))
+                        button.show_all()
+                        _apply_progress_css(progress)
+                return False
+            GLib.idle_add(_do)
+
+        def _update_thread():
+            try:
+                # Step 1: Update Repository (0-20%)
+                update_progress_safe(0)
+
+                update_progress_safe(10, "Updating repository...")
+                cmd = (
+                    "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                    'if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then '
+                    "apt update -y 2>/dev/null; "
+                    'elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then '
+                    "pacman -Sy --noconfirm 2>/dev/null; fi"
+                )
+                subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=60)
+
+                # Step 1b: Update distro repos (20-25%)
+                update_progress_safe(20, "Checking distro repositories...")
+                if hasattr(self, 'distro_config') and self.distro_config.enabled:
+                    distro = self.distro_config.selected
+                    base_cmd = self.distro_config.get_command(distro)
+                    update_progress_safe(
+                        25, f"Updating {distro} repositories..."
+                    )
+
+                    if distro in ("ubuntu", "debian"):
+                        distro_cmd = f"{base_cmd} 'apt update -y'"
+                    elif distro == "fedora":
+                        distro_cmd = f"{base_cmd} 'dnf check-update -y || true'"
+                    elif distro == "archlinux":
+                        distro_cmd = f"{base_cmd} 'pacman -Sy --noconfirm'"
+                    else:
+                        distro_cmd = None
+
+                    if distro_cmd:
+                        subprocess.run(
+                            ["bash", "-c", distro_cmd],
+                            capture_output=True, text=True, timeout=120,
+                        )
+
+                # Step 2: Download new app data (35-70%)
+                update_progress_safe(35, "Downloading updates...")
+                old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, "apps.json")
+                old_apps_data = []
+                if os.path.exists(old_json_path):
+                    with open(old_json_path, "r") as f:
+                        old_apps_data = json.load(f)
+
+                # Backup current → old
+                if os.path.exists(APPSTORE_JSON):
+                    os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
+                    shutil.copy2(APPSTORE_JSON, old_json_path)
+                    os.remove(APPSTORE_JSON)
+
+                dl_cmd = f"aria2c -x 16 -s 16 '{GITHUB_APPS_JSON}' -d '{APPSTORE_DIR}' -o 'apps.json'"
+                subprocess.run(dl_cmd, shell=True, capture_output=True, text=True, timeout=60)
+
+                if not os.path.exists(APPSTORE_JSON):
+                    print("Failed to download new apps.json")
+                    GLib.idle_add(lambda: self._update_system_complete(button))
+                    return
+
+                with open(APPSTORE_JSON, "r") as f:
+                    new_apps_data = json.load(f)
+
+                # Step 3: Resolve versions (spinner during version checks)
+                update_progress_safe(
+                    90, "Checking versions..."
+                )
+                _resolve_native_versions(new_apps_data)
+
+                if hasattr(self, 'distro_config') and self.distro_config.enabled:
+                    update_progress_safe(
+                        90, "Checking versions..."
+                    )
+                    _process_distro_apps(
+                        new_apps_data,
+                        self.distro_config,
+                        self.installed_tracker,
+                    )
+
+                # Save resolved versions
+                with open(APPSTORE_JSON, "w") as f:
+                    json.dump(new_apps_data, f, indent=2)
+
+                # Step 4: Compare versions for installed apps
+                new_updates = {}
+                for new_app in new_apps_data:
+                    folder = new_app["folder_name"]
+                    if folder not in self.installed_apps:
+                        continue
+                    new_ver = new_app.get("version")
+                    if new_ver in ("termux_local_version", "distro_local_version", "Unavailable", None):
+                        continue
+
+                    old_app = next(
+                        (a for a in old_apps_data if a["folder_name"] == folder), None
+                    )
+                    if old_app:
+                        old_ver = old_app.get("version")
+                        if old_ver in ("termux_local_version", "distro_local_version", "Unavailable", None):
+                            continue
+                        if old_ver != new_ver:
+                            new_updates[folder] = new_ver
+                            print(f"Update found: {new_app['app_name']} {old_ver} → {new_ver}")
+
+                # Merge into tracker
+                for folder, ver in new_updates.items():
+                    self.update_tracker.add(folder, ver)
+                self.update_tracker.save()
+                self.pending_updates = self.update_tracker.pending
+
+                # Step 5: Update logos (70%)
+                update_progress_safe(70, "Updating app logos...")
+                if os.path.exists(APPSTORE_LOGO_DIR):
+                    shutil.rmtree(APPSTORE_LOGO_DIR)
+                logo_cmd = (
+                    f"aria2c -x 16 -s 16 '{GITHUB_LOGOS_ZIP}' -d '{APPSTORE_DIR}' -o 'logos.zip' && "
+                    f"unzip -o '{os.path.join(APPSTORE_DIR, 'logos.zip')}' -d '{APPSTORE_LOGO_DIR}' && "
+                    f"rm -f '{os.path.join(APPSTORE_DIR, 'logos.zip')}'"
+                )
+                subprocess.run(logo_cmd, shell=True, capture_output=True, text=True, timeout=120)
+
+                # Step 6: Save last check timestamp
+                from datetime import datetime
+                with open(LAST_VERSION_CHECK_FILE, "w") as f:
+                    f.write(str(datetime.now().timestamp()))
+
+                # Step 7: Reload data and refresh UI (100%)
+                update_progress_safe(100, "Check for Updates")
+                GLib.idle_add(self._load_and_display)
+                GLib.idle_add(self.show_update_apps)
+                print(f"Update check complete — {len(new_updates)} updates found")
+
+            except Exception as e:
+                print(f"Update check failed: {e}")
+                import traceback
+                traceback.print_exc()
+                GLib.idle_add(
+                    lambda: self._show_error(f"Update check failed: {e}")
+                )
+            finally:
+                GLib.idle_add(lambda: self._update_system_complete(button))
+
+        thread = threading.Thread(target=_update_thread, daemon=True)
+        thread.start()
+
+    def _update_system_complete(self, button):
+        """Reset the 'Check for Updates' button after the pipeline finishes."""
+        button.set_sensitive(True)
+        button.get_style_context().remove_class("updating")
+        for i in range(10, 101, 10):
+            button.get_style_context().remove_class(f"progress-{i}")
+
+        # Restore plain label
+        child = button.get_child()
+        if child:
+            button.remove(child)
+        button.add(Gtk.Label(label="Check for Updates"))
+        button.show_all()
     # ------------------------------------------------------------------
     # Shared script execution engine
     # ------------------------------------------------------------------
@@ -642,10 +891,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         Shows a progress dialog with terminal output and weighted
         progress tracking.  Runs the script on a daemon thread.
         """
-        import os
-        import signal
-        import stat
-        import time
 
         from termux_appstore.backend.script_runner import download_script
 

@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 
-from termux_appstore.constants import APPSTORE_DIR, TERMUX_PREFIX
+from termux_appstore.constants import TERMUX_PREFIX
 
 # ---------------------------------------------------------------------------
 # Distro configuration
@@ -27,53 +27,61 @@ class DistroConfig:
         self.load()
 
     def load(self):
-        """Load distro settings from appstore state files."""
+        """Load distro settings from termux-desktop ``configuration.conf``.
+
+        Reads ``distro_add_answer``, ``selected_distro``, and
+        ``selected_distro_type`` directly from the termux-desktop
+        configuration file.
+        """
         try:
-            distro_file = os.path.join(APPSTORE_DIR, "selected_distro")
-            if os.path.exists(distro_file):
-                with open(distro_file, "r") as f:
-                    self.selected_distro = f.read().strip()
-                    if self.selected_distro:
-                        print(f"Found selected_distro: {self.selected_distro}")
-
-            answer_file = os.path.join(APPSTORE_DIR, "distro_add_answer")
-            if os.path.exists(answer_file):
-                with open(answer_file, "r") as f:
-                    answer = f.read().strip()
-                    self.distro_enabled = answer.lower() == "y"
-                    if self.distro_enabled:
-                        print(f"Found distro_add_answer: {answer} -> enabled: True")
-            else:
-                with open(answer_file, "w") as f:
-                    f.write("n")
-                self.distro_enabled = False
-
-            # Read distro type from termux-desktop config
             termux_desktop_config = os.path.join(
                 TERMUX_PREFIX, "etc", "termux-desktop", "configuration.conf"
             )
-            if os.path.exists(termux_desktop_config):
-                try:
-                    with open(termux_desktop_config, "r") as f:
-                        for line in f:
-                            line = line.strip()
-                            if line.startswith("selected_distro_type="):
-                                self.selected_distro_type = (
-                                    line.split("=")[1]
-                                    .strip()
-                                    .strip('"')
-                                    .strip("'")
-                                    .lower()
-                                )
-                                print(
-                                    f"Found selected_distro_type: {self.selected_distro_type}"
-                                )
-                                break
-                except Exception as e:
-                    print(f"Error reading distro type from config: {e}")
+            if not os.path.exists(termux_desktop_config):
+                print(
+                    "Termux desktop config not found. "
+                    "Distro support disabled."
+                )
+                return
+
+            with open(termux_desktop_config, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("distro_add_answer="):
+                        value = (
+                            line.split("=")[1]
+                            .strip()
+                            .strip('"')
+                            .strip("'")
+                            .lower()
+                        )
+                        self.distro_enabled = value in ("y", "yes")
+                        print(
+                            f"distro_add_answer={value} -> enabled: {self.distro_enabled}"
+                        )
+                    elif line.startswith("selected_distro="):
+                        self.selected_distro = (
+                            line.split("=")[1]
+                            .strip()
+                            .strip('"')
+                            .strip("'")
+                            .lower()
+                        )
+                        print(f"selected_distro: {self.selected_distro}")
+                    elif line.startswith("selected_distro_type="):
+                        self.selected_distro_type = (
+                            line.split("=")[1]
+                            .strip()
+                            .strip('"')
+                            .strip("'")
+                            .lower()
+                        )
+                        print(
+                            f"selected_distro_type: {self.selected_distro_type}"
+                        )
 
         except Exception as e:
-            print(f"Error checking distro configuration: {e}")
+            print(f"Error reading distro configuration: {e}")
             self.distro_enabled = False
             self.selected_distro = None
             self.selected_distro_type = "proot"

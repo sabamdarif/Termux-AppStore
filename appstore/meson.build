@@ -54,6 +54,7 @@ termux_appstore_ui_sources = files(
 termux_appstore_tasks_sources = files(
   'termux_appstore/tasks/__init__.py',
   'termux_appstore/tasks/task_manager.py',
+  'termux_appstore/tasks/update_check.py',
 )
 
 # Install Python sources

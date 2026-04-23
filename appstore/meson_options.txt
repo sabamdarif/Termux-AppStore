@@ -1,0 +1,5 @@
+# Termux AppStore build options
+# Currently no custom options needed — using meson defaults.
+# Future options could include:
+#   option('use_modular', type: 'boolean', value: true,
+#          description: 'Use the modular package instead of the monolith')

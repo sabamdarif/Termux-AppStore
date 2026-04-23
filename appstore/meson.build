@@ -59,6 +59,18 @@ termux_appstore_tasks_sources = files(
 # Install Python sources
 pkgdir = py_installation.get_install_dir() / 'termux_appstore'
 
+# Generate _buildconf.py with build-time PREFIX
+conf_data = configuration_data()
+conf_data.set('PREFIX', get_option('prefix'))
+
+configure_file(
+  input: 'termux_appstore/_buildconf.py.in',
+  output: '_buildconf.py',
+  configuration: conf_data,
+  install: true,
+  install_dir: pkgdir,
+)
+
 py_installation.install_sources(
   termux_appstore_sources,
   subdir: 'termux_appstore',

@@ -10,7 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from termux_appstore.constants import TERMUX_TMP
+from termux_appstore.constants import TERMUX_PREFIX, TERMUX_TMP
 
 
 def modify_script(script_path):
@@ -39,7 +39,7 @@ def modify_script(script_path):
         )
 
         for shebang in [
-            "#!/data/data/com.termux/files/usr/bin/bash\n",
+            f"#!{TERMUX_PREFIX}/bin/bash\n",
             "#!/bin/bash\n",
         ]:
             if shebang in content:

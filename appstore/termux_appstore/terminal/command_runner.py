@@ -23,6 +23,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # type: ignore # noqa: E402
 
 from termux_appstore.terminal.emulator import TerminalEmulator
+from termux_appstore.constants import TERMUX_PREFIX
 
 # ---------------------------------------------------------------------------
 # CSS helpers
@@ -40,7 +41,7 @@ def find_terminal_css_path():
             "terminal_style.css",
         ),
         # Termux-specific path (legacy)
-        "/data/data/com.termux/files/usr/opt/appstore/style/terminal_style.css",
+        os.path.join(TERMUX_PREFIX, "opt", "appstore", "style", "terminal_style.css"),
     ]
 
     for path in possible_paths:

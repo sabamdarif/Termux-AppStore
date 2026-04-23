@@ -39,6 +39,7 @@ from termux_appstore.constants import (
     APPSTORE_JSON,
     APPSTORE_LOGO_DIR,
     APPSTORE_OLD_JSON_DIR,
+    TERMUX_PREFIX,
 )
 
 # Tasks
@@ -163,7 +164,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         )
         css_file = os.path.normpath(css_file)
         if not os.path.isfile(css_file):
-            css_file = "/data/data/com.termux/files/usr/opt/appstore/style/style.css"
+            css_file = os.path.join(TERMUX_PREFIX, "opt", "appstore", "style", "style.css")
         try:
             css_provider.load_from_path(css_file)
             Gtk.StyleContext.add_provider_for_screen(
@@ -727,7 +728,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 update_progress_safe(10, "Updating repository...")
                 cmd = (
-                    "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                    f"source {TERMUX_PREFIX}/bin/termux-setup-package-manager && "
                     'if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then '
                     "apt update -y 2>/dev/null; "
                     'elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then '
@@ -737,8 +738,8 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
                 # Step 1b: Update distro repos (20-25%)
                 update_progress_safe(20, "Checking distro repositories...")
-                if hasattr(self, 'distro_config') and self.distro_config.enabled:
-                    distro = self.distro_config.selected
+                if hasattr(self, 'distro_config') and self.distro_config.distro_enabled:
+                    distro = self.distro_config.selected_distro
                     base_cmd = self.distro_config.get_command(distro)
                     update_progress_safe(
                         25, f"Updating {distro} repositories..."
@@ -790,7 +791,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 )
                 _resolve_native_versions(new_apps_data)
 
-                if hasattr(self, 'distro_config') and self.distro_config.enabled:
+                if hasattr(self, 'distro_config') and self.distro_config.distro_enabled:
                     update_progress_safe(
                         90, "Checking versions..."
                     )
@@ -857,8 +858,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                 print(f"Update check failed: {e}")
                 import traceback
                 traceback.print_exc()
+                err_msg = f"Update check failed: {e}"
                 GLib.idle_add(
-                    lambda: self._show_error(f"Update check failed: {e}")
+                    lambda msg=err_msg: self._show_error(msg)
                 )
             finally:
                 GLib.idle_add(lambda: self._update_system_complete(button))

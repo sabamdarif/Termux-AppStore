@@ -22,7 +22,13 @@ APP_ICON_NAME = "system-software-install"
 # ---------------------------------------------------------------------------
 # Termux environment paths
 # ---------------------------------------------------------------------------
-TERMUX_PREFIX = "/data/data/com.termux/files/usr"
+try:
+    from termux_appstore._buildconf import PREFIX as _PREFIX
+except ImportError:
+    # Fallback for development runs outside meson install
+    _PREFIX = os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
+
+TERMUX_PREFIX = _PREFIX
 TERMUX_TMP = os.path.join(TERMUX_PREFIX, "tmp")
 
 # ---------------------------------------------------------------------------

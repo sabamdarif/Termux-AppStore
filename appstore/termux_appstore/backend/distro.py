@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 
-from termux_appstore.constants import APPSTORE_DIR
+from termux_appstore.constants import APPSTORE_DIR, TERMUX_PREFIX
 
 # ---------------------------------------------------------------------------
 # Distro configuration
@@ -49,8 +49,8 @@ class DistroConfig:
                 self.distro_enabled = False
 
             # Read distro type from termux-desktop config
-            termux_desktop_config = (
-                "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+            termux_desktop_config = os.path.join(
+                TERMUX_PREFIX, "etc", "termux-desktop", "configuration.conf"
             )
             if os.path.exists(termux_desktop_config):
                 try:
@@ -142,7 +142,7 @@ def check_native_package_installed(package_name):
     """
     try:
         cmd = (
-            "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager "
+            f"source {TERMUX_PREFIX}/bin/termux-setup-package-manager "
             "&& echo $TERMUX_APP_PACKAGE_MANAGER"
         )
         result = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)

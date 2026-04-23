@@ -11,6 +11,7 @@ import os
 from termux_appstore.constants import (
     APPSTORE_JSON,
     ARCH_COMPATIBILITY,
+    TERMUX_PREFIX,
 )
 from termux_appstore.utils import get_current_arch
 
@@ -18,8 +19,8 @@ from termux_appstore.utils import get_current_arch
 # Termux Desktop config reader  (shared helper, no GTK)
 # ---------------------------------------------------------------------------
 
-TERMUX_DESKTOP_CONFIG = (
-    "/data/data/com.termux/files/usr/etc/termux-desktop/configuration.conf"
+TERMUX_DESKTOP_CONFIG = os.path.join(
+    TERMUX_PREFIX, "etc", "termux-desktop", "configuration.conf"
 )
 
 

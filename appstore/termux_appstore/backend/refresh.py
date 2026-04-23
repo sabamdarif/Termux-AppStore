@@ -29,6 +29,7 @@ from termux_appstore.constants import (
     GITHUB_APPS_JSON,
     GITHUB_LOGOS_ZIP,
     LAST_VERSION_CHECK_FILE,
+    TERMUX_PREFIX,
     TERMUX_TMP,
 )
 from termux_appstore.utils import get_current_arch
@@ -358,7 +359,7 @@ def _check_native_packages(apps, installed_apps):
 
         if app.get("version") == "termux_local_version":
             cmd = (
-                "source /data/data/com.termux/files/usr/bin/termux-setup-package-manager && "
+                f"source {TERMUX_PREFIX}/bin/termux-setup-package-manager && "
                 'if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then '
                 f"apt-cache policy {package_name} | grep 'Candidate:' | awk '{{print $2}}'; "
                 'elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then '

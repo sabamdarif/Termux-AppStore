@@ -1,10 +1,10 @@
 [Desktop Entry]
-Version=0.5.4.1
+Version=@APP_VERSION@
 Type=Application
-Name=Termux AppStore
+Name=@APP_NAME@
 Comment=Browse and install applications in Termux
 Exec=termux-appstore
-Icon=org.sabamdarif.termux.appstore
+Icon=@APP_ID@
 Terminal=false
 Categories=System;PackageManager;
 StartupWMClass=termux-appstore

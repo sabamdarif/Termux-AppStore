@@ -10,25 +10,15 @@ import os
 # ---------------------------------------------------------------------------
 # Application identity
 # ---------------------------------------------------------------------------
-APP_ID = "org.sabamdarif.termux.appstore"
-APP_NAME = "Termux AppStore"
-APP_VERSION = "0.5.4.1"
+from termux_appstore._buildconf import APP_ID, APP_NAME, APP_VERSION, PREFIX
+
 APP_COMMENT = "A modern graphical package manager for Termux"
 APP_COPYRIGHT = "© 2025 Termux Desktop (sabamdarif)"
 APP_WEBSITE = "https://github.com/sabamdarif/termux-desktop"
 APP_WEBSITE_LABEL = "Website (GITHUB)"
 APP_ICON_NAME = "system-software-install"
 
-# ---------------------------------------------------------------------------
-# Termux environment paths
-# ---------------------------------------------------------------------------
-try:
-    from termux_appstore._buildconf import PREFIX as _PREFIX
-except ImportError:
-    # Fallback for development runs outside meson install
-    _PREFIX = os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
-
-TERMUX_PREFIX = _PREFIX
+TERMUX_PREFIX = PREFIX
 TERMUX_TMP = os.path.join(TERMUX_PREFIX, "tmp")
 
 # ---------------------------------------------------------------------------

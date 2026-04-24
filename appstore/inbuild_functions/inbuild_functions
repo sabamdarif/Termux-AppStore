@@ -1,5 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
+readonly TERMUX_HOME=${HOME:-/data/data/com.termux/files/home}
+readonly TERMUX_PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
+
 # shellcheck disable=SC2154
 if [ -t 1 ] && [ -n "${TERM:-}" ]; then
 	R="$(printf '\033[0m\033[1m\033[31m')" # RST + bold + red
@@ -19,9 +22,9 @@ else
 	BOLD=""
 fi
 
-cd "$HOME" || exit 1
+cd "$TERMUX_HOME" || exit 1
 ############### Define basic initial values ######################
-TERMUX_DESKTOP_PATH="$PREFIX/etc/termux-desktop"
+TERMUX_DESKTOP_PATH="$TERMUX_PREFIX/etc/termux-desktop"
 CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
 ##################################################################
 
@@ -42,7 +45,7 @@ function check_termux() {
 		fi
 	fi
 
-	if [[ -z "$PREFIX" || "$PREFIX" != *"/com.termux/"* ]]; then
+	if [[ -z "$TERMUX_PREFIX" || "$TERMUX_PREFIX" != *"/com.termux/"* ]]; then
 		echo "${R}[${R}☓${R}]${R}${BOLD} Please run this script inside Termux."
 		exit 1
 	fi
@@ -292,6 +295,7 @@ function detact_package_manager() {
 # will check if the package is already installed or not, if it installed then reinstall and print success/failed message
 function package_install_and_check {
 	log_debug "Starting package installation for: $*"
+	update_sys
 	local packs_list
 	# Properly splits on spaces
 	IFS=' ' read -r -a packs_list <<<"$*"
@@ -329,7 +333,7 @@ function package_install_and_check {
 
 			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
 				retry_count=$((retry_count + 1))
-				check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+				check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
 				print_msg "Installing Package : ${C}$package"
 
 				# Use a pipe to capture and parse pacman output
@@ -395,12 +399,6 @@ function package_install_and_check {
 				retry_count=$((retry_count + 1))
 				print_msg "Installing package: ${C}$package"
 
-				# Clean up locks before attempting install
-				rm -f "$PREFIX/var/lib/dpkg/lock"
-				rm -f "$PREFIX/var/lib/dpkg/lock-frontend"
-				rm -f "$PREFIX/var/cache/apt/archives/lock"
-				dpkg --configure -a >/dev/null 2>&1
-
 				# Use a pipe to capture and parse apt output
 				apt install "$package" -y 2>&1 | while IFS= read -r line; do
 					echo "$line"
@@ -461,7 +459,7 @@ function package_remove_and_check {
 					local remove_success=false
 					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
 						retry_count=$((retry_count + 1))
-						check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+						check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
 						print_msg "Removing Package : ${C}$package"
 
 						pacman -Rnds --noconfirm "$package" 2>&1 | while IFS= read -r line; do
@@ -484,7 +482,7 @@ function package_remove_and_check {
 					local remove_success=false
 					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
 						retry_count=$((retry_count + 1))
-						check_and_delete "$PREFIX/var/lib/pacman/db.lck"
+						check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
 						print_msg "Removing Package : ${C}$package_name"
 
 						pacman -Rnds --noconfirm "$package_name" 2>&1 | while IFS= read -r line; do
@@ -725,10 +723,10 @@ function get_latest_release() {
 function install_font_for_style() {
 	local style_number="$1"
 	print_msg "Installing Fonts..."
-	check_and_create_directory "$HOME/.fonts"
+	check_and_create_directory "$TERMUX_HOME/.fonts"
 	download_and_extract "https://raw.githubusercontent.com/sabamdarif/termux-desktop/refs/heads/setup-files/setup-files/$de_name/look_${style_number}/font.tar.gz" "$HOME/.fonts"
 	fc-cache -f 2>/dev/null
-	cd "$HOME" || return 1
+	cd "$TERMUX_HOME" || return 1
 }
 
 # Use:- select_an_option 8 1 variable_name
@@ -792,10 +790,16 @@ function print_to_config() {
 
 function update_sys() {
 	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
-		pacman -Syu --noconfirm
+		rm -f "$TERMUX_PREFIX/var/lib/pacman/db.lck"
+		pacman-db-upgrade
+		pacman -Sy
 	else
-		apt-get update -y -o Dpkg::Options::="--force-confnew"
-		apt-get upgrade -y -o Dpkg::Options::="--force-confnew"
+		rm -f "$TERMUX_PREFIX/var/lib/dpkg/lock"
+		rm -f "$TERMUX_PREFIX/var/lib/dpkg/lock-frontend"
+		rm -f "$TERMUX_PREFIX/var/cache/apt/archives/lock"
+		dpkg --configure -a >/dev/null 2>&1
+		apt update -y
+		dpkg --configure -a >/dev/null 2>&1
 	fi
 }
 
@@ -967,7 +971,7 @@ function pd_package_install_and_check() {
 			if dpkg -s "$package_name" >/dev/null 2>&1; then
 				print_success "$package_name ${G}installed successfully"
 			else
-				if command -v wget &>/dev/null || ls "$PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
+				if command -v wget &>/dev/null || ls "$TERMUX_PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
 					print_success "$package_name ${G}installed successfully"
 				fi
 			fi
@@ -975,7 +979,7 @@ function pd_package_install_and_check() {
 			if pacman -Qi "$package_name" >/dev/null 2>&1; then
 				print_success "$package_name ${G}installed successfully"
 			else
-				if command -v wget &>/dev/null || ls "$PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
+				if command -v wget &>/dev/null || ls "$TERMUX_PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
 					print_success "$package_name ${G}installed successfully"
 				fi
 			fi
@@ -983,7 +987,7 @@ function pd_package_install_and_check() {
 			if rpm -q "$package_name" >/dev/null 2>&1; then
 				print_success "$package_name ${G}installed successfully"
 			else
-				if command -v wget &>/dev/null || ls "$PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
+				if command -v wget &>/dev/null || ls "$TERMUX_PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
 					print_success "$package_name ${G}installed successfully"
 				fi
 			fi
@@ -1088,7 +1092,7 @@ function distro_run() {
 
 function set_distro_paths {
 	if [[ "$selected_distro_type" == "proot" ]]; then
-		distro_path="$PREFIX/var/lib/proot-distro/installed-rootfs/$selected_distro"
+		distro_path="$TERMUX_PREFIX/var/lib/proot-distro/installed-rootfs/$selected_distro"
 	elif [[ "$selected_distro_type" == "chroot" ]]; then
 		distro_path="/data/local/chroot-distro/installed-rootfs/$selected_distro"
 	else

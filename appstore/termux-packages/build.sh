@@ -4,7 +4,7 @@ TERMUX_PKG_LICENSE="GPL-3.0"
 TERMUX_PKG_MAINTAINER="@sabamdarif"
 TERMUX_PKG_VERSION="@VERSION@"
 TERMUX_PKG_SRCURL="git+https://github.com/sabamdarif/Termux-AppStore"
-TERMUX_PKG_DEPENDS="python, pygobject, python-pillow, gtk3, glib, aria2, gobject-introspection"
+TERMUX_PKG_DEPENDS="python, pygobject, python-pillow, python-pip, gtk3, glib, aria2, gobject-introspection"
 TERMUX_PKG_BUILD_DEPENDS="pkg-config, xorgproto"
 TERMUX_PKG_PYTHON_RUNTIME_DEPS="fuzzysearch"
 

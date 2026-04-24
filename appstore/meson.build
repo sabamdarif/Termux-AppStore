@@ -77,7 +77,13 @@ termux_appstore_tasks_sources = files(
 )
 
 # Install Python sources
-pkgdir = py_installation.get_install_dir() / 'termux_appstore'
+py3modules_dir = get_option('py3modules_dir')
+if py3modules_dir == ''
+  py3modules_dir = py_installation.get_install_dir()
+else
+  py3modules_dir = get_option('prefix') / py3modules_dir
+endif
+pkgdir = py3modules_dir / 'termux_appstore'
 
 # Generate config files with build-time variables
 conf_data = configuration_data()
@@ -94,29 +100,29 @@ configure_file(
   install_dir: pkgdir,
 )
 
-py_installation.install_sources(
+install_data(
   termux_appstore_sources,
-  subdir: 'termux_appstore',
+  install_dir: pkgdir,
 )
 
-py_installation.install_sources(
+install_data(
   termux_appstore_backend_sources,
-  subdir: 'termux_appstore' / 'backend',
+  install_dir: pkgdir / 'backend',
 )
 
-py_installation.install_sources(
+install_data(
   termux_appstore_terminal_sources,
-  subdir: 'termux_appstore' / 'terminal',
+  install_dir: pkgdir / 'terminal',
 )
 
-py_installation.install_sources(
+install_data(
   termux_appstore_ui_sources,
-  subdir: 'termux_appstore' / 'ui',
+  install_dir: pkgdir / 'ui',
 )
 
-py_installation.install_sources(
+install_data(
   termux_appstore_tasks_sources,
-  subdir: 'termux_appstore' / 'tasks',
+  install_dir: pkgdir / 'tasks',
 )
 
 # Install style files alongside the Python package so they are found

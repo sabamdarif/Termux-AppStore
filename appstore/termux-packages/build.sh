@@ -7,6 +7,9 @@ TERMUX_PKG_SRCURL="git+https://github.com/sabamdarif/Termux-AppStore"
 TERMUX_PKG_DEPENDS="python, pygobject, python-pillow, python-pip, gtk3, glib, aria2, gobject-introspection"
 TERMUX_PKG_BUILD_DEPENDS="pkg-config, xorgproto"
 TERMUX_PKG_PYTHON_RUNTIME_DEPS="fuzzysearch"
+TERMUX_PKG_EXTRA_CONFIGURE_ARGS="
+-Dpy3modules_dir=$TERMUX_PYTHON_HOME/site-packages
+"
 
 termux_step_post_get_source() {
 	cd "$TERMUX_PKG_SRCDIR"

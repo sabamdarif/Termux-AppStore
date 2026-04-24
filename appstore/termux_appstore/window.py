@@ -61,15 +61,24 @@ from termux_appstore.ui.search import SearchBar
 from termux_appstore.ui.sidebar import build_sidebar
 from termux_appstore.utils import get_current_arch
 
-# Fuzzy search (optional)
+# Fuzzy search backend choice
 try:
-    from fuzzywuzzy import fuzz, process  # type: ignore
+    from termux_appstore._buildconf import FUZZY_BACKEND
 except ImportError:
+    FUZZY_BACKEND = "none"
+
+fuzz = None
+process = None
+if FUZZY_BACKEND == "fuzzywuzzy":
+    try:
+        from fuzzywuzzy import fuzz, process  # type: ignore
+    except ImportError:
+        pass
+elif FUZZY_BACKEND == "thefuzz":
     try:
         from thefuzz import fuzz, process  # type: ignore
     except ImportError:
-        fuzz = None
-        process = None
+        pass
 
 
 class AppStoreWindow(Gtk.ApplicationWindow):

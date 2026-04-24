@@ -3,4 +3,5 @@
 """Build-time configuration values injected by meson."""
 
 PREFIX = "@PREFIX@"
+FUZZY_BACKEND = "@FUZZY_BACKEND@"
 

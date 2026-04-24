@@ -5,9 +5,40 @@ project(
   license: 'GPL-3.0-or-later',
 )
 
-# Python module
+# Modules
 python = import('python')
-py_installation = python.find_installation('python3')
+gnome = import('gnome')
+i18n = import('i18n')
+
+# Build list of required Python modules based on fuzzy backend option
+fuzzy_opt = get_option('fuzzy_backend')
+required_modules = ['PIL']
+
+if fuzzy_opt == 'fuzzywuzzy'
+  required_modules += ['fuzzywuzzy']
+elif fuzzy_opt == 'thefuzz'
+  required_modules += ['thefuzz']
+endif
+
+# Find Python installation with required modules
+py_installation = python.find_installation('python3',
+  modules: required_modules,
+  required: true
+)
+
+# Verify Python version
+if not py_installation.language_version().version_compare('>= 3.10')
+  error('Python 3.10 or newer is required.')
+endif
+
+# Program Dependencies
+find_program('aria2c', required: true)
+
+# System Library Dependencies
+dependency('glib-2.0', version: '>= 2.88.0', required: true)
+dependency('gobject-introspection-1.0', version: '>= 1.86.0', required: true)
+dependency('gtk+-3.0', version: '>= 3.24.52', required: true)
+dependency('pygobject-3.0', version: '>= 3.56.2', required: true)
 
 # Package sources — main package
 termux_appstore_sources = files(
@@ -63,6 +94,7 @@ pkgdir = py_installation.get_install_dir() / 'termux_appstore'
 # Generate _buildconf.py with build-time PREFIX
 conf_data = configuration_data()
 conf_data.set('PREFIX', get_option('prefix'))
+conf_data.set('FUZZY_BACKEND', get_option('fuzzy_backend'))
 
 configure_file(
   input: 'termux_appstore/_buildconf.py.in',
@@ -106,8 +138,11 @@ install_data(
 )
 
 # Install desktop file
-install_data(
-  'org.sabamdarif.termux.appstore.desktop',
+configure_file(
+  input: 'data/org.sabamdarif.termux.appstore.desktop.in',
+  output: 'org.sabamdarif.termux.appstore.desktop',
+  configuration: conf_data,
+  install: true,
   install_dir: get_option('prefix') / 'share' / 'applications',
 )
 
@@ -119,7 +154,7 @@ install_data(
 
 # Install launcher script
 install_data(
-  'appstore',
+  'termux-appstore',
   install_dir: get_option('prefix') / 'bin',
   install_mode: 'rwxr-xr-x',
 )
@@ -130,6 +165,8 @@ install_data(
   install_dir: pkgdir / 'inbuild_functions',
 )
 
-# NOTE: Legacy files (gtk_app_store.py, terminal_emulator.py) are
-# installed by the bash 'appstore' launcher script via git clone,
-# not by meson. They will be removed in Phase 8 (final cutover).
+gnome.post_install(
+  glib_compile_schemas: true,
+  gtk_update_icon_cache: true,
+  update_desktop_database: true,
+)

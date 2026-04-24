@@ -118,6 +118,12 @@ install_data(
   install_mode: 'rwxr-xr-x',
 )
 
+# Install inbuild_functions (bash API sourced by install/uninstall scripts)
+install_data(
+  'inbuild_functions/inbuild_functions',
+  install_dir: pkgdir / 'inbuild_functions',
+)
+
 # NOTE: Legacy files (gtk_app_store.py, terminal_emulator.py) are
 # installed by the bash 'appstore' launcher script via git clone,
 # not by meson. They will be removed in Phase 8 (final cutover).

@@ -29,14 +29,16 @@ def modify_script(script_path):
         with open(script_path, "r") as f:
             content = f.read()
 
-        # Resolve the inbuild_functions path relative to the project root.
-        # In the installed layout the project root is the parent of
-        # ``termux_appstore/``, which mirrors the repo root where
-        # ``inbuild_functions/inbuild_functions`` lives.
-        project_root = Path(__file__).resolve().parent.parent.parent
-        inbuild_functions_path = (
-            project_root / "inbuild_functions" / "inbuild_functions"
-        )
+        # Resolve inbuild_functions path.
+        # Installed layout: <site-packages>/termux_appstore/inbuild_functions/
+        # Dev layout:       appstore/inbuild_functions/
+        pkg_root = Path(__file__).resolve().parent.parent  # termux_appstore/
+        inbuild_functions_path = pkg_root / "inbuild_functions" / "inbuild_functions"
+        if not inbuild_functions_path.exists():
+            # Fallback for development runs outside meson install
+            inbuild_functions_path = (
+                pkg_root.parent / "inbuild_functions" / "inbuild_functions"
+            )
 
         for shebang in [
             f"#!{TERMUX_PREFIX}/bin/bash\n",

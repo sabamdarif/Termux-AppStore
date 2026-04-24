@@ -3,3 +3,4 @@
 """Build-time configuration values injected by meson."""
 
 PREFIX = "@PREFIX@"
+

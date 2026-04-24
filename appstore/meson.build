@@ -13,7 +13,8 @@ python = import('python')
 gnome = import('gnome')
 i18n = import('i18n')
 
-# Verify Python version
+py_installation = python.find_installation('python3', required: true)
+
 if not py_installation.language_version().version_compare('>= 3.10')
   error('Python 3.10 or newer is required.')
 endif

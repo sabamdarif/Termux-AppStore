@@ -92,7 +92,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: debs-${{ matrix.target_arch }}
-                  path: termux-packages/debs/*.deb
+                  path: termux-packages/output/*.deb
 
     release:
         needs: [check-env, build]

@@ -28,8 +28,14 @@ jobs:
             - name: Determine build parameters
               id: check
               run: |
-                  commit_msg="${{ github.event.head_commit.message }}"
-                  if [[ "${{ github.event_name }}" == "push" && "$commit_msg" =~ release\(appstore\):\ v([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?) ]]; then
+                  commit_msg=""
+                  if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+                    commit_msg="${{ github.event.pull_request.title }}"
+                  elif [[ "${{ github.event_name }}" == "push" ]]; then
+                    commit_msg="${{ github.event.head_commit.message }}"
+                  fi
+
+                  if [[ "$commit_msg" =~ release\(appstore\):\ v([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?) ]]; then
                     echo "is_release=true" >> "$GITHUB_OUTPUT"
                     echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
                     echo "Found release tag: v${BASH_REMATCH[1]}"
@@ -90,7 +96,7 @@ jobs:
 
     release:
         needs: [check-env, build]
-        if: needs.check-env.outputs.is_release == 'true'
+        if: needs.check-env.outputs.is_release == 'true' && github.event_name == 'push'
         runs-on: ubuntu-latest
         permissions:
             contents: write

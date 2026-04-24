@@ -20,7 +20,7 @@ if not py_installation.language_version().version_compare('>= 3.10')
 endif
 
 # Program Dependencies
-find_program('aria2c', required: true)
+find_program('aria2c', required: false)
 
 # System Library Dependencies
 dependency('glib-2.0', version: '>= 2.88.0', required: true)

@@ -13,15 +13,6 @@ python = import('python')
 gnome = import('gnome')
 i18n = import('i18n')
 
-# Build list of required Python modules
-required_modules = ['PIL', 'fuzzysearch']
-
-# Find Python installation with required modules
-py_installation = python.find_installation('python3',
-  modules: required_modules,
-  required: true
-)
-
 # Verify Python version
 if not py_installation.language_version().version_compare('>= 3.10')
   error('Python 3.10 or newer is required.')

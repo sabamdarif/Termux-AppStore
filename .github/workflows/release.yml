@@ -89,7 +89,7 @@ jobs:
                   ./scripts/run-docker.sh -d ./build-package.sh -I -C -a ${{ matrix.target_arch }} termux-appstore
 
             - name: Upload artifacts
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: debs-${{ matrix.target_arch }}
                   path: termux-packages/output/*.deb

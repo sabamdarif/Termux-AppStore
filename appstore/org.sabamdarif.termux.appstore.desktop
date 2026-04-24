@@ -2,9 +2,9 @@
 Version=0.5.4.1
 Type=Application
 Name=Termux AppStore
-Comment=Browse and install Termux applications
+Comment=Browse and install applications in Termux
 Exec=appstore
-Icon=org.gnome.Software
+Icon=org.sabamdarif.termux.appstore
 Terminal=false
 Categories=System;PackageManager;
 StartupWMClass=termux-appstore

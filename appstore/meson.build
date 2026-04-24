@@ -111,6 +111,12 @@ install_data(
   install_dir: get_option('prefix') / 'share' / 'applications',
 )
 
+# Install icon
+install_data(
+  'data/org.sabamdarif.termux.appstore.svg',
+  install_dir: get_option('prefix') / 'share' / 'icons' / 'hicolor' / 'scalable' / 'apps',
+)
+
 # Install launcher script
 install_data(
   'appstore',

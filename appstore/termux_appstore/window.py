@@ -61,24 +61,11 @@ from termux_appstore.ui.search import SearchBar
 from termux_appstore.ui.sidebar import build_sidebar
 from termux_appstore.utils import get_current_arch
 
-# Fuzzy search backend choice
+# Fuzzy search
 try:
-    from termux_appstore._buildconf import FUZZY_BACKEND
+    from fuzzysearch import find_near_matches  # type: ignore
 except ImportError:
-    FUZZY_BACKEND = "none"
-
-fuzz = None
-process = None
-if FUZZY_BACKEND == "fuzzywuzzy":
-    try:
-        from fuzzywuzzy import fuzz, process  # type: ignore
-    except ImportError:
-        pass
-elif FUZZY_BACKEND == "thefuzz":
-    try:
-        from thefuzz import fuzz, process  # type: ignore
-    except ImportError:
-        pass
+    find_near_matches = None
 
 
 class AppStoreWindow(Gtk.ApplicationWindow):
@@ -433,16 +420,34 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             box.pack_start(lbl, False, False, 0)
         self.app_list_box.pack_start(box, True, True, 0)
 
+    def _get_fuzzy_score(self, search_text, text):
+        if not search_text or not text or not find_near_matches:
+            return 0
+        search_len = len(search_text)
+        if search_len <= 2:
+            max_dist = 0
+        else:
+            max_dist = min(3, search_len // 3)
+            
+        try:
+            matches = find_near_matches(search_text, text, max_l_dist=max_dist)
+            if not matches:
+                return 0
+            best_dist = min(m.dist for m in matches)
+            return max(0, 100 - int((best_dist / search_len) * 100))
+        except Exception:
+            return 0
+
     def _apply_search_filter(self, apps, search_text):
-        if self.get_setting("enable_fuzzy_search", False) and fuzz:
+        if self.get_setting("enable_fuzzy_search", False) and find_near_matches:
             threshold = 60
             scored = []
             for app in apps:
-                ns = fuzz.partial_ratio(search_text, app["app_name"].lower())
-                ds = fuzz.partial_ratio(search_text, app.get("description", "").lower())
+                ns = self._get_fuzzy_score(search_text, app["app_name"].lower())
+                ds = self._get_fuzzy_score(search_text, app.get("description", "").lower())
                 cs = max(
                     (
-                        fuzz.partial_ratio(search_text, c.lower())
+                        self._get_fuzzy_score(search_text, c.lower())
                         for c in app.get("categories", [])
                     ),
                     default=0,

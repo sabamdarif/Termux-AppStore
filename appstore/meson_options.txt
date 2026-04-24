@@ -1,7 +1,0 @@
-option(
-	'fuzzy_backend',
-	type: 'combo',
-	choices: ['fuzzywuzzy', 'thefuzz', 'none'],
-	value: 'thefuzz',
-	description: 'Fuzzy search library to use',
-)

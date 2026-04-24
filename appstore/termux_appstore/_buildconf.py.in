@@ -3,7 +3,6 @@
 """Build-time configuration values injected by meson."""
 
 PREFIX = "@PREFIX@"
-FUZZY_BACKEND = "@FUZZY_BACKEND@"
 APP_VERSION = "@APP_VERSION@"
 APP_NAME = "@APP_NAME@"
 APP_ID = "@APP_ID@"

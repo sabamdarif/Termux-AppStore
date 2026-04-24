@@ -13,15 +13,8 @@ python = import('python')
 gnome = import('gnome')
 i18n = import('i18n')
 
-# Build list of required Python modules based on fuzzy backend option
-fuzzy_opt = get_option('fuzzy_backend')
-required_modules = ['PIL']
-
-if fuzzy_opt == 'fuzzywuzzy'
-  required_modules += ['fuzzywuzzy']
-elif fuzzy_opt == 'thefuzz'
-  required_modules += ['thefuzz']
-endif
+# Build list of required Python modules
+required_modules = ['PIL', 'fuzzysearch']
 
 # Find Python installation with required modules
 py_installation = python.find_installation('python3',
@@ -97,7 +90,6 @@ pkgdir = py_installation.get_install_dir() / 'termux_appstore'
 # Generate config files with build-time variables
 conf_data = configuration_data()
 conf_data.set('PREFIX', get_option('prefix'))
-conf_data.set('FUZZY_BACKEND', get_option('fuzzy_backend'))
 conf_data.set('APP_VERSION', meson.project_version())
 conf_data.set('APP_NAME', app_name)
 conf_data.set('APP_ID', app_id)

@@ -1,0 +1,112 @@
+name: Release AppStore
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - "appstore/**"
+            - ".github/workflows/appstore.yml"
+    pull_request:
+        paths:
+            - "appstore/**"
+            - ".github/workflows/appstore.yml"
+    workflow_dispatch:
+
+jobs:
+    check-env:
+        runs-on: ubuntu-latest
+        outputs:
+            is_release: ${{ steps.check.outputs.is_release }}
+            version: ${{ steps.check.outputs.version }}
+        steps:
+            - name: Checkout AppStore
+              uses: actions/checkout@v4
+              with:
+                  path: repo
+
+            - name: Determine build parameters
+              id: check
+              run: |
+                  commit_msg="${{ github.event.head_commit.message }}"
+                  if [[ "${{ github.event_name }}" == "push" && "$commit_msg" =~ release\(appstore\):\ v([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?) ]]; then
+                    echo "is_release=true" >> "$GITHUB_OUTPUT"
+                    echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+                    echo "Found release tag: v${BASH_REMATCH[1]}"
+                  else
+                    echo "is_release=false" >> "$GITHUB_OUTPUT"
+                    # Extract version from meson.build
+                    version=$(grep -oP "version:\s*'\K[^']+" repo/appstore/meson.build | head -1)
+                    echo "version=$version" >> "$GITHUB_OUTPUT"
+                    echo "Building version $version (no release)"
+                  fi
+
+    build:
+        needs: check-env
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                target_arch: [aarch64, arm, i686, x86_64]
+            fail-fast: false
+        steps:
+            - name: Checkout AppStore
+              uses: actions/checkout@v4
+              with:
+                  path: appstore
+
+            - name: Checkout termux-packages
+              uses: actions/checkout@v4
+              with:
+                  repository: termux/termux-packages
+                  path: termux-packages
+
+            - name: Inject build.sh
+              run: |
+                  mkdir -p termux-packages/x11-packages/termux-appstore
+                  cp appstore/appstore/termux-packages/build.sh termux-packages/x11-packages/termux-appstore/build.sh
+
+                  # Update version in build.sh
+                  sed -i "s/@VERSION@/${{ needs.check-env.outputs.version }}/g" termux-packages/x11-packages/termux-appstore/build.sh
+
+                  # Use local checkout for testing so PRs and unpushed changes are built correctly
+                  cp -r appstore termux-packages/x11-packages/termux-appstore/local-repo
+                  sed -i 's|TERMUX_PKG_SRCURL=.*|TERMUX_PKG_SRCURL="git+file:///home/builder/termux-packages/x11-packages/termux-appstore/local-repo"|' termux-packages/x11-packages/termux-appstore/build.sh
+
+            - name: Load Docker image
+              run: |
+                  cd termux-packages
+                  ./scripts/run-docker.sh true
+
+            - name: Build packages
+              run: |
+                  cd termux-packages
+                  ./scripts/run-docker.sh -d ./build-package.sh -I -C -a ${{ matrix.target_arch }} termux-appstore
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: debs-${{ matrix.target_arch }}
+                  path: termux-packages/debs/*.deb
+
+    release:
+        needs: [check-env, build]
+        if: needs.check-env.outputs.is_release == 'true'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: debs
+                  pattern: debs-*
+                  merge-multiple: true
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: v${{ needs.check-env.outputs.version }}
+                  name: Termux AppStore v${{ needs.check-env.outputs.version }}
+                  files: debs/*.deb
+                  draft: false
+                  prerelease: false

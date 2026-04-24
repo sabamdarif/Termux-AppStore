@@ -83,16 +83,23 @@ jobs:
                   cd termux-packages
                   ./scripts/run-docker.sh true
 
-            - name: Build packages
+            - name: Build packages (deb)
               run: |
                   cd termux-packages
                   ./scripts/run-docker.sh -d ./build-package.sh -I -C -a ${{ matrix.target_arch }} termux-appstore
 
+            - name: Build packages (pacman)
+              run: |
+                  cd termux-packages
+                  ./scripts/run-docker.sh -d ./build-package.sh -f --format pacman -I -C -a ${{ matrix.target_arch }} termux-appstore
+
             - name: Upload artifacts
               uses: actions/upload-artifact@v7
               with:
-                  name: debs-${{ matrix.target_arch }}
-                  path: termux-packages/output/*.deb
+                  name: packages-${{ matrix.target_arch }}
+                  path: |
+                      termux-packages/output/*.deb
+                      termux-packages/output/*.pkg.*
 
     release:
         needs: [check-env, build]
@@ -104,8 +111,8 @@ jobs:
             - name: Download all artifacts
               uses: actions/download-artifact@v8
               with:
-                  path: debs
-                  pattern: debs-*
+                  path: packages
+                  pattern: packages-*
                   merge-multiple: true
 
             - name: Create Release
@@ -113,6 +120,8 @@ jobs:
               with:
                   tag_name: v${{ needs.check-env.outputs.version }}
                   name: Termux AppStore v${{ needs.check-env.outputs.version }}
-                  files: debs/*.deb
+                  files: |
+                      packages/*.deb
+                      packages/*.pkg.*
                   draft: false
                   prerelease: false

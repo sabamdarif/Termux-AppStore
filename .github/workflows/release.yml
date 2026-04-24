@@ -21,7 +21,7 @@ jobs:
             version: ${{ steps.check.outputs.version }}
         steps:
             - name: Checkout AppStore
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   path: repo
 
@@ -56,12 +56,12 @@ jobs:
             fail-fast: false
         steps:
             - name: Checkout AppStore
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   path: appstore
 
             - name: Checkout termux-packages
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                   repository: termux/termux-packages
                   path: termux-packages

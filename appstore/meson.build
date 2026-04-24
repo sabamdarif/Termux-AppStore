@@ -155,8 +155,9 @@ install_data(
   install_dir: pkgdir / 'inbuild_functions',
 )
 
-gnome.post_install(
-  glib_compile_schemas: true,
-  gtk_update_icon_cache: true,
-  update_desktop_database: true,
-)
+if not meson.is_cross_build()
+  gnome.post_install(
+    gtk_update_icon_cache: true,
+    update_desktop_database: true,
+  )
+endif

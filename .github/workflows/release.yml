@@ -6,11 +6,11 @@ on:
             - main
         paths:
             - "appstore/**"
-            - ".github/workflows/appstore.yml"
+            - ".github/workflows/release.yml"
     pull_request:
         paths:
             - "appstore/**"
-            - ".github/workflows/appstore.yml"
+            - ".github/workflows/release.yml"
     workflow_dispatch:
 
 jobs:

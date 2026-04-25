@@ -38,47 +38,28 @@ class DistroConfig:
                 TERMUX_PREFIX, "etc", "termux-desktop", "configuration.conf"
             )
             if not os.path.exists(termux_desktop_config):
-                print(
-                    "Termux desktop config not found. "
-                    "Distro support disabled."
-                )
+                print("Termux desktop config not found. Distro support disabled.")
                 return
 
             with open(termux_desktop_config, "r") as f:
                 for line in f:
                     line = line.strip()
                     if line.startswith("distro_add_answer="):
-                        value = (
-                            line.split("=")[1]
-                            .strip()
-                            .strip('"')
-                            .strip("'")
-                            .lower()
-                        )
+                        value = line.split("=")[1].strip().strip('"').strip("'").lower()
                         self.distro_enabled = value in ("y", "yes")
                         print(
                             f"distro_add_answer={value} -> enabled: {self.distro_enabled}"
                         )
                     elif line.startswith("selected_distro="):
                         self.selected_distro = (
-                            line.split("=")[1]
-                            .strip()
-                            .strip('"')
-                            .strip("'")
-                            .lower()
+                            line.split("=")[1].strip().strip('"').strip("'").lower()
                         )
                         print(f"selected_distro: {self.selected_distro}")
                     elif line.startswith("selected_distro_type="):
                         self.selected_distro_type = (
-                            line.split("=")[1]
-                            .strip()
-                            .strip('"')
-                            .strip("'")
-                            .lower()
+                            line.split("=")[1].strip().strip('"').strip("'").lower()
                         )
-                        print(
-                            f"selected_distro_type: {self.selected_distro_type}"
-                        )
+                        print(f"selected_distro_type: {self.selected_distro_type}")
 
         except Exception as e:
             print(f"Error reading distro configuration: {e}")

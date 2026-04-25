@@ -86,7 +86,9 @@ def run_update_pipeline(
         )
         subprocess.run(
             ["bash", "-c", cmd],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
 
         # Step 1b: Update distro repos (20-25%)
@@ -101,7 +103,9 @@ def run_update_pipeline(
             try:
                 test_result = subprocess.run(
                     ["bash", "-c", test_cmd],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 if test_result.returncode == 0:
                     distro_available = True
@@ -112,12 +116,12 @@ def run_update_pipeline(
                     if distro_cmd:
                         subprocess.run(
                             ["bash", "-c", distro_cmd],
-                            capture_output=True, text=True, timeout=120,
+                            capture_output=True,
+                            text=True,
+                            timeout=120,
                         )
                 else:
-                    print(
-                        f"Distro test failed for {distro}: {test_result.stderr}"
-                    )
+                    print(f"Distro test failed for {distro}: {test_result.stderr}")
             except Exception as e:
                 print(f"Error testing distro: {e}")
 
@@ -140,7 +144,11 @@ def run_update_pipeline(
             f"-d '{APPSTORE_DIR}' -o 'apps.json'"
         )
         subprocess.run(
-            dl_cmd, shell=True, capture_output=True, text=True, timeout=60,
+            dl_cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
 
         if not os.path.exists(APPSTORE_JSON):
@@ -173,7 +181,9 @@ def run_update_pipeline(
         # Step 4: Compare versions for installed apps
         _progress(70, "Comparing versions...")
         new_updates = _compare_versions(
-            new_apps_data, old_apps_data, installed_apps,
+            new_apps_data,
+            old_apps_data,
+            installed_apps,
         )
 
         # Merge into tracker
@@ -206,6 +216,7 @@ def run_update_pipeline(
     except Exception as e:
         print(f"Update check failed: {e}")
         import traceback
+
         traceback.print_exc()
         if on_error:
             on_error(f"Update check failed: {e}")
@@ -246,7 +257,8 @@ def _compare_versions(new_apps_data, old_apps_data, installed_apps):
             continue
 
         old_app = next(
-            (a for a in old_apps_data if a["folder_name"] == folder), None,
+            (a for a in old_apps_data if a["folder_name"] == folder),
+            None,
         )
         if old_app:
             old_ver = old_app.get("version")
@@ -254,9 +266,7 @@ def _compare_versions(new_apps_data, old_apps_data, installed_apps):
                 continue
             if old_ver != new_ver:
                 new_updates[folder] = new_ver
-                print(
-                    f"Update found: {new_app['app_name']} {old_ver} → {new_ver}"
-                )
+                print(f"Update found: {new_app['app_name']} {old_ver} → {new_ver}")
     return new_updates
 
 
@@ -272,5 +282,9 @@ def _update_logos():
         f"rm -f '{os.path.join(APPSTORE_DIR, 'logos.zip')}'"
     )
     subprocess.run(
-        logo_cmd, shell=True, capture_output=True, text=True, timeout=120,
+        logo_cmd,
+        shell=True,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )

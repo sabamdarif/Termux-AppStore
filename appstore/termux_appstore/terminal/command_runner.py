@@ -22,8 +22,8 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # type: ignore # noqa: E402
 
-from termux_appstore.terminal.emulator import TerminalEmulator
 from termux_appstore.constants import TERMUX_PREFIX
+from termux_appstore.terminal.emulator import TerminalEmulator
 
 # ---------------------------------------------------------------------------
 # CSS helpers

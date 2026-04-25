@@ -8,32 +8,19 @@ supported_distro="all"
 package_name="libreoffice"
 run_cmd="libreoffice"
 
-# Check if a distro is selected
-if [ -z "$selected_distro" ]; then
-    echo "Error: No distro selected"
-    exit 1
-fi
-
 # Install based on distro type
-case "$selected_distro" in
-    "debian"|"ubuntu")
-        $selected_distro update
-        $selected_distro install libreoffice libreoffice-gtk3 -y
-        ;;
-    "fedora")
-        $selected_distro install libreoffice -y
-        ;;
-    *)
-        echo "Unsupported distribution: $selected_distro"
-        exit 1
-        ;;
+case "$SELECTED_DISTRO" in
+"debian" | "ubuntu")
+	pd_package_install_and_check "libreoffice libreoffice-gtk3"
+	;;
+"fedora")
+	pd_package_install_and_check libreoffice
+	;;
+"arch*")
+	pd_package_install_and_check libreoffice-fresh
+	;;
+*)
+	echo "Unsupported distribution: $SELECTED_DISTRO"
+	exit 1
+	;;
 esac
-
-# Check if installation was successful
-if [ $? -eq 0 ]; then
-    echo "LibreOffice installed successfully"
-    exit 0
-else
-    echo "LibreOffice installation failed"
-    exit 1
-fi

@@ -11,8 +11,8 @@ supported_distro="all"
 
 # Check if a distro is selected
 if [ -z "$selected_distro" ]; then
-    print_failed "Error: No distro selected"
-    exit 1
+	print_failed "Error: No distro selected"
+	exit 1
 fi
 
 distro_run "
@@ -20,11 +20,9 @@ check_and_delete '/opt/brave-browser'
 check_and_create_directory '/opt/brave-browser'
 "
 cd $working_dir/brave-browser
-echo "$(pwd)"
 download_file "${page_url}/releases/download/${version}/brave-browser-${version#v}-linux-arm64.zip"
 distro_run "
 cd /opt/brave-browser
-echo $(pwd)
 extract brave-browser-${version#v}-linux-arm64.zip
 check_and_delete brave-browser-${version#v}-linux-arm64.zip
 "

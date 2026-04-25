@@ -10,12 +10,12 @@ supported_distro="all"
 page_url="https://github.com/voideditor/binaries"
 working_dir="${distro_path}/opt"
 
-if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]]; then
+if [[ "$SELECTED_DISTRO" == "ubuntu" ]] || [[ "$SELECTED_DISTRO" == "debian" ]]; then
 	distro_run "
 sudo apt update -y -o Dpkg::Options::='--force-confnew'
 sudo apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libdrm2 libxcb-dri3-0 libxshmfence1
 "
-elif [[ "$selected_distro" == "fedora" ]]; then
+elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
 	distro_run "
 sudo dnf install -y nss atk at-spi2-atk gtk3 mesa-libgbm alsa-lib libX11-xcb libXcomposite libXdamage libXrandr libdrm libxcb libxshmfence libxkbcommon --skip-unavailable
 "
@@ -39,11 +39,7 @@ check_and_delete '/opt/void'
 check_and_create_directory '/opt/void'
 "
 
-if [[ "$selected_distro_type" == "chroot" ]]; then
-	su -c "cp '$temp_download' '${working_dir}/void/${filename}'"
-else
-	cp "$temp_download" "${working_dir}/void/${filename}"
-fi
+"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/opt/void/${filename}"
 
 distro_run "
 cd /opt/void

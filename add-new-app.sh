@@ -94,7 +94,9 @@ EOF
 
 	if [ "$app_type" = "native" ]; then
 		cat >>"$folder_path/install.sh" <<'EOF'
+progress_phase "prepare" 0 "Preparing to install..."
 package_install_and_check "$package_name"
+progress_done
 EOF
 	elif [ "$is_repo_pkg" = "yes" ]; then
 		cat >>"$folder_path/install.sh" <<EOF
@@ -105,6 +107,8 @@ if [ -z "\$selected_distro" ]; then
     print_failed "Error: No distro selected"
     exit 1
 fi
+
+progress_phase "prepare" 0 "Preparing distro packages..."
 
 # Install based on distro type
 case "\$selected_distro" in
@@ -123,6 +127,7 @@ case "\$selected_distro" in
 esac
 
 fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
+progress_done
 EOF
 	else
 		# Extract the base URL (everything before /releases/download/)
@@ -154,7 +159,7 @@ appimage_filename="$filename_pattern"
 
 check_and_delete "\${TMPDIR}/\${appimage_filename} \${PREFIX}/share/applications/pd_added/$package_name.desktop"
 
-print_success "Downloading $package_name AppImage..."
+progress_phase "download" 0 "Downloading $package_name AppImage..."
 download_file "\${page_url}/releases/download/\${version}/\${appimage_filename}"
 install_appimage "\${appimage_filename}" "$package_name"
 
@@ -180,6 +185,7 @@ Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
 Categories=${selected_categories[0]};
 DESKTOP_EOF
+progress_done
 EOF
 		elif [[ "$download_url" =~ \.deb$ ]]; then
 			# Extract the filename pattern from the download URL
@@ -267,6 +273,7 @@ Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
 Categories=${selected_categories[0]};
 DESKTOP_EOF
+progress_done
 EOF
 		else
 			# For tar/archive installations
@@ -337,6 +344,7 @@ Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
 Categories=${selected_categories[0]};
 DESKTOP_EOF
+progress_done
 EOF
 		fi
 	fi
@@ -354,12 +362,15 @@ create_uninstall_script() {
 		cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
+progress_phase "cleanup" 0 "Removing $package_name..."
 package_remove_and_check "$package_name"
+progress_done
 EOF
 	elif [ "$is_repo_pkg" = "yes" ]; then
 		cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
+progress_phase "cleanup" 0 "Removing $package_name..."
 case "\$selected_distro" in
     "debian"|"ubuntu")
         \$selected_distro remove $package_name -y
@@ -374,6 +385,7 @@ case "\$selected_distro" in
 esac
 
 check_and_delete "\$PREFIX/share/applications/pd_added/$package_name.desktop"
+progress_done
 EOF
 	else
 		if [[ "$download_url" =~ \.AppImage$ ]]; then
@@ -381,9 +393,11 @@ EOF
 			cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
+progress_phase "cleanup" 0 "Removing $package_name AppImage..."
 check_and_delete "\${distro_path}/opt/AppImageLauncher/$package_name"
 check_and_delete "\${distro_path}/usr/share/icons/hicolor/*/apps/$package_name.png"
 check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
+progress_done
 EOF
 		elif [[ "$download_url" =~ \.deb$ ]]; then
 			cat >"$folder_path/uninstall.sh" <<EOF
@@ -402,16 +416,19 @@ else
 fi
 
 check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
+progress_done
 EOF
 		else
 			cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
+progress_phase "cleanup" 0 "Removing $package_name..."
 distro_run "
 check_and_delete '/opt/$package_name'
 "
 
 check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
+progress_done
 EOF
 		fi
 	fi

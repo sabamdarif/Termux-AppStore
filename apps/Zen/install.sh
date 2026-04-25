@@ -10,32 +10,23 @@ supported_distro="all"
 page_url="https://github.com/zen-browser/desktop"
 working_dir="${distro_path}/opt"
 
-# Check if a distro is selected
-if [ -z "$selected_distro" ]; then
-	print_failed "Error: No distro selected"
-	exit 1
-fi
-
 app_arch=$(uname -m)
 case "$app_arch" in
 aarch64) archtype="aarch64" ;;
-*) print_failed "Unsupported architectures" ;;
+*)
+	print_failed "Unsupported architectures"
+	exit 1
+	;;
 esac
 
 filename="zen.linux-${archtype}.tar.xz"
 temp_download="$TMPDIR/${filename}"
 download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
 
-distro_run "
-check_and_delete '/opt/zen-browser'
-check_and_delete '/opt/zen'
-"
+pd_check_and_delete '/opt/zen-browser'
+pd_check_and_delete '/opt/zen'
 
-if [[ "$selected_distro_type" == "chroot" ]]; then
-	su -c "cp '$temp_download' '${working_dir}/${filename}'"
-else
-	cp "$temp_download" "${working_dir}/${filename}"
-fi
+"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/opt/${filename}"
 
 distro_run "
 cd /opt

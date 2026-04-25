@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-supported_arch="Invalid,choice(s).,Please,choose,from:,aarch64,arm,aarch64,arm"
+supported_arch="aarch64"
 package_name="youtube-music"
 run_cmd="youtube-music"
 version="v3.11.0"
@@ -9,29 +9,31 @@ supported_distro="all"
 page_url="https://github.com/th-ch/youtube-music"
 run_cmd="/opt/AppImageLauncher/youtube-music/youtube-music --no-sandbox"
 
-cd ${TMPDIR}
-
 app_arch=$(uname -m)
 case " $app_arch" in
 aarch64) archtype="arm64" ;;
-armv7*|arm) archtype="armv7l" ;;
+*)
+	print_failed "Unsupported architectures"
+	exit 1
+	;;
 esac
 
-appimage_filename="YouTube-Music-${version#v}-arm64.AppImage"
+cd ${TMPDIR}
+
+appimage_filename="YouTube-Music-${version#v}-${archtype}.AppImage"
 
 check_and_delete "${TMPDIR}/${appimage_filename} ${PREFIX}/share/applications/pd_added/youtube-music.desktop"
 
-print_success "Downloading youtube-music AppImage..."
 download_file "${page_url}/releases/download/${version}/$appimage_filename"
 install_appimage "$appimage_filename" "youtube-music"
 
 # Determine which logo file to use
 if [ -f "${HOME}/.appstore/logo/Youtube-music/logo.png" ]; then
-    icon_path="${HOME}/.appstore/logo/Youtube-music/logo.png"
+	icon_path="${HOME}/.appstore/logo/Youtube-music/logo.png"
 elif [ -f "${HOME}/.appstore/logo/Youtube-music/logo.svg" ]; then
-    icon_path="${HOME}/.appstore/logo/Youtube-music/logo.svg"
+	icon_path="${HOME}/.appstore/logo/Youtube-music/logo.svg"
 else
-    icon_path="${HOME}/.appstore/logo/Youtube-music/logo"
+	icon_path="${HOME}/.appstore/logo/Youtube-music/logo"
 fi
 
 print_success "Creating desktop entry..."

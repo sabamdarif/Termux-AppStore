@@ -14,44 +14,35 @@ aarch64) archtype="arm64" ;;
 *) print_failed "Unsupported architectures" ;;
 esac
 
-if [[ "$selected_distro" == "ubuntu" ]] || [[ "$selected_distro" == "debian" ]]; then
+if [[ "$SELECTED_DISTRO" == "ubuntu" ]] || [[ "$SELECTED_DISTRO" == "debian" ]]; then
 	filename="signal-desktop-unofficial_${version#v}_${archtype}.deb"
 	temp_download="$TMPDIR/${filename}"
 	download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
+	pd_check_and_delete "/root/${filename}"
+	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/root/${filename}"
+	pd_update_sys
 	distro_run "
-check_and_delete '/root/${filename}'
-"
-	if [[ "$selected_distro_type" == "chroot" ]]; then
-		su -c "cp '$temp_download' '${working_dir}/${filename}'"
-	else
-		cp "$temp_download" "${working_dir}/${filename}"
-	fi
-	distro_run "
-sudo apt update -y -o Dpkg::Options::='--force-confnew'
-sudo apt install /root/${filename} -y
+apt install /root/${filename} -y
 cd /opt
 mv 'Signal Unofficial' Signal-Unofficial
-check_and_delete '/root/${filename}'
 "
-elif [[ "$selected_distro" == "fedora" ]]; then
+	pd_check_and_delete "/root/${filename}"
+
+elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
 	filename="signal-desktop-unofficial_${version#v}_${archtype}.deb"
 	temp_download="$TMPDIR/${filename}"
 	download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
-	distro_run "
-check_and_delete '/root/signal'
-check_and_delete '/root/${filename}'
-"
-	if [[ "$selected_distro_type" == "chroot" ]]; then
-		su -c "cp '$temp_download' '${working_dir}/${filename}'"
-	else
-		cp "$temp_download" "${working_dir}/${filename}"
-	fi
+	pd_check_and_delete '/root/signal'
+	pd_check_and_delete "/root/${filename}"
+
+	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/root/${filename}"
+	pd_update_sys
+	pd_package_install_and_check --just "ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3"
 	distro_run "
 cd /root
 mkdir signal
 mv ${filename} signal/
 cd signal
-sudo dnf install -y ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3
 ar x ${filename}
 extract 'data.tar.xz'
 cd opt

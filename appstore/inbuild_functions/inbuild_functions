@@ -3,30 +3,37 @@
 readonly TERMUX_HOME=${HOME:-/data/data/com.termux/files/home}
 readonly TERMUX_PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 
-# shellcheck disable=SC2154
-if [ -t 1 ] && [ -n "${TERM:-}" ]; then
-	R="$(printf '\033[0m\033[1m\033[31m')" # RST + bold + red
-	G="$(printf '\033[0m\033[32m')"        # RST + green
-	Y="$(printf '\033[0m\033[33m')"        # RST + yellow
-	B="$(printf '\033[0m\033[34m')"        # RST + blue
-	C="$(printf '\033[0m\033[36m')"        # RST + cyan
-	NC="$(printf '\033[0m')"               # RST
-	BOLD="$(printf '\033[1m')"             # bold
-else
-	R=""
-	G=""
-	Y=""
-	B=""
-	C=""
-	NC=""
-	BOLD=""
-fi
-
 cd "$TERMUX_HOME" || exit 1
 ############### Define basic initial values ######################
 TERMUX_DESKTOP_PATH="$TERMUX_PREFIX/etc/termux-desktop"
 CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
+if [[ ! -f "ONFIG_FILE" ]]; then
+	echo " Configuration file ONFIG_FILE not found"
+	exit 1
+fi
+# shellcheck disable=SC1090
+source "ONFIG_FILE"
 LOG_FILE="$TERMUX_HOME/termux-appstore-$(date +%Y%m%d_%H%M%S).log"
+DISTRO_ADD_ANSWER="${distro_add_answer:-}"
+SELECTED_DISTRO="${selected_distro:-}"
+SELECTED_DISTRO_TYPE="${selected_distro_type:-}"
+PD_AUDIO_CONFIG_ANSWER="${pd_audio_config_answer:-}"
+PD_USERADD_ANSWER="${pd_useradd_answer:-}"
+USER_NAME="${user_name:-}"
+PD_PASS_TYPE="${pd_pass_type:-}"
+PASS="${pass:-}"
+
+if [[ "$SELECTED_DISTRO_TYPE" == "proot" ]]; then
+	DISTRO_PATH="$TERMUX_PREFIX/var/lib/proot-distro/installed-rootfs/$SELECTED_DISTRO"
+elif [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
+	DISTRO_PATH="/data/local/chroot-distro/installed-rootfs/$SELECTED_DISTRO"
+else
+	print_failed "Unable to get distro type..."
+	exit 1
+fi
+DISTRO_ROOT_PATH="$DISTRO_PATH/root"
+DISTRO_OPT_PATH="$DISTRO_PATH/opt"
+DISTRO_USER_HOME_PATH="$DISTRO_PATH/home/$USER_NAME"
 ##################################################################
 
 # ==================== PROGRESS SYSTEM ====================
@@ -64,9 +71,11 @@ progress_error() {
 }
 # ==================== END PROGRESS SYSTEM ====================
 
+# ==================== BASE FUNCTIONS ====================
+
 function check_termux() {
 	if [ ! -f /system/build.prop ]; then
-		echo "${R}[${R}☓${R}]${R}${BOLD} Not running on Android."
+		echo "[☓] Not running on Android."
 		exit 1
 	fi
 
@@ -76,13 +85,13 @@ function check_termux() {
 		local tracer_name
 		tracer_name=$(grep Name "/proc/${tracer_pid}/status" | cut -d $'\t' -f 2)
 		if [ "$tracer_name" = "proot" ]; then
-			echo "${R}[${R}☓${R}]${R}${BOLD} Must not be executed under PRoot."
+			echo "[☓] Must not be executed under PRoot."
 			exit 1
 		fi
 	fi
 
 	if [[ -z "$TERMUX_PREFIX" || "$TERMUX_PREFIX" != *"/com.termux/"* ]]; then
-		echo "${R}[${R}☓${R}]${R}${BOLD} Please run this script inside Termux."
+		echo "[☓] Please run this script inside Termux."
 		exit 1
 	fi
 }
@@ -111,34 +120,34 @@ function log_debug() {
 function print_success() {
 	local msg
 	msg="$1"
-	echo "${R}[${G}✓${R}]${G} $msg ${NC}"
+	echo "[✓] $msg "
 	log_debug "$msg"
 }
 
 function print_failed() {
 	local msg
 	msg="$1"
-	echo "${R}[${R}☓${R}]${R} $msg ${NC}"
+	echo "[☓] $msg "
 	log_debug "$msg"
 }
 
 function print_warn() {
 	local msg
 	msg="$1"
-	echo "${R}[${Y}!${R}]${Y} $msg ${NC}"
+	echo "[!] $msg "
 	log_debug "$msg"
 }
 
 function print_msg() {
 	local msg
 	msg="$1"
-	echo "${R}[${C}-${R}]${B} $msg ${NC}"
+	echo "[-] $msg "
 	log_debug "$msg"
 
 }
 
 function wait_for_keypress() {
-	read -n1 -s -r -p "${R}[${C}-${R}]${G} Press any key to continue, CTRL+c to cancel...${NC}"
+	read -n1 -s -r -p "[-] Press any key to continue, CTRL+c to cancel..."
 	echo
 }
 
@@ -256,7 +265,7 @@ function download_file() {
 				while IFS= read -r line; do
 					echo "$line"
 					if [[ "$line" =~ \(([0-9]+)%\) ]]; then
-						progress_phase "download" "${BASH_REMATCH[1]}" "Downloading $dest_file (${BASH_REMATCH[1]}%)"
+						progress_phase "download" "ASH_REMATCH[1]}" "Downloading $dest_file (ASH_REMATCH[1]}%)"
 					fi
 				done
 			download_status="${PIPESTATUS[0]}"
@@ -266,7 +275,7 @@ function download_file() {
 				while IFS= read -r line; do
 					echo "$line"
 					if [[ "$line" =~ ([0-9]+)% ]]; then
-						progress_phase "download" "${BASH_REMATCH[1]}" "Downloading $dest_file (${BASH_REMATCH[1]}%)"
+						progress_phase "download" "ASH_REMATCH[1]}" "Downloading $dest_file (ASH_REMATCH[1]}%)"
 					fi
 				done
 			download_status="${PIPESTATUS[0]}"
@@ -311,7 +320,7 @@ function detact_package_manager() {
 		PACKAGE_MANAGER="pacman"
 	else
 		PACKAGE_MANAGER="pkg"
-		print_failed "${C} Could not detect your package manager, Switching To ${C}pkg ${NC}"
+		print_failed " Could not detect your package manager, Switching To pkg "
 	fi
 	log_debug "Package manager: $PACKAGE_MANAGER"
 }
@@ -350,7 +359,7 @@ function package_install_and_check {
 			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
 				retry_count=$((retry_count + 1))
 				check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
-				print_msg "Installing Package : ${C}$package"
+				print_msg "Installing Package : $package"
 
 				pacman -S --noconfirm "$package" 2>&1 | while IFS= read -r line; do
 					echo "$line"
@@ -367,10 +376,10 @@ function package_install_and_check {
 				# Since we piped, we check status after.
 
 				if pacman -Qi "$package" >/dev/null 2>&1; then
-					print_success "Successfully install package: ${C}$package"
+					print_success "Successfully install package: $package"
 					install_success=true
 				else
-					print_warn "Failed to install package: ${C}${package}. ${Y}Trying again... ($retry_count)"
+					print_warn "Failed to install package: ${package}. Trying again... ($retry_count)"
 				fi
 			done
 		done
@@ -398,7 +407,7 @@ function package_install_and_check {
 
 			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
 				retry_count=$((retry_count + 1))
-				print_msg "Installing package: ${C}$package"
+				print_msg "Installing package: $package"
 
 				apt install "$package" -y 2>&1 | while IFS= read -r line; do
 					echo "$line"
@@ -412,10 +421,10 @@ function package_install_and_check {
 				done
 
 				if dpkg -s "$package" >/dev/null 2>&1; then
-					print_success "Successfully install package: ${C}$package"
+					print_success "Successfully install package: $package"
 					install_success=true
 				else
-					print_warn "Failed to install package: ${C}${package}. ${Y}Trying again... ($retry_count)"
+					print_warn "Failed to install package: ${package}. Trying again... ($retry_count)"
 					# Only run recovery commands on failure
 					dpkg --configure -a 2>/dev/null
 					apt --fix-broken install -y 2>/dev/null
@@ -441,7 +450,7 @@ function package_remove_and_check {
 				local packages
 				packages=$(pacman -Qsq 2>/dev/null | grep -E "^${package_name//\*/.*}$")
 				if [[ -z "$packages" ]]; then
-					print_success "No installed packages found matching: ${C}$package_name"
+					print_success "No installed packages found matching: $package_name"
 					continue
 				fi
 				log_debug "matched packages: $packages"
@@ -452,7 +461,7 @@ function package_remove_and_check {
 					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
 						retry_count=$((retry_count + 1))
 						check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
-						print_msg "Removing Package : ${C}$package"
+						print_msg "Removing Package : $package"
 
 						pacman -Rnds --noconfirm "$package" 2>&1 | while IFS= read -r line; do
 							echo "$line"
@@ -462,10 +471,10 @@ function package_remove_and_check {
 						done
 
 						if ! pacman -Qi "$package" >/dev/null 2>&1; then
-							print_success "Successfully removed package: ${C}$package"
+							print_success "Successfully removed package: $package"
 							remove_success=true
 						else
-							print_warn "Failed to remove package: ${C}${package}. ${Y}Trying again...($retry_count)"
+							print_warn "Failed to remove package: ${package}. Trying again...($retry_count)"
 						fi
 					done
 				done
@@ -477,7 +486,7 @@ function package_remove_and_check {
 					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
 						retry_count=$((retry_count + 1))
 						check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
-						print_msg "Removing Package : ${C}$package_name"
+						print_msg "Removing Package : $package_name"
 
 						pacman -Rnds --noconfirm "$package_name" 2>&1 | while IFS= read -r line; do
 							echo "$line"
@@ -487,14 +496,14 @@ function package_remove_and_check {
 						done
 
 						if ! pacman -Qi "$package_name" >/dev/null 2>&1; then
-							print_success "Successfully removed package: ${C}$package_name"
+							print_success "Successfully removed package: $package_name"
 							remove_success=true
 						else
-							print_warn "Failed to remove package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
+							print_warn "Failed to remove package: ${package_name}. Trying again... ($retry_count)"
 						fi
 					done
 				else
-					print_success "Package ${C}$package_name${G} is not installed.${NC}"
+					print_success "Package $package_name is not installed."
 				fi
 			fi
 		done
@@ -506,7 +515,7 @@ function package_remove_and_check {
 				packages=$(dpkg-query -W -f='${binary:Package}\n' "${package_name}" 2>/dev/null | grep -v ' ')
 
 				if [[ -z "$packages" ]]; then
-					print_success "No installed packages found matching: ${C}$package_name"
+					print_success "No installed packages found matching: $package_name"
 					continue
 				fi
 
@@ -517,7 +526,7 @@ function package_remove_and_check {
 					local remove_success=false
 					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
 						retry_count=$((retry_count + 1))
-						print_msg "Removing package: ${C}$package"
+						print_msg "Removing package: $package"
 						dpkg --configure -a >/dev/null 2>&1
 
 						apt autoremove "$package" -y 2>&1 | while IFS= read -r line; do
@@ -528,10 +537,10 @@ function package_remove_and_check {
 						done
 
 						if ! dpkg -s "$package" >/dev/null 2>&1; then
-							print_success "Successfully removed package: ${C}$package"
+							print_success "Successfully removed package: $package"
 							remove_success=true
 						else
-							print_warn "Failed to remove package: ${C}${package}. ${Y}Trying again...($retry_count)"
+							print_warn "Failed to remove package: ${package}. Trying again...($retry_count)"
 						fi
 					done
 				done
@@ -542,7 +551,7 @@ function package_remove_and_check {
 					local remove_success=false
 					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
 						retry_count=$((retry_count + 1))
-						print_msg "Removing package: ${C}$package_name"
+						print_msg "Removing package: $package_name"
 						dpkg --configure -a >/dev/null 2>&1
 
 						apt autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
@@ -553,14 +562,14 @@ function package_remove_and_check {
 						done
 
 						if ! dpkg -s "$package_name" >/dev/null 2>&1; then
-							print_success "Successfully removed package: ${C}$package_name"
+							print_success "Successfully removed package: $package_name"
 							remove_success=true
 						else
-							print_warn "Failed to remove package: ${C}${package_name}. ${Y}Trying again... ($retry_count)"
+							print_warn "Failed to remove package: ${package_name}. Trying again... ($retry_count)"
 						fi
 					done
 				else
-					print_success "Package ${C}$package_name${G} is not installed.${NC}"
+					print_success "Package $package_name is not installed."
 				fi
 			fi
 		done
@@ -588,75 +597,75 @@ function extract() {
 
 	case "$archive" in
 	*.tar.gz | *.tgz)
-		print_success "Extracting ${C}$archive"
+		print_success "Extracting $archive"
 		tar xzvf "$archive" 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*.tar.xz)
-		print_success "Extracting ${C}$archive"
+		print_success "Extracting $archive"
 		tar xJvf "$archive" 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*.tar.bz2 | *.tbz2)
-		print_success "Extracting ${C}$archive"
+		print_success "Extracting $archive"
 		tar xjvf "$archive" 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*.tar)
-		print_success "Extracting ${C}$archive"
+		print_success "Extracting $archive"
 		tar xvf "$archive" 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*.bz2)
-		print_success "Extracting ${C}$archive"
+		print_success "Extracting $archive"
 		bunzip2 -v "$archive" 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*.gz)
-		print_success "Extracting ${C}$archive${NC}"
+		print_success "Extracting $archive"
 		gunzip -v "$archive" 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*.7z)
-		print_success "Extracting ${C}$archive"
+		print_success "Extracting $archive"
 		7z x "$archive" -y 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*.zip)
-		print_success "Extracting ${C}$archive"
+		print_success "Extracting $archive"
 		unzip "${archive}" 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*.rar)
-		print_success "Extracting ${C}$archive"
+		print_success "Extracting $archive"
 		unrar x "$archive" 2>/dev/null || {
-			print_failed "Failed to extract ${C}$archive"
+			print_failed "Failed to extract $archive"
 			return 1
 		}
 		;;
 	*)
-		print_failed "Unsupported archive format: ${C}$archive"
+		print_failed "Unsupported archive format: $archive"
 		return 1
 		;;
 	esac
 	progress_phase "extract" 100 "Extraction complete"
-	print_success "Successfully extracted ${C}$archive"
+	print_success "Successfully extracted $archive"
 	log_debug "Extracted: $archive"
 }
 
@@ -678,8 +687,8 @@ function download_and_extract() {
 			check_and_delete "$filename"
 		fi
 	else
-		print_failed "Failed to download ${C}${filename}"
-		print_msg "${C}Please check your internet connection"
+		print_failed "Failed to download ${filename}"
+		print_msg "Please check your internet connection"
 	fi
 	log_debug "Downloaded and extracted: $url to $target_dir"
 }
@@ -728,7 +737,7 @@ function select_an_option() {
 	local response
 
 	while true; do
-		read -r -p "${Y}select an option (Default ${default_option}): ${NC}" response
+		read -r -p "select an option (Default ${default_option}): " response
 		response=${response:-$default_option}
 
 		if [[ $response =~ ^[0-9]+$ ]] && ((response >= 1 && response <= max_options)); then
@@ -744,36 +753,26 @@ function select_an_option() {
 	done
 }
 
-function read_conf() {
-	if [[ ! -f "$CONFIG_FILE" ]]; then
-		print_failed " Configuration file $CONFIG_FILE not found"
-		exit 1
-	fi
-	# shellcheck disable=SC1090
-	source "$CONFIG_FILE"
-	print_success "Configuration variables loaded"
-}
-
 # Use atomic write pattern to prevent background execution issues
 function print_to_config() {
 	local var_name="$1"
 	local var_value="${2:-${!var_name}}"
 	local IFS=$' \t\n'
-	local temp_file="${CONFIG_FILE}.tmp.$$"
+	local temp_file="ONFIG_FILE}.tmp.$$"
 
 	# Ensure config file exists
-	if [[ ! -f "$CONFIG_FILE" ]]; then
-		touch "$CONFIG_FILE" 2>/dev/null || {
-			log_error "Cannot access $CONFIG_FILE"
+	if [[ ! -f "ONFIG_FILE" ]]; then
+		touch "ONFIG_FILE" 2>/dev/null || {
+			log_error "Cannot access ONFIG_FILE"
 			return 1
 		}
 	fi
 
-	if grep -q "^${var_name}=" "$CONFIG_FILE" 2>/dev/null; then
+	if grep -q "^${var_name}=" "ONFIG_FILE" 2>/dev/null; then
 		# Atomic write: write to temp file then move
-		sed "s|^${var_name}=.*|${var_name}=${var_value}|" "$CONFIG_FILE" >"$temp_file" && mv "$temp_file" "$CONFIG_FILE"
+		sed "s|^${var_name}=.*|${var_name}=${var_value}|" "ONFIG_FILE" >"$temp_file" && mv "$temp_file" "ONFIG_FILE"
 	else
-		echo "${var_name}=${var_value}" >>"$CONFIG_FILE"
+		echo "${var_name}=${var_value}" >>"ONFIG_FILE"
 	fi
 
 	log_debug "$var_name = $var_value"
@@ -804,32 +803,6 @@ function fix_exec() {
     }" "$file"
 }
 
-function install_appimage() {
-	local appimage_file_name="$1"
-	local appimage_directory_name="$2"
-	progress_report 10 "Setting up AppImage directory..."
-	distro_run "
-check_and_create_directory '/opt/AppImageLauncher/'
-check_and_delete '/opt/AppImageLauncher/$appimage_directory_name'
-"
-	progress_report 20 "Moving AppImage to install location..."
-	if [[ "$selected_distro_type" == "chroot" ]]; then
-		sudo mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
-	else
-		mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
-	fi
-	progress_report 30 "Extracting AppImage contents..."
-	distro_run "
-cd /opt/AppImageLauncher
-ldconfig
-chmod +x '${appimage_file_name}'
-APPIMAGE_EXTRACT_AND_RUN=1 ./${appimage_file_name} --appimage-extract
-mv -f squashfs-root '$appimage_directory_name'
-check_and_delete '${appimage_file_name}'
-"
-	progress_report 80 "AppImage setup complete"
-}
-
 function get_latest_version() {
 	local package_name
 	local latest_version
@@ -845,238 +818,56 @@ function get_latest_version() {
 	fi
 }
 
-function pd_package_install_and_check() {
-	# Check for --root flag
-	local use_sudo=true
-	if [[ "$1" == "--root" ]]; then
-		use_sudo=false
-		shift
-	fi
-	progress_phase "install" 0 "Preparing distro packages: $*"
-
-	# shellcheck disable=SC2206
-	packs_list=($@)
-
-	# Get distro id
-	# shellcheck disable=SC1091
-	if [ -f /etc/os-release ]; then
-		. /etc/os-release
-	fi
-
-	# Install package
-	for package_name in "${packs_list[@]}"; do
-		print_msg "${BOLD}Installing package: ${C}$package_name"
-
-		# Install package and handle errors
-		install_failed=false
-		if [[ "$ID" == "debian" ]] || [[ "$ID" == "ubuntu" ]]; then
-			if $use_sudo; then
-				if ! sudo apt install "$package_name" -y; then
-					install_failed=true
-				fi
-			else
-				if ! apt install "$package_name" -y; then
-					install_failed=true
-				fi
-			fi
-		elif [[ "$ID" == arch* ]]; then
-			if $use_sudo; then
-				if ! sudo pacman -Sy --noconfirm "$package_name"; then
-					install_failed=true
-				fi
-			else
-				if ! pacman -Sy --noconfirm "$package_name"; then
-					install_failed=true
-				fi
-			fi
-		elif [[ "$ID" == "fedora" ]]; then
-			if $use_sudo; then
-				if ! sudo dnf install "$package_name" -y; then
-					install_failed=true
-				fi
-			else
-				if ! dnf install "$package_name" -y; then
-					install_failed=true
-				fi
-			fi
-		fi
-
-		# Handle error in installation
-		if $install_failed; then
-			print_failed "${BOLD} Error detected during installation of: ${C}$package_name${NC}"
-			if [[ "$ID" == "debian" ]] || [[ "$ID" == "ubuntu" ]]; then
-				if $use_sudo; then
-					sudo apt --fix-broken install -y
-					sudo dpkg --configure -a
-					sudo apt install "$package_name" -y
-				else
-					apt --fix-broken install -y
-					dpkg --configure -a
-					apt install "$package_name" -y
-				fi
-			elif [[ "$ID" == arch* ]]; then
-				if $use_sudo; then
-					sudo pacman -Syu --noconfirm
-					sudo pacman -Sy --noconfirm "$package_name"
-				else
-					pacman -Syu --noconfirm
-					pacman -Sy --noconfirm "$package_name"
-				fi
-			elif [[ "$ID" == "fedora" ]]; then
-				if $use_sudo; then
-					sudo dnf --refresh install -y
-					sudo rpm --rebuilddb
-					sudo dnf install "$package_name" -y
-				else
-					dnf --refresh install -y
-					rpm --rebuilddb
-					dnf install "$package_name" -y
-				fi
-			fi
-		fi
-
-		# Reinstall if necessary
-		if [[ "$ID" == "debian" ]] || [[ "$ID" == "ubuntu" ]]; then
-			if ! dpkg -s "$package_name" >/dev/null 2>&1; then
-				if $use_sudo; then
-					sudo apt install "$package_name" -y
-				else
-					apt install "$package_name" -y
-				fi
-			fi
-		elif [[ "$ID" == arch* ]]; then
-			if ! pacman -Qi "$package_name" >/dev/null 2>&1; then
-				if $use_sudo; then
-					sudo pacman -Sy --noconfirm "$package_name"
-				else
-					pacman -Sy --noconfirm "$package_name"
-				fi
-			fi
-		elif [[ "$ID" == "fedora" ]]; then
-			if ! rpm -q "$package_name" >/dev/null 2>&1; then
-				if $use_sudo; then
-					sudo dnf install "$package_name" -y
-				else
-					dnf install "$package_name" -y
-				fi
-			fi
-		fi
-
-		# Check installation
-		if [[ "$ID" == "debian" ]] || [[ "$ID" == "ubuntu" ]]; then
-			if dpkg -s "$package_name" >/dev/null 2>&1; then
-				print_success "$package_name ${G}installed successfully"
-			else
-				if command -v wget &>/dev/null || ls "$TERMUX_PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
-					print_success "$package_name ${G}installed successfully"
-				fi
-			fi
-		elif [[ "$ID" == arch* ]]; then
-			if pacman -Qi "$package_name" >/dev/null 2>&1; then
-				print_success "$package_name ${G}installed successfully"
-			else
-				if command -v wget &>/dev/null || ls "$TERMUX_PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
-					print_success "$package_name ${G}installed successfully"
-				fi
-			fi
-		elif [[ "$ID" == "fedora" ]]; then
-			if rpm -q "$package_name" >/dev/null 2>&1; then
-				print_success "$package_name ${G}installed successfully"
-			else
-				if command -v wget &>/dev/null || ls "$TERMUX_PREFIX/bin/"*"$package_name"* >/dev/null 2>&1; then
-					print_success "$package_name ${G}installed successfully"
-				fi
-			fi
-		fi
-	done
-	progress_phase "install" 100 "Distro package installation complete"
-	echo ""
-}
+# ==================== PD FUNCTIONS ====================
 
 function create_shell_script() {
 	local script_path="$1"
 	local shell_setup_content="$2"
 	# Create directory if it doesn't exist
-	if [[ "$selected_distro_type" == "chroot" ]]; then
+	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
 		sudo mkdir -p "$(dirname "$script_path")"
 	else
 		mkdir -p "$(dirname "$script_path")"
 	fi
 
-	if [[ "$selected_distro_type" == "chroot" ]]; then
+	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
 		sudo tee "$script_path" >/dev/null <<EOF
 #!/bin/bash
-
-if [ -t 1 ] && [ -n "\${TERM:-}" ]; then
-    R="$R"
-    G="$G"
-    Y="$Y"
-    B="$B"
-    C="$C"
-    NC="$NC"
-    BOLD="$BOLD"
-else
-    R=""
-    G=""
-    Y=""
-    B=""
-    C=""
-    NC=""
-    BOLD=""
-fi
 
 TERMUX_PREFIX="$TERMUX_PREFIX"
 TERMUX_HOME="$TERMUX_HOME"
 TERMUX_DESKTOP_PATH="$TERMUX_DESKTOP_PATH"
-CONFIG_FILE="$CONFIG_FILE"
+CONFIG_FILE="ONFIG_FILE"
 LOG_FILE="$LOG_FILE"
+SELECTED_DISTRO="$SELECTED_DISTRO"
 EOF
 	else
 		cat <<EOF >"$script_path"
 #!/bin/bash
 
-#!/bin/bash
-
-if [ -t 1 ] && [ -n "\${TERM:-}" ]; then
-    R="$R"
-    G="$G"
-    Y="$Y"
-    B="$B"
-    C="$C"
-    NC="$NC"
-    BOLD="$BOLD"
-else
-    R=""
-    G=""
-    Y=""
-    B=""
-    C=""
-    NC=""
-    BOLD=""
-fi
-
 TERMUX_PREFIX="$TERMUX_PREFIX"
 TERMUX_HOME="$TERMUX_HOME"
 TERMUX_DESKTOP_PATH="$TERMUX_DESKTOP_PATH"
-CONFIG_FILE="$CONFIG_FILE"
+CONFIG_FILE="ONFIG_FILE"
 LOG_FILE="$LOG_FILE"
+SELECTED_DISTRO="$SELECTED_DISTRO"
 EOF
 	fi
-	if [[ "$selected_distro_type" == "chroot" ]]; then
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths | sudo tee -a "$script_path" >/dev/null
+	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore set_distro_paths | sudo tee -a "$script_path" >/dev/null
 		echo "$shell_setup_content" | sudo tee -a "$script_path" >/dev/null
 	else
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths >>"$script_path"
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore set_distro_paths >>"$script_path"
 		echo "$shell_setup_content" >>"$script_path"
 	fi
 	# Make script executable
-	if [[ "$selected_distro_type" == "chroot" ]]; then
+	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
 		sudo chmod +x "$script_path"
 	else
 		chmod +x "$script_path"
 	fi
 	# Verify script was created
-	if [[ "$selected_distro_type" == "chroot" ]]; then
+	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
 		if ! su -c "ls '$script_path'" >/dev/null 2>&1; then
 			print_failed "Failed to create script at $script_path"
 		fi
@@ -1089,10 +880,12 @@ EOF
 
 function distro_run() {
 	local command="$1"
-	pd_setup_content="${command}"
+	local pd_setup_content="${command}"
+	local script_name="pd_setup_$$_${RANDOM}.sh"
+	local script_path="$DISTRO_PATH/root/$script_name"
 
-	create_shell_script "$distro_path/root/pd_setup.sh" "$pd_setup_content"
-	"${selected_distro_type}"-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh 2>&1 |
+	create_shell_script "$script_path" "$pd_setup_content"
+	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- /bin/bash "/root/$script_name" 2>&1 |
 		while IFS= read -r line; do
 			echo "$line"
 			# Forward structured progress tokens from inside distro
@@ -1100,19 +893,458 @@ function distro_run() {
 				echo "$line" >&2
 			fi
 		done
-	return "${PIPESTATUS[0]}"
+	local exit_code="${PIPESTATUS[0]}"
+
+	# Clean up the temporary setup script
+	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- rm -f "/root/$script_name"
+
+	return "$exit_code"
 }
 
-function set_distro_paths {
-	if [[ "$selected_distro_type" == "proot" ]]; then
-		distro_path="$TERMUX_PREFIX/var/lib/proot-distro/installed-rootfs/$selected_distro"
-	elif [[ "$selected_distro_type" == "chroot" ]]; then
-		distro_path="/data/local/chroot-distro/installed-rootfs/$selected_distro"
-	else
-		print_failed "Unable to get distro type..."
-		exit 1
+function _pd_update_sys_internal() {
+	if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
+		rm -f /var/lib/dpkg/lock
+		rm -f /var/lib/dpkg/lock-frontend
+		rm -f /var/cache/apt/archives/lock
+		dpkg --configure -a >/dev/null 2>&1
+		apt update -y
+		dpkg --configure -a >/dev/null 2>&1
+	elif [[ "$SELECTED_DISTRO" == "arch" ]]; then
+		rm -f /var/lib/pacman/db.lck
+		pacman -Sy
+	elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+		dnf makecache
 	fi
 }
 
-read_conf
-set_distro_paths
+function _pd_package_install_and_check_internal() {
+	log_debug "Starting distro package installation for: $*"
+	progress_phase "install" 0 "Preparing distro packages: $*"
+
+	_pd_update_sys_internal
+
+	# shellcheck disable=SC2206
+	local packs_list=($@)
+
+	if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
+		local all_packages=()
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				local packages
+				packages=$(apt-cache pkgnames 2>/dev/null | grep -E "^${package_name//\*/.*}$" | sort -u)
+				for package in $packages; do
+					all_packages+=("$package")
+				done
+			else
+				all_packages+=("$package_name")
+			fi
+		done
+
+		for package in "${all_packages[@]}"; do
+			local retry_count=0
+			local max_retries=5
+			local install_success=false
+
+			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+				retry_count=$((retry_count + 1))
+				print_msg "Installing distro package: $package"
+
+				apt install "$package" -y 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "${line,,}" == *"get:"* ]]; then
+						progress_phase "install" 20 "Downloading $package..."
+					elif [[ "${line,,}" == *"unpacking"* ]]; then
+						progress_phase "install" 50 "Unpacking $package..."
+					elif [[ "${line,,}" == *"setting up"* ]]; then
+						progress_phase "install" 80 "Setting up $package..."
+					fi
+				done
+
+				if dpkg -s "$package" >/dev/null 2>&1; then
+					print_success "Successfully installed distro package: $package"
+					install_success=true
+				else
+					print_warn "Failed to install distro package: ${package}. Trying again... ($retry_count)"
+					dpkg --configure -a 2>/dev/null
+					apt --fix-broken install -y 2>/dev/null
+					apt install --fix-missing -y 2>/dev/null
+				fi
+			done
+		done
+
+	elif [[ "$SELECTED_DISTRO" == "arch" ]]; then
+		local all_packages=()
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				local packages
+				packages=$(pacman -Ssq 2>/dev/null | grep -E "^${package_name//\*/.*}$")
+				for package in $packages; do
+					all_packages+=("$package")
+				done
+			else
+				all_packages+=("$package_name")
+			fi
+		done
+
+		for package in "${all_packages[@]}"; do
+			local retry_count=0
+			local max_retries=5
+			local install_success=false
+
+			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+				retry_count=$((retry_count + 1))
+				rm -f /var/lib/pacman/db.lck
+				print_msg "Installing distro package: $package"
+
+				pacman -S --noconfirm "$package" 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "${line,,}" == *"downloading"* ]]; then
+						progress_phase "install" 20 "Downloading $package..."
+					elif [[ "${line,,}" == *"checking"* ]]; then
+						progress_phase "install" 50 "Checking $package..."
+					elif [[ "${line,,}" == *"installing"* ]]; then
+						progress_phase "install" 80 "Installing $package..."
+					fi
+				done
+
+				if pacman -Qi "$package" >/dev/null 2>&1; then
+					print_success "Successfully installed distro package: $package"
+					install_success=true
+				else
+					print_warn "Failed to install distro package: ${package}. Trying again... ($retry_count)"
+				fi
+			done
+		done
+
+	elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+		local all_packages=()
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				local packages
+				packages=$(dnf list available -q 2>/dev/null | awk '{print $1}' | cut -d'.' -f1 | grep -E "^${package_name//\*/.*}$")
+				for package in $packages; do
+					all_packages+=("$package")
+				done
+			else
+				all_packages+=("$package_name")
+			fi
+		done
+
+		for package in "${all_packages[@]}"; do
+			local retry_count=0
+			local max_retries=5
+			local install_success=false
+
+			while [[ "$retry_count" -lt "$max_retries" && "$install_success" == false ]]; do
+				retry_count=$((retry_count + 1))
+				print_msg "Installing distro package: $package"
+
+				dnf install -y "$package" 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "${line,,}" == *"downloading"* ]]; then
+						progress_phase "install" 20 "Downloading $package..."
+					elif [[ "${line,,}" == *"running transaction"* ]]; then
+						progress_phase "install" 80 "Installing $package..."
+					fi
+				done
+
+				if rpm -q "$package" >/dev/null 2>&1; then
+					print_success "Successfully installed distro package: $package"
+					install_success=true
+				else
+					print_warn "Failed to install distro package: ${package}. Trying again... ($retry_count)"
+				fi
+			done
+		done
+	fi
+	progress_phase "install" 100 "Distro package installation complete"
+}
+
+function _pd_package_remove_and_check_internal() {
+	log_debug "Starting distro package removal for: $*"
+
+	local packs_list
+	IFS=' ' read -r -a packs_list <<<"$*"
+
+	if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				local packages
+				packages=$(dpkg-query -W -f='${binary:Package}\n' "${package_name}" 2>/dev/null | grep -v ' ')
+				if [[ -z "$packages" ]]; then
+					print_success "No installed distro packages found matching: $package_name"
+					continue
+				fi
+				for package in $packages; do
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						print_msg "Removing distro package: $package"
+						dpkg --configure -a >/dev/null 2>&1
+
+						apt autoremove "$package" -y 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package..."
+							fi
+						done
+
+						if ! dpkg -s "$package" >/dev/null 2>&1; then
+							print_success "Successfully removed distro package: $package"
+							remove_success=true
+						else
+							print_warn "Failed to remove distro package: ${package}. Trying again...($retry_count)"
+						fi
+					done
+				done
+			else
+				if dpkg -s "$package_name" >/dev/null 2>&1; then
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						print_msg "Removing distro package: $package_name"
+						dpkg --configure -a >/dev/null 2>&1
+
+						apt autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package_name..."
+							fi
+						done
+
+						if ! dpkg -s "$package_name" >/dev/null 2>&1; then
+							print_success "Successfully removed distro package: $package_name"
+							remove_success=true
+						else
+							print_warn "Failed to remove distro package: ${package_name}. Trying again... ($retry_count)"
+						fi
+					done
+				else
+					print_success "Distro package $package_name is not installed."
+				fi
+			fi
+		done
+	elif [[ "$SELECTED_DISTRO" == "arch" ]]; then
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				local packages
+				packages=$(pacman -Qsq 2>/dev/null | grep -E "^${package_name//\*/.*}$")
+				if [[ -z "$packages" ]]; then
+					print_success "No installed distro packages found matching: $package_name"
+					continue
+				fi
+				for package in $packages; do
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						rm -f /var/lib/pacman/db.lck
+						print_msg "Removing distro package: $package"
+
+						pacman -Rnds --noconfirm "$package" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package..."
+							fi
+						done
+
+						if ! pacman -Qi "$package" >/dev/null 2>&1; then
+							print_success "Successfully removed distro package: $package"
+							remove_success=true
+						else
+							print_warn "Failed to remove distro package: ${package}. Trying again...($retry_count)"
+						fi
+					done
+				done
+			else
+				if pacman -Qi "$package_name" >/dev/null 2>&1; then
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						rm -f /var/lib/pacman/db.lck
+						print_msg "Removing distro package: $package_name"
+
+						pacman -Rnds --noconfirm "$package_name" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package_name..."
+							fi
+						done
+
+						if ! pacman -Qi "$package_name" >/dev/null 2>&1; then
+							print_success "Successfully removed distro package: $package_name"
+							remove_success=true
+						else
+							print_warn "Failed to remove distro package: ${package_name}. Trying again... ($retry_count)"
+						fi
+					done
+				else
+					print_success "Distro package $package_name is not installed."
+				fi
+			fi
+		done
+	elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+		for package_name in "${packs_list[@]}"; do
+			if [[ "$package_name" == *"*"* ]]; then
+				local packages
+				packages=$(rpm -qa --queryformat '%{NAME}\n' | grep -E "^${package_name//\*/.*}$")
+				if [[ -z "$packages" ]]; then
+					print_success "No installed distro packages found matching: $package_name"
+					continue
+				fi
+				for package in $packages; do
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						print_msg "Removing distro package: $package"
+
+						dnf remove -y "$package" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package..."
+							fi
+						done
+
+						if ! rpm -q "$package" >/dev/null 2>&1; then
+							print_success "Successfully removed distro package: $package"
+							remove_success=true
+						else
+							print_warn "Failed to remove distro package: ${package}. Trying again...($retry_count)"
+						fi
+					done
+				done
+			else
+				if rpm -q "$package_name" >/dev/null 2>&1; then
+					local retry_count=0
+					local max_retries=5
+					local remove_success=false
+					while [[ "$retry_count" -lt "$max_retries" && "$remove_success" == false ]]; do
+						retry_count=$((retry_count + 1))
+						print_msg "Removing distro package: $package_name"
+
+						dnf remove -y "$package_name" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package_name..."
+							fi
+						done
+
+						if ! rpm -q "$package_name" >/dev/null 2>&1; then
+							print_success "Successfully removed distro package: $package_name"
+							remove_success=true
+						else
+							print_warn "Failed to remove distro package: ${package_name}. Trying again... ($retry_count)"
+						fi
+					done
+				else
+					print_success "Distro package $package_name is not installed."
+				fi
+			fi
+		done
+	fi
+}
+
+function pd_update_sys() {
+	distro_run "_pd_update_sys_internal"
+}
+
+function pd_package_install_and_check() {
+	local just_run=false
+	local filtered_args=()
+
+	for arg in "$@"; do
+		if [[ "$arg" == "--just" ]]; then
+			just_run=true
+		else
+			# Safely split space-separated strings
+			read -ra split_args <<< "$arg"
+			filtered_args+=("${split_args[@]}")
+		fi
+	done
+
+	if [[ "$just_run" == true ]]; then
+		local args
+		printf -v args "%q " "${filtered_args[@]}"
+		distro_run "_pd_package_install_and_check_internal $args"
+	else
+		"$SELECTED_DISTRO" install "${filtered_args[@]}" -y
+	fi
+}
+
+function pd_package_remove_and_check() {
+	local just_run=false
+	local filtered_args=()
+
+	for arg in "$@"; do
+		if [[ "$arg" == "--just" ]]; then
+			just_run=true
+		else
+			read -ra split_args <<< "$arg"
+			filtered_args+=("${split_args[@]}")
+		fi
+	done
+
+	if [[ "$just_run" == true ]]; then
+		local args
+		printf -v args "%q " "${filtered_args[@]}"
+		distro_run "_pd_package_remove_and_check_internal $args"
+	else
+		"$SELECTED_DISTRO" remove "${filtered_args[@]}" -y
+	fi
+}
+
+function pd_check_and_create_directory() {
+	local args
+	printf -v args "%q " "$@"
+	distro_run "check_and_create_directory $args"
+}
+
+function pd_check_and_delete() {
+	local args
+	printf -v args "%q " "$@"
+	distro_run "check_and_delete $args"
+}
+
+function pd_check_and_backup() {
+	local args
+	printf -v args "%q " "$@"
+	distro_run "check_and_backup $args"
+}
+
+function pd_check_and_restore() {
+	local args
+	printf -v args "%q " "$@"
+	distro_run "check_and_restore $args"
+}
+
+function install_appimage() {
+	local appimage_file_name="$1"
+	local appimage_directory_name="$2"
+
+	progress_report 10 "Setting up AppImage directory..."
+	pd_check_and_delete "/opt/AppImageLauncher/$appimage_directory_name"
+	pd_check_and_create_directory "/opt/AppImageLauncher/"
+
+	progress_report 20 "Moving AppImage to install location..."
+	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- mv "$PWD/$appimage_file_name" "/opt/AppImageLauncher/"
+
+	progress_report 30 "Extracting AppImage contents..."
+	distro_run "
+cd /opt/AppImageLauncher || { print_failed 'cant find the /opt/AppImageLauncher directory'; exit 1; }
+ldconfig
+chmod +x '${appimage_file_name}'
+APPIMAGE_EXTRACT_AND_RUN=1 ./${appimage_file_name} --appimage-extract
+mv -f squashfs-root '${appimage_directory_name}'
+check_and_delete '${appimage_file_name}'
+"
+	progress_report 80 "AppImage setup complete"
+}

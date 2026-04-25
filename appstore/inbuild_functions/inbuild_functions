@@ -409,7 +409,7 @@ function package_install_and_check {
 				retry_count=$((retry_count + 1))
 				print_msg "Installing package: $package"
 
-				apt install "$package" -y 2>&1 | while IFS= read -r line; do
+				apt-get install "$package" -y 2>&1 | while IFS= read -r line; do
 					echo "$line"
 					if [[ "${line,,}" == *"get:"* ]]; then
 						progress_phase "install" 20 "Downloading $package..."
@@ -427,8 +427,8 @@ function package_install_and_check {
 					print_warn "Failed to install package: ${package}. Trying again... ($retry_count)"
 					# Only run recovery commands on failure
 					dpkg --configure -a 2>/dev/null
-					apt --fix-broken install -y 2>/dev/null
-					apt install --fix-missing -y 2>/dev/null
+					apt-get --fix-broken install -y 2>/dev/null
+					apt-get install --fix-missing -y 2>/dev/null
 				fi
 			done
 		done
@@ -529,7 +529,7 @@ function package_remove_and_check {
 						print_msg "Removing package: $package"
 						dpkg --configure -a >/dev/null 2>&1
 
-						apt autoremove "$package" -y 2>&1 | while IFS= read -r line; do
+						apt-get autoremove "$package" -y 2>&1 | while IFS= read -r line; do
 							echo "$line"
 							if [[ "${line,,}" == *"removing"* ]]; then
 								progress_phase "cleanup" 50 "Removing $package..."
@@ -554,7 +554,7 @@ function package_remove_and_check {
 						print_msg "Removing package: $package_name"
 						dpkg --configure -a >/dev/null 2>&1
 
-						apt autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
+						apt-get autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
 							echo "$line"
 							if [[ "${line,,}" == *"removing"* ]]; then
 								progress_phase "cleanup" 50 "Removing $package_name..."
@@ -788,7 +788,7 @@ function update_sys() {
 		rm -f "$TERMUX_PREFIX/var/lib/dpkg/lock-frontend"
 		rm -f "$TERMUX_PREFIX/var/cache/apt/archives/lock"
 		dpkg --configure -a >/dev/null 2>&1
-		apt update -y
+		apt-get update -y
 		dpkg --configure -a >/dev/null 2>&1
 	fi
 }
@@ -907,7 +907,13 @@ function _pd_update_sys_internal() {
 		rm -f /var/lib/dpkg/lock-frontend
 		rm -f /var/cache/apt/archives/lock
 		dpkg --configure -a >/dev/null 2>&1
-		apt update -y
+		if ! apt-get update -y; then
+			if ! apt-get update -y --allow-releaseinfo-change; then
+				rm -rf /var/lib/apt/lists/*
+				apt-get clean
+				apt-get update -y || apt-get update -y --fix-missing
+			fi
+		fi
 		dpkg --configure -a >/dev/null 2>&1
 	elif [[ "$SELECTED_DISTRO" == "arch" ]]; then
 		rm -f /var/lib/pacman/db.lck
@@ -949,7 +955,7 @@ function _pd_package_install_and_check_internal() {
 				retry_count=$((retry_count + 1))
 				print_msg "Installing distro package: $package"
 
-				apt install "$package" -y 2>&1 | while IFS= read -r line; do
+				apt-get install "$package" -y 2>&1 | while IFS= read -r line; do
 					echo "$line"
 					if [[ "${line,,}" == *"get:"* ]]; then
 						progress_phase "install" 20 "Downloading $package..."
@@ -966,8 +972,8 @@ function _pd_package_install_and_check_internal() {
 				else
 					print_warn "Failed to install distro package: ${package}. Trying again... ($retry_count)"
 					dpkg --configure -a 2>/dev/null
-					apt --fix-broken install -y 2>/dev/null
-					apt install --fix-missing -y 2>/dev/null
+					apt-get --fix-broken install -y 2>/dev/null
+					apt-get install --fix-missing -y 2>/dev/null
 				fi
 			done
 		done
@@ -1084,7 +1090,7 @@ function _pd_package_remove_and_check_internal() {
 						print_msg "Removing distro package: $package"
 						dpkg --configure -a >/dev/null 2>&1
 
-						apt autoremove "$package" -y 2>&1 | while IFS= read -r line; do
+						apt-get autoremove "$package" -y 2>&1 | while IFS= read -r line; do
 							echo "$line"
 							if [[ "${line,,}" == *"removing"* ]]; then
 								progress_phase "cleanup" 50 "Removing $package..."
@@ -1109,7 +1115,7 @@ function _pd_package_remove_and_check_internal() {
 						print_msg "Removing distro package: $package_name"
 						dpkg --configure -a >/dev/null 2>&1
 
-						apt autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
+						apt-get autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
 							echo "$line"
 							if [[ "${line,,}" == *"removing"* ]]; then
 								progress_phase "cleanup" 50 "Removing $package_name..."

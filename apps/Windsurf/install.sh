@@ -10,16 +10,16 @@ working_dir="${distro_path}/opt"
 supported_distro="all"
 
 # Check if a distro is selected
-if [ -z "$selected_distro" ]; then
+if [ -z "$SELECTED_DISTRO" ]; then
     print_failed "Error: No distro selected"
     exit 1
 fi
 
-if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]]; then
+if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
 distro_run "
 sudo apt update -y -o Dpkg::Options::="--force-confnew" && sudo apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 libx11-xcb1  libxcomposite1  libxdamage1 libxrandr2  libdrm2 libxcb-dri3-0 libxshmfence1
 "
-elif [[ "$selected_distro" == "fedora" ]]; then
+elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
 distro_run "
 sudo dnf install -y nss atk at-spi2-atk gtk3 mesa-libgbm alsa-lib libX11-xcb libXcomposite libXdamage libXrandr libdrm  libxcb libxshmfence libxkbcommon --skip-unavailable
 "
@@ -49,7 +49,7 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/windsurf.desktop >/dev/null
+cat <<DESKTOP_EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/windsurf.desktop >/dev/null
 [Desktop Entry]
 Name=Windsurf
 Exec=pdrun "${run_cmd}"

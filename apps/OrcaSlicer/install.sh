@@ -22,7 +22,7 @@ echo "Detected OS: $ID"
 echo "ID_LIKE: $ID_LIKE"
 
 # Check if running on Ubuntu
-if [[ "$selected_distro" == "ubuntu" || "$selected_distro" == "debian"* ]]; then
+if [[ "$SELECTED_DISTRO" == "ubuntu" || "$SELECTED_DISTRO" == "debian"* ]]; then
     cd $working_dir
     filename="OrcaSlicer_UbuntuLinux_${version}-dev${supported_arch}.deb"
     # --- Step 1: Download and Install OrcaSlicer ---
@@ -65,5 +65,5 @@ Categories=Graphics;3DPrinting;
 EOF
 
 chmod +x "$SHORTCUT_FILE"
-cp "$SHORTCUT_FILE" ${PREFIX}/share/applications/pd_added/
+cp "$SHORTCUT_FILE" ${TERMUX_PREFIX}/share/applications/pd_added/
 echo "Desktop shortcut created successfully at $SHORTCUT_FILE"

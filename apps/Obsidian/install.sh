@@ -12,14 +12,14 @@ cd ${TMPDIR}
 # Get the correct filename that will be downloaded
 appimage_filename="Obsidian-${version#v}-${supported_arch}.AppImage"
 
-check_and_delete "${TMPDIR}/${appimage_filename} ${PREFIX}/share/applications/obsidian.desktop"
+check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/obsidian.desktop"
 
 print_success "Downloading Obsidian AppImage..."
 download_file "${page_url}/releases/download/${version}/Obsidian-${version#v}-${supported_arch}.AppImage"
 install_appimage "$appimage_filename" "Obsidian"
 
 print_success "Creating desktop entry..."
-cat <<EOF | tee ${PREFIX}/share/applications/pd_added/obsidian.desktop >/dev/null
+cat <<EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/obsidian.desktop >/dev/null
 [Desktop Entry]
 Name=Obsidian
 Exec=pdrun ${run_cmd}

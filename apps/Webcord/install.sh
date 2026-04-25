@@ -18,14 +18,14 @@ esac
 
 appimage_filename="WebCord-${version#v}-${archtype}.AppImage"
 
-check_and_delete "${TMPDIR}/${appimage_filename} ${PREFIX}/share/applications/pd_added/webcord.desktop"
+check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/pd_added/webcord.desktop"
 
 print_success "Downloading webcord AppImage..."
 download_file "${page_url}/releases/download/${version}/${appimage_filename}"
 install_appimage "$appimage_filename" "webcord"
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/webcord.desktop >/dev/null
+cat <<DESKTOP_EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/webcord.desktop >/dev/null
 [Desktop Entry]
 Name=Webcord
 Exec=pdrun ${run_cmd}

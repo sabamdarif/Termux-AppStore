@@ -14,7 +14,7 @@ check_and_create_directory "$HOME/.config/ytdlp-gui/"
 download_file "$HOME/.config/ytdlp-gui/logo.png" "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/main/apps/ytdlp-gui/logo.png"
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/ytdlp-gui.desktop >/dev/null
+cat <<DESKTOP_EOF | tee ${TERMUX_PREFIX}/share/applications/ytdlp-gui.desktop >/dev/null
 [Desktop Entry]
 Name=YtDlp GUI
 Exec=$HOME/.local/bin/yt-dlp-gui

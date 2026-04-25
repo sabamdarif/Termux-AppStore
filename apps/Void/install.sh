@@ -57,7 +57,7 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee "${PREFIX}"/share/applications/pd_added/void.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "${TERMUX_PREFIX}"/share/applications/pd_added/void.desktop >/dev/null
 [Desktop Entry]
 Name=Void
 Exec=pdrun ${run_cmd}

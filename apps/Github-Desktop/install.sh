@@ -42,7 +42,7 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee "${PREFIX}"/share/applications/pd_added/github-desktop.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "${TERMUX_PREFIX}"/share/applications/pd_added/github-desktop.desktop >/dev/null
 [Desktop Entry]
 Name=GitHub Desktop
 Exec=pdrun ${run_cmd}

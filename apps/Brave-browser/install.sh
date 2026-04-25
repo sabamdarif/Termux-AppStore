@@ -10,7 +10,7 @@ working_dir="${distro_path}/opt"
 supported_distro="all"
 
 # Check if a distro is selected
-if [ -z "$selected_distro" ]; then
+if [ -z "$SELECTED_DISTRO" ]; then
 	print_failed "Error: No distro selected"
 	exit 1
 fi
@@ -27,7 +27,7 @@ extract brave-browser-${version#v}-linux-arm64.zip
 check_and_delete brave-browser-${version#v}-linux-arm64.zip
 "
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/brave-browser.desktop >/dev/null
+cat <<DESKTOP_EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/brave-browser.desktop >/dev/null
 [Desktop Entry]
 Name=Brave-browser
 Exec=pdrun ${run_cmd}

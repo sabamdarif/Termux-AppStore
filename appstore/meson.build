@@ -1,6 +1,6 @@
 project(
   'termux-appstore',
-  version: '0.5.4.1',
+  version: '1.0.0-rc1',
   meson_version: '>= 0.59.0',
   license: 'GPL-3.0-or-later',
 )

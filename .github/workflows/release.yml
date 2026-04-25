@@ -80,7 +80,7 @@ jobs:
                   # Update version in build.sh
                   # Termux package versions cannot contain hyphens, so we convert them to tildes
                   RAW_VERSION="${{ needs.check-env.outputs.version }}"
-                  PKG_VERSION="${RAW_VERSION//-/~}"
+                  PKG_VERSION="$(echo "$RAW_VERSION" | tr '-' '~')"
                   sed -i "s/@VERSION@/${PKG_VERSION}/g" termux-packages/x11-packages/termux-appstore/build.sh
 
                   # Use local checkout for testing so PRs and unpushed changes are built correctly
@@ -107,8 +107,8 @@ jobs:
               with:
                   name: packages-${{ matrix.target_arch }}
                   path: |
-                      termux-packages/output/*.deb
-                      termux-packages/output/*.pkg.*
+                      termux-packages/output/termux-appstore*.deb
+                      termux-packages/output/termux-appstore*.pkg.*
 
     release:
         needs: [check-env, build]
@@ -164,7 +164,7 @@ jobs:
                   name: Termux AppStore v${{ needs.check-env.outputs.version }}
                   body: ${{ steps.changelog.outputs.notes }}
                   files: |
-                      packages/*.deb
-                      packages/*.pkg.*
+                      packages/termux-appstore*.deb
+                      packages/termux-appstore*.pkg.*
                   draft: false
                   prerelease: ${{ needs.check-env.outputs.is_prerelease == 'true' }}

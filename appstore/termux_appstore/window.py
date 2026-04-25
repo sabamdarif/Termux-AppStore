@@ -820,21 +820,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             progress_bar.set_text(f"{int(fraction * 100)}%")
             return False
 
-        # --- Weight-based progress constants ---
-        function_weights = {
-            "package_install_and_check": 50,
-            "package_remove_and_check": 30,
-            "install_appimage": 30,
-            "download_file": 20,
-            "extract": 15,
-            "distro_run": 25,
-            "check_and_create_directory": 2,
-            "check_and_delete": 2,
-            "check_and_backup": 2,
-            "check_and_restore": 2,
-            "echo": 1,
-        }
-        default_weight = 5
 
         def worker():
             nonlocal script_file, process
@@ -858,49 +843,16 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                     GLib.idle_add(progress_dialog.destroy)
                     return
 
-                # 2. Make executable (30%)
+                # 3. Make executable
                 GLib.idle_add(
                     update_progress, 0.3, f"Preparing {action_label.lower()}..."
                 )
                 os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
 
-                # 3. Analyse script for progress weighting
-                total_weight = 0
-                try:
-                    with open(script_file, "r") as f:
-                        for raw_line in f:
-                            raw_line = raw_line.strip()
-                            if raw_line and not raw_line.startswith("#"):
-                                weight = default_weight
-                                for func, w in function_weights.items():
-                                    if func in raw_line:
-                                        weight = w
-                                        break
-                                else:
-                                    if (
-                                        "apt install" in raw_line
-                                        or "pacman -" in raw_line
-                                    ):
-                                        weight = 40
-                                total_weight += weight
-                except Exception:
-                    total_weight = 100
-
-                total_weight = max(1, total_weight)
-
-                GLib.idle_add(
-                    lambda: update_terminal(
-                        terminal_view, f"Script analysis: total weight {total_weight}\n"
-                    )
-                )
-
                 # 4. Run script
-                start_progress = 0.15
+                start_progress = 0.35
                 end_progress = 0.95
                 progress_range = end_progress - start_progress
-                completed_weight = 0
-                current_op_weight = 0
-                current_op_progress = 0.0
 
                 GLib.idle_add(
                     update_progress,
@@ -942,37 +894,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         except (ValueError, TypeError):
                             sub = 0.5
 
-                        current_op_progress = sub
-                        eff_w = (
-                            current_op_weight
-                            if current_op_weight > 0
-                            else default_weight
-                        )
-                        wp = (
-                            completed_weight + eff_w * current_op_progress
-                        ) / total_weight
-                        cp = min(end_progress, start_progress + wp * progress_range)
+                        cp = min(end_progress, start_progress + sub * progress_range)
                         GLib.idle_add(update_progress, cp, progress_info["message"])
                         GLib.idle_add(
                             lambda l=line: update_terminal(terminal_view, l + "\n")
                         )
                         continue
 
-                    # Detect heavyweight operation starts
-                    for func, w in function_weights.items():
-                        if func in line:
-                            if current_op_weight > 0:
-                                completed_weight += current_op_weight
-                            current_op_weight = w
-                            current_op_progress = 0.0
-                            break
-
-                    eff_w = (
-                        current_op_weight if current_op_weight > 0 else default_weight
-                    )
-                    wp = (completed_weight + eff_w * current_op_progress) / total_weight
-                    cp = min(end_progress, start_progress + wp * progress_range)
-                    GLib.idle_add(update_progress, cp, line)
+                    # For normal lines, just update terminal
                     GLib.idle_add(
                         lambda l=line: update_terminal(terminal_view, l + "\n")
                     )

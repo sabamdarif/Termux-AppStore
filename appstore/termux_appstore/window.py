@@ -8,12 +8,12 @@ terminal, and task modules into a working application window.
 import os
 import platform
 import queue
+import signal
+import stat
 import subprocess
 import sys
 import threading
 import time
-import signal
-import stat
 
 import gi
 
@@ -38,11 +38,11 @@ from termux_appstore.constants import (
     APPSTORE_OLD_JSON_DIR,
     TERMUX_PREFIX,
 )
+from termux_appstore.tasks.script_executor import run_script_with_progress
 
 # Tasks
 from termux_appstore.tasks.task_manager import (
     create_progress_dialog,
-    parse_progress_line,
     update_terminal,
 )
 
@@ -157,7 +157,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         )
         css_file = os.path.normpath(css_file)
         if not os.path.isfile(css_file):
-            css_file = os.path.join(TERMUX_PREFIX, "opt", "appstore", "style", "style.css")
+            css_file = os.path.join(
+                TERMUX_PREFIX, "opt", "appstore", "style", "style.css"
+            )
         try:
             css_provider.load_from_path(css_file)
             Gtk.StyleContext.add_provider_for_screen(
@@ -428,7 +430,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             max_dist = 0
         else:
             max_dist = min(3, search_len // 3)
-            
+
         try:
             matches = find_near_matches(search_text, text, max_l_dist=max_dist)
             if not matches:
@@ -444,7 +446,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             scored = []
             for app in apps:
                 ns = self._get_fuzzy_score(search_text, app["app_name"].lower())
-                ds = self._get_fuzzy_score(search_text, app.get("description", "").lower())
+                ds = self._get_fuzzy_score(
+                    search_text, app.get("description", "").lower()
+                )
                 cs = max(
                     (
                         self._get_fuzzy_score(search_text, c.lower())
@@ -681,6 +685,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         def _update_button_label(progress, label):
             """Update button progress — spinner for version-checks, percentage for rest."""
+
             def _do():
                 if label:
                     if "Checking versions" in label:
@@ -709,6 +714,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
                         button.show_all()
                         _apply_progress_css(progress)
                 return False
+
             GLib.idle_add(_do)
 
         def _on_progress(progress, label):
@@ -736,6 +742,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             except Exception as e:
                 print(f"Update check failed: {e}")
                 import traceback
+
                 traceback.print_exc()
                 _on_error(f"Update check failed: {e}")
             finally:
@@ -757,6 +764,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             button.remove(child)
         button.add(Gtk.Label(label="Check for Updates"))
         button.show_all()
+
     # ------------------------------------------------------------------
     # Shared script execution engine
     # ------------------------------------------------------------------
@@ -766,11 +774,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     ):
         """Download and execute an install/uninstall script.
 
-        Shows a progress dialog with terminal output and weighted
-        progress tracking.  Runs the script on a daemon thread.
+        Delegates to :func:`~termux_appstore.tasks.script_executor.run_script_with_progress`
+        which handles progress tracking, terminal output, and cleanup.
         """
-
-        from termux_appstore.backend.script_runner import download_script
 
         url = app.get(url_key) or (
             app.get(fallback_url_key) if fallback_url_key else None
@@ -785,168 +791,18 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             )
         )
 
-        cancelled = False
-        process = None
-        script_file = None
-
-        # --- Cancel handler ---
-        def on_cancel(*_args):
-            nonlocal cancelled
-            cancelled = True
-            if process:
-                try:
-                    pgid = os.getpgid(process.pid)
-                    os.killpg(pgid, signal.SIGTERM)
-                    try:
-                        process.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        os.killpg(pgid, signal.SIGKILL)
-                        process.wait(timeout=1)
-                except Exception as e:
-                    print(f"Error stopping process: {e}")
-            GLib.timeout_add(
-                500, lambda: progress_dialog.destroy() if progress_dialog else None
-            )
-            return True
-
-        progress_dialog.connect("response", on_cancel)
-
-        # --- Progress helper ---
-        def update_progress(fraction, text):
-            if not progress_dialog or not progress_dialog.get_window():
-                return False
-            status_label.set_text(text)
-            progress_bar.set_fraction(fraction)
-            progress_bar.set_text(f"{int(fraction * 100)}%")
-            return False
-
-
-        def worker():
-            nonlocal script_file, process
-
-            try:
-                # 1. Download script (20%)
-                GLib.idle_add(
-                    update_progress,
-                    0.2,
-                    f"Downloading {action_label.lower()} script...",
-                )
-                GLib.idle_add(
-                    lambda: update_terminal(
-                        terminal_view, f"Downloading {action_label.lower()} script...\n"
-                    )
-                )
-                script_file = download_script(url)
-                if not script_file or cancelled:
-                    if script_file and os.path.exists(script_file):
-                        os.remove(script_file)
-                    GLib.idle_add(progress_dialog.destroy)
-                    return
-
-                # 3. Make executable
-                GLib.idle_add(
-                    update_progress, 0.3, f"Preparing {action_label.lower()}..."
-                )
-                os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
-
-                # 4. Run script
-                start_progress = 0.35
-                end_progress = 0.95
-                progress_range = end_progress - start_progress
-
-                GLib.idle_add(
-                    update_progress,
-                    start_progress,
-                    f"Starting {action_label.lower()}...",
-                )
-                process = subprocess.Popen(
-                    ["bash", script_file],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    universal_newlines=True,
-                    bufsize=1,
-                    preexec_fn=os.setsid,
-                )
-
-                while True:
-                    if cancelled:
-                        GLib.idle_add(progress_dialog.destroy)
-                        return
-
-                    line = process.stdout.readline() if process.stdout else ""
-                    if not line and process.poll() is not None:
-                        break
-
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    # Check for progress protocol lines
-                    progress_info = parse_progress_line(line)
-                    if progress_info:
-                        try:
-                            val_str = progress_info["value"]
-                            if "/" in val_str:
-                                curr, tot = val_str.split("/")
-                                sub = float(curr) / max(1, float(tot))
-                            else:
-                                sub = float(val_str) / 100.0
-                        except (ValueError, TypeError):
-                            sub = 0.5
-
-                        cp = min(end_progress, start_progress + sub * progress_range)
-                        GLib.idle_add(update_progress, cp, progress_info["message"])
-                        GLib.idle_add(
-                            lambda l=line: update_terminal(terminal_view, l + "\n")
-                        )
-                        continue
-
-                    # For normal lines, just update terminal
-                    GLib.idle_add(
-                        lambda l=line: update_terminal(terminal_view, l + "\n")
-                    )
-
-                # 5. Handle result
-                if process.wait() == 0 and not cancelled:
-                    GLib.idle_add(
-                        update_progress, 0.95, f"Finalizing {action_label.lower()}..."
-                    )
-                    GLib.idle_add(on_success)
-
-                    # Refresh the visible app list
-                    cat = self._get_selected_category()
-                    GLib.idle_add(lambda c=cat: self.show_apps(c))
-
-                    GLib.idle_add(update_progress, 1.0, f"{action_label} complete!")
-                    time.sleep(2)
-                else:
-                    if not cancelled:
-                        GLib.idle_add(update_progress, 1.0, f"{action_label} failed!")
-                        time.sleep(2)
-
-                GLib.idle_add(progress_dialog.destroy)
-
-            except Exception as e:
-                print(f"{action_label} error: {e}")
-                GLib.idle_add(update_progress, 1.0, f"Error: {e}")
-                time.sleep(2)
-                GLib.idle_add(progress_dialog.destroy)
-
-            finally:
-                if process:
-                    try:
-                        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                    except Exception:
-                        pass
-                    process = None
-                if script_file and os.path.exists(script_file):
-                    try:
-                        os.remove(script_file)
-                    except Exception:
-                        pass
-
-        thread = threading.Thread(target=worker, daemon=True)
-        thread.start()
+        run_script_with_progress(
+            app=app,
+            url=url,
+            action_label=action_label,
+            on_success=on_success,
+            progress_bar=progress_bar,
+            status_label=status_label,
+            terminal_view=terminal_view,
+            progress_dialog=progress_dialog,
+            get_category_cb=self._get_selected_category,
+            show_apps_cb=self.show_apps,
+        )
 
     def _mark_installed(self, app, installed):
         """Update installed status for *app* and persist."""

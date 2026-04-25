@@ -29,6 +29,41 @@ CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
 LOG_FILE="$TERMUX_HOME/termux-appstore-$(date +%Y%m%d_%H%M%S).log"
 ##################################################################
 
+# ==================== PROGRESS SYSTEM ====================
+# These helpers are the only way scripts should emit progress.
+# All output goes to stderr so it never pollutes stdout.
+# Tokens are only emitted when PROGRESS_ENABLED=1 (set by Python).
+
+PROGRESS_ENABLED=${PROGRESS_ENABLED:-0}
+
+_progress_emit() {
+	[[ "$PROGRESS_ENABLED" == "1" ]] && echo "$1" >&2
+}
+
+progress_report() {
+	# Usage: progress_report PERCENT "Message"
+	local percent="$1"
+	local message="${2:-Working...}"
+	_progress_emit "__PROGRESS__ ${percent}|${message}"
+}
+
+progress_phase() {
+	# Usage: progress_phase PHASE_NAME PERCENT_IN_PHASE "Message"
+	local phase="$1"
+	local pct="${2:-0}"
+	local message="${3:-}"
+	_progress_emit "__PHASE__ ${phase}|${pct}|${message}"
+}
+
+progress_done() {
+	_progress_emit "__DONE__"
+}
+
+progress_error() {
+	_progress_emit "__ERROR__ ${1:-Unknown error}"
+}
+# ==================== END PROGRESS SYSTEM ====================
+
 function check_termux() {
 	if [ ! -f /system/build.prop ]; then
 		echo "${R}[${R}☓${R}]${R}${BOLD} Not running on Android."
@@ -199,12 +234,15 @@ function download_file() {
 
 	if [[ -z "$url" ]]; then
 		print_failed "No URL provided!"
+		progress_error "No URL provided"
 		return 1
 	fi
 
 	dest="$(realpath -m "$dest")"
 	dest_dir="$(dirname "$dest")"
 	dest_file="$(basename "$dest")"
+
+	progress_phase "download" 0 "Starting download: $dest_file"
 
 	while [[ $attempt -le $max_retries ]]; do
 		print_msg "Downloading $dest_file..."
@@ -214,12 +252,24 @@ function download_file() {
 
 		if command -v aria2c &>/dev/null; then
 			aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 \
-				--dir="$dest_dir" -o "$dest_file" "$url"
-			download_status=$?
+				--dir="$dest_dir" -o "$dest_file" "$url" 2>&1 |
+				while IFS= read -r line; do
+					echo "$line"
+					if [[ "$line" =~ \(([0-9]+)%\) ]]; then
+						progress_phase "download" "${BASH_REMATCH[1]}" "Downloading $dest_file (${BASH_REMATCH[1]}%)"
+					fi
+				done
+			download_status="${PIPESTATUS[0]}"
 		elif command -v wget &>/dev/null; then
 			wget --tries=5 --timeout=15 --retry-connrefused --progress=bar:force \
-				-O "$dest" "$url"
-			download_status=$?
+				-O "$dest" "$url" 2>&1 |
+				while IFS= read -r line; do
+					echo "$line"
+					if [[ "$line" =~ ([0-9]+)% ]]; then
+						progress_phase "download" "${BASH_REMATCH[1]}" "Downloading $dest_file (${BASH_REMATCH[1]}%)"
+					fi
+				done
+			download_status="${PIPESTATUS[0]}"
 		else
 			curl -# -L "$url" -o "$dest"
 			download_status=$?
@@ -235,6 +285,7 @@ function download_file() {
 	done
 
 	if [[ -f "$dest" ]]; then
+		progress_phase "download" 100 "Download complete: $dest_file"
 		if [[ $successful_attempt -eq 1 ]]; then
 			print_success "File downloaded successfully."
 		else
@@ -243,6 +294,7 @@ function download_file() {
 		return 0
 	fi
 
+	progress_error "Download failed: $dest_file"
 	print_failed "Failed to download the file after $max_retries attempts. Exiting."
 	return 1
 }
@@ -267,6 +319,7 @@ function detact_package_manager() {
 # will check if the package is already installed or not, if it installed then reinstall and print success/failed message
 function package_install_and_check {
 	log_debug "Starting package installation for: $*"
+	progress_phase "install" 0 "Preparing to install: $*"
 	update_sys
 	local packs_list
 	# Properly splits on spaces
@@ -299,7 +352,16 @@ function package_install_and_check {
 				check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
 				print_msg "Installing Package : ${C}$package"
 
-				pacman -S --noconfirm "$package"
+				pacman -S --noconfirm "$package" 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "${line,,}" == *"downloading"* ]]; then
+						progress_phase "install" 20 "Downloading $package..."
+					elif [[ "${line,,}" == *"checking"* ]]; then
+						progress_phase "install" 50 "Checking $package..."
+					elif [[ "${line,,}" == *"installing"* ]]; then
+						progress_phase "install" 80 "Installing $package..."
+					fi
+				done
 
 				# Check install status via return code of pipe (requires pipefail or check explicitly)
 				# Since we piped, we check status after.
@@ -338,7 +400,16 @@ function package_install_and_check {
 				retry_count=$((retry_count + 1))
 				print_msg "Installing package: ${C}$package"
 
-				apt install "$package" -y
+				apt install "$package" -y 2>&1 | while IFS= read -r line; do
+					echo "$line"
+					if [[ "${line,,}" == *"get:"* ]]; then
+						progress_phase "install" 20 "Downloading $package..."
+					elif [[ "${line,,}" == *"unpacking"* ]]; then
+						progress_phase "install" 50 "Unpacking $package..."
+					elif [[ "${line,,}" == *"setting up"* ]]; then
+						progress_phase "install" 80 "Setting up $package..."
+					fi
+				done
 
 				if dpkg -s "$package" >/dev/null 2>&1; then
 					print_success "Successfully install package: ${C}$package"
@@ -353,6 +424,7 @@ function package_install_and_check {
 			done
 		done
 	fi
+	progress_phase "install" 100 "Package installation complete"
 }
 
 # will check the package is installed or not then remove it
@@ -382,7 +454,12 @@ function package_remove_and_check {
 						check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
 						print_msg "Removing Package : ${C}$package"
 
-						pacman -Rnds --noconfirm "$package"
+						pacman -Rnds --noconfirm "$package" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package..."
+							fi
+						done
 
 						if ! pacman -Qi "$package" >/dev/null 2>&1; then
 							print_success "Successfully removed package: ${C}$package"
@@ -402,7 +479,12 @@ function package_remove_and_check {
 						check_and_delete "$TERMUX_PREFIX/var/lib/pacman/db.lck"
 						print_msg "Removing Package : ${C}$package_name"
 
-						pacman -Rnds --noconfirm "$package_name"
+						pacman -Rnds --noconfirm "$package_name" 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package_name..."
+							fi
+						done
 
 						if ! pacman -Qi "$package_name" >/dev/null 2>&1; then
 							print_success "Successfully removed package: ${C}$package_name"
@@ -438,7 +520,12 @@ function package_remove_and_check {
 						print_msg "Removing package: ${C}$package"
 						dpkg --configure -a >/dev/null 2>&1
 
-						apt autoremove "$package" -y
+						apt autoremove "$package" -y 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package..."
+							fi
+						done
 
 						if ! dpkg -s "$package" >/dev/null 2>&1; then
 							print_success "Successfully removed package: ${C}$package"
@@ -458,7 +545,12 @@ function package_remove_and_check {
 						print_msg "Removing package: ${C}$package_name"
 						dpkg --configure -a >/dev/null 2>&1
 
-						apt autoremove "$package_name" -y
+						apt autoremove "$package_name" -y 2>&1 | while IFS= read -r line; do
+							echo "$line"
+							if [[ "${line,,}" == *"removing"* ]]; then
+								progress_phase "cleanup" 50 "Removing $package_name..."
+							fi
+						done
 
 						if ! dpkg -s "$package_name" >/dev/null 2>&1; then
 							print_success "Successfully removed package: ${C}$package_name"
@@ -491,6 +583,8 @@ function extract() {
 		print_failed "$archive doesn't exist"
 		return 1
 	fi
+
+	progress_phase "extract" 0 "Extracting $archive..."
 
 	case "$archive" in
 	*.tar.gz | *.tgz)
@@ -561,6 +655,7 @@ function extract() {
 		return 1
 		;;
 	esac
+	progress_phase "extract" 100 "Extraction complete"
 	print_success "Successfully extracted ${C}$archive"
 	log_debug "Extracted: $archive"
 }
@@ -712,15 +807,18 @@ function fix_exec() {
 function install_appimage() {
 	local appimage_file_name="$1"
 	local appimage_directory_name="$2"
+	progress_report 10 "Setting up AppImage directory..."
 	distro_run "
 check_and_create_directory '/opt/AppImageLauncher/'
 check_and_delete '/opt/AppImageLauncher/$appimage_directory_name'
 "
+	progress_report 20 "Moving AppImage to install location..."
 	if [[ "$selected_distro_type" == "chroot" ]]; then
 		sudo mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
 	else
 		mv -f "$appimage_file_name" "$distro_path/opt/AppImageLauncher/"
 	fi
+	progress_report 30 "Extracting AppImage contents..."
 	distro_run "
 cd /opt/AppImageLauncher
 ldconfig
@@ -729,6 +827,7 @@ APPIMAGE_EXTRACT_AND_RUN=1 ./${appimage_file_name} --appimage-extract
 mv -f squashfs-root '$appimage_directory_name'
 check_and_delete '${appimage_file_name}'
 "
+	progress_report 80 "AppImage setup complete"
 }
 
 function get_latest_version() {
@@ -753,6 +852,7 @@ function pd_package_install_and_check() {
 		use_sudo=false
 		shift
 	fi
+	progress_phase "install" 0 "Preparing distro packages: $*"
 
 	# shellcheck disable=SC2206
 	packs_list=($@)
@@ -889,6 +989,7 @@ function pd_package_install_and_check() {
 			fi
 		fi
 	done
+	progress_phase "install" 100 "Distro package installation complete"
 	echo ""
 }
 
@@ -954,10 +1055,10 @@ CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
 EOF
 	fi
 	if [[ "$selected_distro_type" == "chroot" ]]; then
-		typeset -f check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths | sudo tee -a "$script_path" >/dev/null
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths | sudo tee -a "$script_path" >/dev/null
 		echo "$shell_setup_content" | sudo tee -a "$script_path" >/dev/null
 	else
-		typeset -f check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths >>"$script_path"
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version pd_package_install_and_check distro_run set_distro_paths >>"$script_path"
 		echo "$shell_setup_content" >>"$script_path"
 	fi
 	# Make script executable
@@ -983,7 +1084,15 @@ function distro_run() {
 	pd_setup_content="${command}"
 
 	create_shell_script "$distro_path/root/pd_setup.sh" "$pd_setup_content"
-	"${selected_distro_type}"-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh
+	"${selected_distro_type}"-distro login "$selected_distro" -- /bin/bash /root/pd_setup.sh 2>&1 |
+		while IFS= read -r line; do
+			echo "$line"
+			# Forward structured progress tokens from inside distro
+			if [[ "$line" =~ ^(__PROGRESS__|__PHASE__|__DONE__|__ERROR__|pmstatus:) ]]; then
+				echo "$line" >&2
+			fi
+		done
+	return "${PIPESTATUS[0]}"
 }
 
 function set_distro_paths {

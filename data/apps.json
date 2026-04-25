@@ -1404,7 +1404,7 @@
     ],
     "app_type": "distro",
     "run_cmd": "/opt/AppImageLauncher/youtube-music/youtube-music --no-sandbox",
-    "supported_arch": "Invalid,choice(s).,Please,choose,from:,aarch64,arm,aarch64,arm",
+    "supported_arch": "aarch64",
     "version": "v3.11.0",
     "supported_distro": "all",
     "package_name": "youtube-music",

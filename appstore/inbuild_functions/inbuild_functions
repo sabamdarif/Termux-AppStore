@@ -7,12 +7,12 @@ cd "$TERMUX_HOME" || exit 1
 ############### Define basic initial values ######################
 TERMUX_DESKTOP_PATH="$TERMUX_PREFIX/etc/termux-desktop"
 CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
-if [[ ! -f "ONFIG_FILE" ]]; then
-	echo " Configuration file ONFIG_FILE not found"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+	echo " Configuration file CONFIG_FILE not found"
 	exit 1
 fi
 # shellcheck disable=SC1090
-source "ONFIG_FILE"
+source "$CONFIG_FILE"
 LOG_FILE="$TERMUX_HOME/termux-appstore-$(date +%Y%m%d_%H%M%S).log"
 DISTRO_ADD_ANSWER="${distro_add_answer:-}"
 SELECTED_DISTRO="${selected_distro:-}"
@@ -758,21 +758,21 @@ function print_to_config() {
 	local var_name="$1"
 	local var_value="${2:-${!var_name}}"
 	local IFS=$' \t\n'
-	local temp_file="ONFIG_FILE}.tmp.$$"
+	local temp_file="$CONFIG_FILE}.tmp.$$"
 
 	# Ensure config file exists
-	if [[ ! -f "ONFIG_FILE" ]]; then
-		touch "ONFIG_FILE" 2>/dev/null || {
-			log_error "Cannot access ONFIG_FILE"
+	if [[ ! -f "$CONFIG_FILE" ]]; then
+		touch "$CONFIG_FILE" 2>/dev/null || {
+			log_error "Cannot access CONFIG_FILE"
 			return 1
 		}
 	fi
 
-	if grep -q "^${var_name}=" "ONFIG_FILE" 2>/dev/null; then
+	if grep -q "^${var_name}=" "$CONFIG_FILE" 2>/dev/null; then
 		# Atomic write: write to temp file then move
-		sed "s|^${var_name}=.*|${var_name}=${var_value}|" "ONFIG_FILE" >"$temp_file" && mv "$temp_file" "ONFIG_FILE"
+		sed "s|^${var_name}=.*|${var_name}=${var_value}|" "$CONFIG_FILE" >"$temp_file" && mv "$temp_file" "$CONFIG_FILE"
 	else
-		echo "${var_name}=${var_value}" >>"ONFIG_FILE"
+		echo "${var_name}=${var_value}" >>"$CONFIG_FILE"
 	fi
 
 	log_debug "$var_name = $var_value"
@@ -837,7 +837,7 @@ function create_shell_script() {
 TERMUX_PREFIX="$TERMUX_PREFIX"
 TERMUX_HOME="$TERMUX_HOME"
 TERMUX_DESKTOP_PATH="$TERMUX_DESKTOP_PATH"
-CONFIG_FILE="ONFIG_FILE"
+CONFIG_FILE="$CONFIG_FILE"
 LOG_FILE="$LOG_FILE"
 SELECTED_DISTRO="$SELECTED_DISTRO"
 EOF
@@ -848,7 +848,7 @@ EOF
 TERMUX_PREFIX="$TERMUX_PREFIX"
 TERMUX_HOME="$TERMUX_HOME"
 TERMUX_DESKTOP_PATH="$TERMUX_DESKTOP_PATH"
-CONFIG_FILE="ONFIG_FILE"
+CONFIG_FILE="$CONFIG_FILE"
 LOG_FILE="$LOG_FILE"
 SELECTED_DISTRO="$SELECTED_DISTRO"
 EOF
@@ -1266,7 +1266,7 @@ function pd_package_install_and_check() {
 			just_run=true
 		else
 			# Safely split space-separated strings
-			read -ra split_args <<< "$arg"
+			read -ra split_args <<<"$arg"
 			filtered_args+=("${split_args[@]}")
 		fi
 	done
@@ -1288,7 +1288,7 @@ function pd_package_remove_and_check() {
 		if [[ "$arg" == "--just" ]]; then
 			just_run=true
 		else
-			read -ra split_args <<< "$arg"
+			read -ra split_args <<<"$arg"
 			filtered_args+=("${split_args[@]}")
 		fi
 	done

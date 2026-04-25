@@ -1004,17 +1004,17 @@ function create_shell_script() {
 	fi
 
 	if [[ "$selected_distro_type" == "chroot" ]]; then
-		sudo tee "$script_path" >/dev/null <<'EOF'
+		sudo tee "$script_path" >/dev/null <<EOF
 #!/bin/bash
 
-if [ -t 1 ] && [ -n "${TERM:-}" ]; then
-    R="$(printf '\033[0m\033[1m\033[31m')" # RST + bold + red
-    G="$(printf '\033[0m\033[32m')"        # RST + green
-    Y="$(printf '\033[0m\033[33m')"        # RST + yellow
-    B="$(printf '\033[0m\033[34m')"        # RST + blue
-    C="$(printf '\033[0m\033[36m')"        # RST + cyan
-    NC="$(printf '\033[0m')"               # RST
-    BOLD="$(printf '\033[1m')"             # bold
+if [ -t 1 ] && [ -n "\${TERM:-}" ]; then
+    R="$R"
+    G="$G"
+    Y="$Y"
+    B="$B"
+    C="$C"
+    NC="$NC"
+    BOLD="$BOLD"
 else
     R=""
     G=""
@@ -1025,21 +1025,26 @@ else
     BOLD=""
 fi
 
-TERMUX_DESKTOP_PATH="/data/data/com.termux/files/usr/etc/termux-desktop"
-CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
+TERMUX_PREFIX="$TERMUX_PREFIX"
+TERMUX_HOME="$TERMUX_HOME"
+TERMUX_DESKTOP_PATH="$TERMUX_DESKTOP_PATH"
+CONFIG_FILE="$CONFIG_FILE"
+LOG_FILE="$LOG_FILE"
 EOF
 	else
-		cat <<'EOF' >"$script_path"
+		cat <<EOF >"$script_path"
 #!/bin/bash
 
-if [ -t 1 ] && [ -n "${TERM:-}" ]; then
-    R="$(printf '\033[0m\033[1m\033[31m')" # RST + bold + red
-    G="$(printf '\033[0m\033[32m')"        # RST + green
-    Y="$(printf '\033[0m\033[33m')"        # RST + yellow
-    B="$(printf '\033[0m\033[34m')"        # RST + blue
-    C="$(printf '\033[0m\033[36m')"        # RST + cyan
-    NC="$(printf '\033[0m')"               # RST
-    BOLD="$(printf '\033[1m')"             # bold
+#!/bin/bash
+
+if [ -t 1 ] && [ -n "\${TERM:-}" ]; then
+    R="$R"
+    G="$G"
+    Y="$Y"
+    B="$B"
+    C="$C"
+    NC="$NC"
+    BOLD="$BOLD"
 else
     R=""
     G=""
@@ -1050,8 +1055,11 @@ else
     BOLD=""
 fi
 
-TERMUX_DESKTOP_PATH="/data/data/com.termux/files/usr/etc/termux-desktop"
-CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
+TERMUX_PREFIX="$TERMUX_PREFIX"
+TERMUX_HOME="$TERMUX_HOME"
+TERMUX_DESKTOP_PATH="$TERMUX_DESKTOP_PATH"
+CONFIG_FILE="$CONFIG_FILE"
+LOG_FILE="$LOG_FILE"
 EOF
 	fi
 	if [[ "$selected_distro_type" == "chroot" ]]; then

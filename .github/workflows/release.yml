@@ -78,7 +78,10 @@ jobs:
                   cp appstore/appstore/termux-packages/build.sh termux-packages/x11-packages/termux-appstore/build.sh
 
                   # Update version in build.sh
-                  sed -i "s/@VERSION@/${{ needs.check-env.outputs.version }}/g" termux-packages/x11-packages/termux-appstore/build.sh
+                  # Termux package versions cannot contain hyphens, so we convert them to tildes
+                  RAW_VERSION="${{ needs.check-env.outputs.version }}"
+                  PKG_VERSION="${RAW_VERSION//-/~}"
+                  sed -i "s/@VERSION@/${PKG_VERSION}/g" termux-packages/x11-packages/termux-appstore/build.sh
 
                   # Use local checkout for testing so PRs and unpushed changes are built correctly
                   cp -r appstore termux-packages/x11-packages/termux-appstore/local-repo
@@ -114,6 +117,39 @@ jobs:
         permissions:
             contents: write
         steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Generate release notes
+              id: changelog
+              run: |
+                  # Find the last stable release tag for appstore
+                  # Stable releases contain numbers and don't contain alpha, beta, or rc
+                  last_stable_tag=$(git tag --list '*[0-9]*' --sort=-v:refname | grep -iEv 'alpha|beta|rc' | head -n 1 || true)
+
+                  if [ -z "$last_stable_tag" ]; then
+                    echo "No previous stable release found. Getting all commits for appstore/."
+                    log=$(git log --pretty=format:"- %s" -- appstore/ || true)
+                  else
+                    echo "Comparing with last stable release: $last_stable_tag"
+                    log=$(git log ${last_stable_tag}..HEAD --pretty=format:"- %s" -- appstore/ || true)
+                  fi
+
+                  delimiter="$(openssl rand -hex 8)"
+                  {
+                    echo "notes<<$delimiter"
+                    echo "### v${{ needs.check-env.outputs.version }}"
+                    echo ""
+                    if [ -z "$log" ]; then
+                      echo "No changes found in this release."
+                    else
+                      echo "$log"
+                    fi
+                    echo "$delimiter"
+                  } >> "$GITHUB_OUTPUT"
+
             - name: Download all artifacts
               uses: actions/download-artifact@v8
               with:
@@ -126,6 +162,7 @@ jobs:
               with:
                   tag_name: v${{ needs.check-env.outputs.version }}
                   name: Termux AppStore v${{ needs.check-env.outputs.version }}
+                  body: ${{ steps.changelog.outputs.notes }}
                   files: |
                       packages/*.deb
                       packages/*.pkg.*

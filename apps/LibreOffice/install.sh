@@ -8,7 +8,9 @@ supported_distro="all"
 package_name="libreoffice"
 run_cmd="libreoffice"
 
-# Install based on distro type
+progress_phase "prepare" 0 "Preparing..."
+progress_phase "install" 0 "Installing..."
+
 case "$SELECTED_DISTRO" in
 "debian" | "ubuntu")
 	pd_package_install_and_check "libreoffice libreoffice-gtk3"
@@ -24,3 +26,4 @@ case "$SELECTED_DISTRO" in
 	exit 1
 	;;
 esac
+progress_done

@@ -5,4 +5,6 @@ package_name="blender"
 run_cmd="blender"
 version="termux_local_version"
 app_type="native"
+progress_phase "prepare" 0 "Preparing to install blender..."
 package_install_and_check "$package_name"
+progress_done

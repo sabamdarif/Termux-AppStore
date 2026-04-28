@@ -5,7 +5,9 @@ package_name="ytdlp-gui"
 run_cmd="yt-dlp-gui"
 version="3.5"
 app_type="native"
+progress_phase "prepare" 0 "Preparing to install ytdlp-gui..."
 package_install_and_check "python-yt-dlp ffmpeg yad atomicparsley xsel xclip"
+progress_done
 
 check_and_create_directory "$HOME/.local/bin/"
 download_file "$HOME/.local/bin/yt-dlp-gui" "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/main/apps/ytdlp-gui/bin/yt-dlp-gui"

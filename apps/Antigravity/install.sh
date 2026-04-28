@@ -7,8 +7,11 @@ app_type="distro"
 supported_distro="all"
 run_cmd="antigravity --no-sandbox"
 
+progress_phase "prepare" 0 "Preparing..."
+
 if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
 
+	progress_phase "configure" 0 "Configuring repository..."
 	pd_check_and_create_directory "/etc/apt/keyrings"
 	pd_update_sys
 	pd_package_install_and_check --just "gpg"
@@ -19,6 +22,7 @@ echo "deb [signed-by=/etc/apt/keyrings/antigravity-repo-key.gpg] https://us-cent
 	pd_update_sys
 
 elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+	progress_phase "configure" 0 "Configuring repository..."
 	pd_check_and_create_directory "/etc/yum.repos.d"
 	distro_run '
 tee /etc/yum.repos.d/antigravity.repo << EOL
@@ -32,6 +36,8 @@ EOL
 	pd_update_sys
 fi
 
+progress_phase "install" 0 "Installing..."
 pd_package_install_and_check "$package_name"
 fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
 fix_exec "pd_added/$package_name-url-handler.desktop" "--no-sandbox"
+progress_done

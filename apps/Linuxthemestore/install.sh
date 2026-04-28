@@ -14,7 +14,9 @@ armv7* | arm) archtype="arm" ;;
 esac
 
 deb_file_name="linuxthemestore-git_${version#v}_${archtype}.deb"
+progress_phase "prepare" 0 "Preparing to install linuxthemestore-git..."
 download_file "https://github.com/sabamdarif/linuxthemestore/releases/download/${version#v}-termux/${deb_file_name}"
 dpkg --configure -a
 apt --fix-broken install -y
 apt install ./${deb_file_name} -y
+progress_done

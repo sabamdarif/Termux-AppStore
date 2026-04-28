@@ -8,4 +8,7 @@ app_type="native"
 # working_dir=""
 run_cmd="code-oss"
 
-package_install_and_check "code-oss"
+progress_phase "prepare" 0 "Preparing to install code-oss..."
+package_install_and_check "$package_name"
+progress_done
+

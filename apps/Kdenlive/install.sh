@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 run_cmd="kdenlive"
 
+progress_phase "prepare" 0 "Preparing to install kdenlive..."
 package_install_and_check "kdenlive"
+progress_done

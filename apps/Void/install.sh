@@ -10,12 +10,16 @@ supported_distro="all"
 page_url="https://github.com/voideditor/binaries"
 working_dir="${distro_path}/opt"
 
+progress_phase "prepare" 0 "Preparing..."
+
 if [[ "$SELECTED_DISTRO" == "ubuntu" ]] || [[ "$SELECTED_DISTRO" == "debian" ]]; then
+	progress_phase "configure" 0 "Configuring..."
 	distro_run "
 sudo apt update -y -o Dpkg::Options::='--force-confnew'
 sudo apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libdrm2 libxcb-dri3-0 libxshmfence1
 "
 elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+	progress_phase "configure" 0 "Configuring..."
 	distro_run "
 sudo dnf install -y nss atk at-spi2-atk gtk3 mesa-libgbm alsa-lib libX11-xcb libXcomposite libXdamage libXrandr libdrm libxcb libxshmfence libxkbcommon --skip-unavailable
 "
@@ -32,8 +36,10 @@ esac
 
 filename="Void-linux-${archtype}-${version}.tar.gz"
 temp_download="$TMPDIR/${filename}"
+progress_phase "download" 0 "Downloading..."
 download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
 
+progress_phase "configure" 0 "Configuring..."
 distro_run "
 check_and_delete '/opt/void'
 check_and_create_directory '/opt/void'
@@ -41,6 +47,7 @@ check_and_create_directory '/opt/void'
 
 "${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/opt/void/${filename}"
 
+progress_phase "extract" 0 "Extracting..."
 distro_run "
 cd /opt/void
 extract '${filename}'
@@ -56,6 +63,7 @@ else
 	icon_path="${HOME}/.appstore/logo/void/logo"
 fi
 
+progress_phase "desktop" 0 "Creating desktop entry..."
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee "${TERMUX_PREFIX}"/share/applications/pd_added/void.desktop >/dev/null
 [Desktop Entry]
@@ -69,3 +77,5 @@ Comment=Void an open source Cursor alternative.
 MimeType=x-scheme-handler/void;
 Categories=Development;
 DESKTOP_EOF
+
+progress_done

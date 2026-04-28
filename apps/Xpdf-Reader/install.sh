@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 run_cmd="xpdf"
 
+progress_phase "prepare" 0 "Preparing to install xpdf..."
 package_install_and_check "xpdf"
+progress_done

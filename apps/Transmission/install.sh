@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 run_cmd="transmission-gtk"
 
+progress_phase "prepare" 0 "Preparing to install transmission..."
 package_install_and_check "transmission-gtk"
+progress_done

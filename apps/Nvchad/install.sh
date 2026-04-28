@@ -5,6 +5,8 @@ package_name="neovim"
 run_cmd="nvim"
 version="termux_local_version"
 app_type="native"
+progress_phase "prepare" 0 "Preparing to install neovim..."
 package_install_and_check "$package_name git"
 check_and_backup "$HOME/.config/nvim"
 git clone https://github.com/NvChad/starter ~/.config/nvim
+progress_done

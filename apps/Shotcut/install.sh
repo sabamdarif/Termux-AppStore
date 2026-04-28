@@ -8,5 +8,7 @@ app_type="native"
 # working_dir=""
 run_cmd="shotcut"
 
+progress_phase "prepare" 0 "Preparing to install shotcut..."
 package_install_and_check "shotcut jack jack2 jack-example-tools"
+progress_done
 

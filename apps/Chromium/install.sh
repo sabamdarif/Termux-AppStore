@@ -8,4 +8,7 @@ app_type="native"
 # working_dir=""
 run_cmd="/data/data/com.termux/files/usr/bin/chromium-browser --enable-features=Vulkan"
 
-package_install_and_check "chromium"
+progress_phase "prepare" 0 "Preparing to install chromium..."
+package_install_and_check "$package_name"
+progress_done
+

@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 run_cmd="inkscape"
 
+progress_phase "prepare" 0 "Preparing to install inkscape..."
 package_install_and_check "inkscape"
+progress_done

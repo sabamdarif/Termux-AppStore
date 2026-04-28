@@ -7,8 +7,11 @@ app_type="distro"
 supported_distro="all"
 run_cmd="cursor --no-sandbox"
 
+progress_phase "prepare" 0 "Preparing..."
+
 if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
 
+	progress_phase "configure" 0 "Configuring repository..."
 	pd_check_and_create_directory "/etc/apt/keyrings"
 	pd_update_sys
 	pd_package_install_and_check --just "gpg"
@@ -19,6 +22,7 @@ echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/cursor.gpg] https://down
 	pd_update_sys
 
 elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+	progress_phase "configure" 0 "Configuring repository..."
 	pd_check_and_create_directory "/etc/yum.repos.d"
 	distro_run '
 tee /etc/yum.repos.d/antigravity.repo << EOL
@@ -33,6 +37,8 @@ EOL
 	pd_update_sys
 fi
 
+progress_phase "install" 0 "Installing..."
 pd_package_install_and_check "$package_name"
 fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
 fix_exec "pd_added/$package_name-url-handler.desktop" "--no-sandbox" 2>/dev/null || true
+progress_done

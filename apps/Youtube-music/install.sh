@@ -24,6 +24,7 @@ appimage_filename="YouTube-Music-${version#v}-${archtype}.AppImage"
 
 check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/pd_added/youtube-music.desktop"
 
+progress_phase "download" 0 "Downloading YouTube-Music AppImage..."
 download_file "${page_url}/releases/download/${version}/$appimage_filename"
 install_appimage "$appimage_filename" "youtube-music"
 
@@ -36,7 +37,7 @@ else
 	icon_path="${HOME}/.appstore/logo/Youtube-music/logo"
 fi
 
-print_success "Creating desktop entry..."
+progress_phase "desktop" 0 "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/youtube-music.desktop >/dev/null
 [Desktop Entry]
 Name=Youtube-music
@@ -49,3 +50,4 @@ Comment=youtube-music
 MimeType=x-scheme-handler/youtube-music;
 Categories=Multimedia;
 DESKTOP_EOF
+progress_done

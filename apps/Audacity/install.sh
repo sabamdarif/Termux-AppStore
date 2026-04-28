@@ -8,4 +8,7 @@ app_type="native"
 # working_dir=""
 run_cmd="audacity"
 
-package_install_and_check "audacity"
+progress_phase "prepare" 0 "Preparing to install audacity..."
+package_install_and_check "$package_name"
+progress_done
+

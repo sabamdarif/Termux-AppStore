@@ -5,4 +5,6 @@ package_name="rawtherapee"
 run_cmd="rawtherapee"
 version="termux_local_version"
 app_type="native"
+progress_phase "prepare" 0 "Preparing to install rawtherapee..."
 package_install_and_check "$package_name"
+progress_done

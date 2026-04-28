@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 run_cmd="thunderbird"
 
+progress_phase "prepare" 0 "Preparing to install thunderbird..."
 package_install_and_check "thunderbird"
+progress_done

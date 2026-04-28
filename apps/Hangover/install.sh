@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 # run_cmd="wine"
 
+progress_phase "prepare" 0 "Preparing to install hangover..."
 package_install_and_check "hangover"
+progress_done

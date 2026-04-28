@@ -10,9 +10,13 @@ supported_distro="all"
 page_url="https://github.com/Vencord/Vesktop"
 working_dir="${distro_path}/root"
 
+progress_phase "prepare" 0 "Preparing..."
+
 if [[ "$SELECTED_DISTRO" == "ubuntu" ]] || [[ "$SELECTED_DISTRO" == "debian" ]]; then
+	progress_phase "configure" 0 "Configuring..."
 	filename="vesktop_${version#v}_arm64.deb"
 	temp_download="$TMPDIR/${filename}"
+	progress_phase "download" 0 "Downloading..."
 	download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
 	pd_check_and_delete "/root/${filename}"
 	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/root/${filename}"
@@ -20,11 +24,15 @@ if [[ "$SELECTED_DISTRO" == "ubuntu" ]] || [[ "$SELECTED_DISTRO" == "debian" ]];
 	pd_check_and_delete "/root/${filename}"
 
 elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+	progress_phase "configure" 0 "Configuring..."
 	filename="vesktop_${version#v}_aarch64.rpm"
+	temp_download="$TMPDIR/${filename}"
+	progress_phase "download" 0 "Downloading..."
+	download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
 	pd_check_and_delete "/root/${filename}"
 	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/root/${filename}"
 	distro_run "
-dnf install ./${filename} -y
+dnf install /root/${filename} -y
 "
 	pd_check_and_delete "/root/${filename}"
 
@@ -32,6 +40,7 @@ else
 	print_failed "Unsupported distro"
 fi
 
+progress_phase "desktop" 0 "Creating desktop entry..."
 print_success "Creating desktop entry..."
 cat <<DESKTOP_EOF | tee "${TERMUX_PREFIX}"/share/applications/pd_added/vesktop.desktop >/dev/null
 [Desktop Entry]
@@ -45,3 +54,5 @@ Comment=Vesktop is a custom Discord App
 MimeType=x-scheme-handler/sgnl;x-scheme-handler/signalcaptcha;
 Categories=Network;InstantMessaging;Chat;
 DESKTOP_EOF
+
+progress_done

@@ -698,6 +698,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kdenlive/icon-64.png"
   },
   {
+    "app_name": "Kget",
+    "folder_name": "Kget",
+    "description": "Download Manager by KDE",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "run_cmd": "kget",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "kget",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kget/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kget/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Kget/logo.png"
+  },
+  {
     "app_name": "Kig",
     "folder_name": "Kig",
     "description": "Interactive Geometry",

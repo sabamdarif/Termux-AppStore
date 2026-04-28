@@ -1,5 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
+progress_phase "cleanup" 0 "Removing libreoffice..."
+
 # remove based on distro type
 case "$SELECTED_DISTRO" in
 "debian" | "ubuntu")
@@ -16,4 +18,6 @@ case "$SELECTED_DISTRO" in
 	exit 1
 	;;
 esac
+
+progress_done
 

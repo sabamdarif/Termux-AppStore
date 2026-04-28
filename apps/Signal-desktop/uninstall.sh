@@ -1,5 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
+progress_phase "cleanup" 0 "Removing signal-desktop-unofficial..."
+
 distro_run "
 mv /opt/Signal-Unofficial '/opt/Signal Unofficial'
 "
@@ -11,3 +13,5 @@ else
 	print_failed "Unsupported distro"
 fi
 check_and_delete "${TERMUX_PREFIX}/share/applications/pd_added/signal-desktop-unofficial.desktop"
+
+progress_done

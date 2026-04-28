@@ -25,8 +25,9 @@ elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
 	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/root/${filename}"
 	distro_run "
 dnf install ./${filename} -y
-check_and_delete '/root/${filename}'
 "
+	pd_check_and_delete "/root/${filename}"
+
 else
 	print_failed "Unsupported distro"
 fi

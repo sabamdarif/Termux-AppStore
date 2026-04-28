@@ -18,14 +18,14 @@ esac
 
 appimage_filename="WebCord-${version#v}-${archtype}.AppImage"
 
-check_and_delete "${TMPDIR}/${appimage_filename} ${PREFIX}/share/applications/pd_added/webcord.desktop"
+check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/pd_added/webcord.desktop"
 
-print_success "Downloading webcord AppImage..."
+progress_phase "download" 0 "Downloading WebCord AppImage..."
 download_file "${page_url}/releases/download/${version}/${appimage_filename}"
 install_appimage "$appimage_filename" "webcord"
 
-print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${PREFIX}/share/applications/pd_added/webcord.desktop >/dev/null
+progress_phase "desktop" 0 "Creating desktop entry..."
+cat <<DESKTOP_EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/webcord.desktop >/dev/null
 [Desktop Entry]
 Name=Webcord
 Exec=pdrun ${run_cmd}
@@ -37,3 +37,4 @@ Comment=webcord
 MimeType=x-scheme-handler/webcord;
 Categories=Internet;
 DESKTOP_EOF
+progress_done

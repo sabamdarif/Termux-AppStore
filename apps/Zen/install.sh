@@ -10,33 +10,29 @@ supported_distro="all"
 page_url="https://github.com/zen-browser/desktop"
 working_dir="${distro_path}/opt"
 
-# Check if a distro is selected
-if [ -z "$selected_distro" ]; then
-	print_failed "Error: No distro selected"
-	exit 1
-fi
+progress_phase "prepare" 0 "Preparing..."
 
 app_arch=$(uname -m)
 case "$app_arch" in
 aarch64) archtype="aarch64" ;;
-*) print_failed "Unsupported architectures" ;;
+*)
+	print_failed "Unsupported architectures"
+	exit 1
+	;;
 esac
 
 filename="zen.linux-${archtype}.tar.xz"
 temp_download="$TMPDIR/${filename}"
+progress_phase "download" 0 "Downloading..."
 download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
 
-distro_run "
-check_and_delete '/opt/zen-browser'
-check_and_delete '/opt/zen'
-"
+progress_phase "configure" 0 "Configuring..."
+pd_check_and_delete '/opt/zen-browser'
+pd_check_and_delete '/opt/zen'
 
-if [[ "$selected_distro_type" == "chroot" ]]; then
-	su -c "cp '$temp_download' '${working_dir}/${filename}'"
-else
-	cp "$temp_download" "${working_dir}/${filename}"
-fi
+"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/opt/${filename}"
 
+progress_phase "extract" 0 "Extracting..."
 distro_run "
 cd /opt
 extract '${filename}'
@@ -46,8 +42,9 @@ cd /opt/zen-browser/
 mv zen zen-browser
 "
 
+progress_phase "desktop" 0 "Creating desktop entry..."
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee "${PREFIX}"/share/applications/pd_added/zen-browser.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "${TERMUX_PREFIX}"/share/applications/pd_added/zen-browser.desktop >/dev/null
 [Desktop Entry]
 Name=Zen Browser
 Comment=Experience tranquillity while browsing the web without people tracking you!
@@ -60,3 +57,5 @@ Categories=Network;WebBrowser;
 StartupNotify=true
 Terminal=false
 DESKTOP_EOF
+
+progress_done

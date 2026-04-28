@@ -8,6 +8,7 @@ working_dir="${distro_path}/root"
 page_url="https://github.com/CodeMasterCody3D/OrcaSlicer/releases"
 run_cmd="orca-slicer"
 
+progress_phase "prepare" 0 "Preparing..."
 echo "Downloading install script..."
 echo "Preparing installation..."
 
@@ -22,12 +23,14 @@ echo "Detected OS: $ID"
 echo "ID_LIKE: $ID_LIKE"
 
 # Check if running on Ubuntu
-if [[ "$selected_distro" == "ubuntu" || "$selected_distro" == "debian"* ]]; then
+if [[ "$SELECTED_DISTRO" == "ubuntu" || "$SELECTED_DISTRO" == "debian"* ]]; then
     cd $working_dir
     filename="OrcaSlicer_UbuntuLinux_${version}-dev${supported_arch}.deb"
     # --- Step 1: Download and Install OrcaSlicer ---
     echo "Downloading OrcaSlicer deb file..."
+    progress_phase "download" 0 "Downloading..."
     download_file "${page_url}/releases/download/${supported_arch}/${filename}"
+    progress_phase "configure" 0 "Configuring..."
     distro_run "sudo dpkg -i ${filename}"
     distro_run "sudo apt-get install -f -y"
     check_and_delete "${working_dir}/${filename}"
@@ -52,6 +55,7 @@ SHORTCUT_FILE="$DESKTOP_DIR/OrcaSlicer.desktop"
 echo "Ensuring Desktop directory exists..."
 mkdir -p "$DESKTOP_DIR"
 
+progress_phase "desktop" 0 "Creating desktop entry..."
 echo "Creating desktop shortcut for OrcaSlicer..."
 cat <<EOF > "$SHORTCUT_FILE"
 [Desktop Entry]
@@ -65,5 +69,7 @@ Categories=Graphics;3DPrinting;
 EOF
 
 chmod +x "$SHORTCUT_FILE"
-cp "$SHORTCUT_FILE" ${PREFIX}/share/applications/pd_added/
+cp "$SHORTCUT_FILE" ${TERMUX_PREFIX}/share/applications/pd_added/
 echo "Desktop shortcut created successfully at $SHORTCUT_FILE"
+
+progress_done

@@ -6,4 +6,6 @@ run_cmd="gnome-font-viewer"
 version=termux_local_version
 app_type="native"
 
+progress_phase "prepare" 0 "Preparing to install gnome-font-viewer..."
 package_install_and_check "gnome-font-viewer"
+progress_done

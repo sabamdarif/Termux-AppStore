@@ -7,18 +7,23 @@ app_type="distro"
 supported_distro="all"
 run_cmd="cursor --no-sandbox"
 
-if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]]; then
+progress_phase "prepare" 0 "Preparing..."
 
+if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
+
+	progress_phase "configure" 0 "Configuring repository..."
+	pd_check_and_create_directory "/etc/apt/keyrings"
+	pd_update_sys
+	pd_package_install_and_check --just "gpg"
 	distro_run '
-mkdir -p /etc/apt/keyrings
-apt update
-apt install gpg -y
-curl -fsSL https://downloads.cursor.com/keys/anysphere.asc | gpg --dearmor | sudo tee /etc/apt/keyrings/cursor.gpg > /dev/null
-echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/cursor.gpg] https://downloads.cursor.com/aptrepo stable main" | sudo tee /etc/apt/sources.list.d/cursor.list > /dev/null
-apt update
+curl -fsSL https://downloads.cursor.com/keys/anysphere.asc | gpg --dearmor | tee /etc/apt/keyrings/cursor.gpg > /dev/null
+echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/cursor.gpg] https://downloads.cursor.com/aptrepo stable main" | tee /etc/apt/sources.list.d/cursor.list > /dev/null
 '
+	pd_update_sys
 
-elif [[ "$selected_distro" == "fedora" ]]; then
+elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+	progress_phase "configure" 0 "Configuring repository..."
+	pd_check_and_create_directory "/etc/yum.repos.d"
 	distro_run '
 tee /etc/yum.repos.d/antigravity.repo << EOL
 [cursor]
@@ -28,11 +33,12 @@ enabled=1
 gpgcheck=1
 gpgkey=https://downloads.cursor.com/keys/anysphere.asc
 EOL
-dnf makecache
 '
+	pd_update_sys
 fi
 
-$selected_distro install $package_name -y
-
+progress_phase "install" 0 "Installing..."
+pd_package_install_and_check "$package_name"
 fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
 fix_exec "pd_added/$package_name-url-handler.desktop" "--no-sandbox" 2>/dev/null || true
+progress_done

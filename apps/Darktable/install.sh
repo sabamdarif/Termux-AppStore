@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 run_cmd="/data/data/com.termux/files/usr/bin/darktable"
 
+progress_phase "prepare" 0 "Preparing to install darktable..."
 package_install_and_check "darktable"
+progress_done

@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 run_cmd="gedit"
 
+progress_phase "prepare" 0 "Preparing to install gedit..."
 package_install_and_check "gedit"
+progress_done

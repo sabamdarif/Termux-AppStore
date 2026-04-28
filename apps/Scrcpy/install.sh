@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 # run_cmd="scrcpy"
 
+progress_phase "prepare" 0 "Preparing to install scrcpy..."
 package_install_and_check "scrcpy"
+progress_done

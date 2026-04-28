@@ -8,4 +8,6 @@ app_type="native"
 # working_dir=""
 # run_cmd="git"
 
+progress_phase "prepare" 0 "Preparing to install git..."
 package_install_and_check "git"
+progress_done

@@ -94,35 +94,33 @@ EOF
 
 	if [ "$app_type" = "native" ]; then
 		cat >>"$folder_path/install.sh" <<'EOF'
+progress_phase "prepare" 0 "Preparing to install..."
 package_install_and_check "$package_name"
+progress_done
 EOF
 	elif [ "$is_repo_pkg" = "yes" ]; then
 		cat >>"$folder_path/install.sh" <<EOF
-supported_distro="$supported_distro"
-
-# Check if a distro is selected
-if [ -z "\$selected_distro" ]; then
-    print_failed "Error: No distro selected"
-    exit 1
-fi
+progress_phase "prepare" 0 "Preparing distro packages..."
 
 # Install based on distro type
-case "\$selected_distro" in
+case "\$SELECTED_DISTRO" in
     "debian"|"ubuntu")
-        \$selected_distro update -y
-        \$selected_distro install $package_name -y
+        pd_package_install_and_check "$package_name"
         ;;
     "fedora")
-        \$selected_distro update -y
-        \$selected_distro install $package_name -y
+        pd_package_install_and_check "$package_name"
+        ;;
+	"arch*")
+        pd_package_install_and_check "$package_name"
         ;;
     *)
-        echo "Unsupported distribution: \$selected_distro"
+        echo "Unsupported distribution: \$SELECTED_DISTRO"
         exit 1
         ;;
 esac
 
 fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
+progress_done
 EOF
 	else
 		# Extract the base URL (everything before /releases/download/)
@@ -152,9 +150,9 @@ esac
 
 appimage_filename="$filename_pattern"
 
-check_and_delete "\${TMPDIR}/\${appimage_filename} \${PREFIX}/share/applications/pd_added/$package_name.desktop"
+check_and_delete "\${TMPDIR}/\${appimage_filename} \${TERMUX_PREFIX}/share/applications/pd_added/$package_name.desktop"
 
-print_success "Downloading $package_name AppImage..."
+progress_phase "download" 0 "Downloading $package_name AppImage..."
 download_file "\${page_url}/releases/download/\${version}/\${appimage_filename}"
 install_appimage "\${appimage_filename}" "$package_name"
 
@@ -168,7 +166,7 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee "\${PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "\${TERMUX_PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
 Exec=pdrun \${run_cmd}
@@ -180,6 +178,7 @@ Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
 Categories=${selected_categories[0]};
 DESKTOP_EOF
+progress_done
 EOF
 		elif [[ "$download_url" =~ \.deb$ ]]; then
 			# Extract the filename pattern from the download URL
@@ -199,42 +198,34 @@ case "\$app_arch" in
     *) print_failed "Unsupported architectures" ;;
 esac
 
-if [[ "\$selected_distro" == "ubuntu" ]] || [[ "\$selected_distro" == "debian" ]]; then
+if [[ "\$SELECTED_DISTRO" == "ubuntu" ]] || [[ "\$SELECTED_DISTRO" == "debian" ]]; then
     filename="$filename_pattern"
     temp_download="\$TMPDIR/\${filename}"
     download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
+	pd_check_and_delete "/root/\${filename}"
+	"\${SELECTED_DISTRO_TYPE}"-distro login "\$SELECTED_DISTRO" -- cp "\$temp_download" "/root/\${filename}"
+
+	pd_update_sys
     distro_run "
-check_and_delete '/root/\${filename}'
+apt install /root/\${filename} -y
 "
-    if [[ "\$selected_distro_type" == "chroot" ]]; then
-        su -c "cp '\$temp_download' '\${working_dir}/\${filename}'"
-    else
-        cp "\$temp_download" "\${working_dir}/\${filename}"
-    fi
-    distro_run "
-sudo apt update -y -o Dpkg::Options::='--force-confnew'
-sudo apt install /root/\${filename} -y
-check_and_delete '/root/\${filename}'
-"
-elif [[ "\$selected_distro" == "fedora" ]]; then
+pd_check_and_delete "/root/\${filename}"
+
+elif [[ "\$SELECTED_DISTRO" == "fedora" ]]; then
     filename="$filename_pattern"
     temp_download="\$TMPDIR/\${filename}"
     download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
-    distro_run "
-check_and_delete '/root/app_installer'
-check_and_delete '/root/\${filename}'
-"
-    if [[ "\$selected_distro_type" == "chroot" ]]; then
-        su -c "cp '\$temp_download' '\${working_dir}/\${filename}'"
-    else
-        cp "\$temp_download" "\${working_dir}/\${filename}"
-    fi
+	pd_check_and_delete "/root/app_installer"
+	pd_check_and_delete "/root/\${filename}"
+	"\${SELECTED_DISTRO_TYPE}"-distro login "\$SELECTED_DISTRO" -- cp "\$temp_download" "/root/\${filename}"
+
+	pd_package_install_and_check --just "ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3"
+
     distro_run "
 cd /root
 check_and_create_directory 'app_installer'
 mv \${filename} app_installer/
 cd app_installer
-sudo dnf install -y ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3
 ar x \${filename}
 extract 'data.tar.xz'
 mv opt/* /opt
@@ -255,7 +246,7 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee "\${PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "\${TERMUX_PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
 Exec=pdrun \${run_cmd}
@@ -267,6 +258,7 @@ Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
 Categories=${selected_categories[0]};
 DESKTOP_EOF
+progress_done
 EOF
 		else
 			# For tar/archive installations
@@ -282,7 +274,7 @@ page_url="$base_url"
 working_dir="\${distro_path}/opt"
 
 # Check if a distro is selected
-if [ -z "\$selected_distro" ]; then
+if [ -z "\$SELECTED_DISTRO" ]; then
     print_failed "Error: No distro selected"
     exit 1
 fi
@@ -298,16 +290,11 @@ filename="$filename_pattern"
 temp_download="\$TMPDIR/\${filename}"
 download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
 
-distro_run "
-check_and_delete '/opt/$package_name'
-check_and_create_directory '/opt/$package_name'
-"
+pd_check_and_delete "/opt/$package_name"
+pd_check_and_create_directory "/opt/$package_name"
 
-if [[ "\$selected_distro_type" == "chroot" ]]; then
-    su -c "cp '\$temp_download' '\${working_dir}/$package_name/\${filename}'"
-else
-    cp "\$temp_download" "\${working_dir}/$package_name/\${filename}"
-fi
+"\${SELECTED_DISTRO_TYPE}"-distro login "\$SELECTED_DISTRO" -- cp "\$temp_download" "\${working_dir}/$package_name/\${filename}"
+
 
 distro_run "
 cd /opt/$package_name
@@ -325,7 +312,7 @@ else
 fi
 
 print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee "\${PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
+cat <<DESKTOP_EOF | tee "\${TERMUX_PREFIX}"/share/applications/pd_added/$package_name.desktop >/dev/null
 [Desktop Entry]
 Name=${package_name^}
 Exec=pdrun \${run_cmd}
@@ -337,6 +324,7 @@ Comment=$package_name
 MimeType=x-scheme-handler/$package_name;
 Categories=${selected_categories[0]};
 DESKTOP_EOF
+progress_done
 EOF
 		fi
 	fi
@@ -354,26 +342,30 @@ create_uninstall_script() {
 		cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
+progress_phase "cleanup" 0 "Removing $package_name..."
 package_remove_and_check "$package_name"
+progress_done
 EOF
 	elif [ "$is_repo_pkg" = "yes" ]; then
 		cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
-case "\$selected_distro" in
+progress_phase "cleanup" 0 "Removing $package_name..."
+case "\$SELECTED_DISTRO" in
     "debian"|"ubuntu")
-        \$selected_distro remove $package_name -y
+        \$SELECTED_DISTRO remove $package_name -y
         ;;
     "fedora")
-        \$selected_distro remove $package_name -y
+        \$SELECTED_DISTRO remove $package_name -y
         ;;
     *)
-        echo "Unsupported distribution: \$selected_distro"
+        echo "Unsupported distribution: \$SELECTED_DISTRO"
         exit 1
         ;;
 esac
 
-check_and_delete "\$PREFIX/share/applications/pd_added/$package_name.desktop"
+check_and_delete "\$TERMUX_PREFIX/share/applications/pd_added/$package_name.desktop"
+progress_done
 EOF
 	else
 		if [[ "$download_url" =~ \.AppImage$ ]]; then
@@ -381,37 +373,38 @@ EOF
 			cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
+progress_phase "cleanup" 0 "Removing $package_name AppImage..."
 check_and_delete "\${distro_path}/opt/AppImageLauncher/$package_name"
 check_and_delete "\${distro_path}/usr/share/icons/hicolor/*/apps/$package_name.png"
-check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
+check_and_delete "\${TERMUX_PREFIX}/share/applications/pd_added/$package_name.desktop"
+progress_done
 EOF
 		elif [[ "$download_url" =~ \.deb$ ]]; then
 			cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
-if [[ "\$selected_distro" == "ubuntu" ]] || [[ "\$selected_distro" == "debian" ]]; then
+if [[ "\$SELECTED_DISTRO" == "ubuntu" ]] || [[ "\$SELECTED_DISTRO" == "debian" ]]; then
     distro_run "
-sudo apt remove $package_name -y
+apt remove $package_name -y
 "
-elif [[ "\$selected_distro" == "fedora" ]]; then
-    distro_run "
-rm -rf '/opt/$package_name'
-"
+elif [[ "\$SELECTED_DISTRO" == "fedora" ]]; then
+    pd_check_and_delete "/opt/$package_name"
 else
     print_failed "Unsupported distro"
 fi
 
-check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
+check_and_delete "\${TERMUX_PREFIX}/share/applications/pd_added/$package_name.desktop"
+progress_done
 EOF
 		else
 			cat >"$folder_path/uninstall.sh" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
-distro_run "
-check_and_delete '/opt/$package_name'
-"
+progress_phase "cleanup" 0 "Removing $package_name..."
+pd_check_and_delete '/opt/$package_name'
 
-check_and_delete "\${PREFIX}/share/applications/pd_added/$package_name.desktop"
+check_and_delete "\${TERMUX_PREFIXFIX}/share/applications/pd_added/$package_name.desktop"
+progress_done
 EOF
 		fi
 	fi

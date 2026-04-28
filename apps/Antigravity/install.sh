@@ -7,18 +7,23 @@ app_type="distro"
 supported_distro="all"
 run_cmd="antigravity --no-sandbox"
 
-if [[ "$selected_distro" == "debian" ]] || [[ "$selected_distro" == "ubuntu" ]]; then
+progress_phase "prepare" 0 "Preparing..."
 
+if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
+
+	progress_phase "configure" 0 "Configuring repository..."
+	pd_check_and_create_directory "/etc/apt/keyrings"
+	pd_update_sys
+	pd_package_install_and_check --just "gpg"
 	distro_run '
-mkdir -p /etc/apt/keyrings
-apt update
-apt install gpg -y
 curl -fsSL https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg | gpg --dearmor --yes -o /etc/apt/keyrings/antigravity-repo-key.gpg
 echo "deb [signed-by=/etc/apt/keyrings/antigravity-repo-key.gpg] https://us-central1-apt.pkg.dev/projects/antigravity-auto-updater-dev/ antigravity-debian main" | tee /etc/apt/sources.list.d/antigravity.list > /dev/null
-apt update
 '
+	pd_update_sys
 
-elif [[ "$selected_distro" == "fedora" ]]; then
+elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
+	progress_phase "configure" 0 "Configuring repository..."
+	pd_check_and_create_directory "/etc/yum.repos.d"
 	distro_run '
 tee /etc/yum.repos.d/antigravity.repo << EOL
 [antigravity-rpm]
@@ -27,11 +32,12 @@ baseurl=https://us-central1-yum.pkg.dev/projects/antigravity-auto-updater-dev/an
 enabled=1
 gpgcheck=0
 EOL
-dnf makecache
 '
+	pd_update_sys
 fi
 
-$selected_distro install $package_name -y
-
+progress_phase "install" 0 "Installing..."
+pd_package_install_and_check "$package_name"
 fix_exec "pd_added/$package_name.desktop" "--no-sandbox"
 fix_exec "pd_added/$package_name-url-handler.desktop" "--no-sandbox"
+progress_done

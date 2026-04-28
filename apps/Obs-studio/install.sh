@@ -2,7 +2,7 @@
 
 supported_arch="aarch64,arm"
 package_name="obs-studio"
-run_cmd="obs-studio"
+run_cmd="obs"
 version="32.1.2"
 _libdatachannel_version="0.24.2"
 _qrcodegen_version="1.8.0"

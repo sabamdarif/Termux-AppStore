@@ -979,7 +979,7 @@
       "Games"
     ],
     "app_type": "native",
-    "run_cmd": "obs-studio",
+    "run_cmd": "obs",
     "supported_arch": "aarch64,arm",
     "version": "32.1.2",
     "package_name": "obs-studio",

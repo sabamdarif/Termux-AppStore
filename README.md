@@ -2,28 +2,11 @@
 
 A simple GTK3 based app store for Termux.
 
-## A part of [sabamdarif/termux-desktop](https://github.com/sabamdarif/termux-desktop)
-
 ## Installation
 
 ### Pre-installed in my [Termux-Desktop](https://github.com/sabamdarif/termux-desktop) setup
 
-#### Or run,
-
-```bash
-wget https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/refs/heads/src/appstore
-```
-
-```bash
-chmod +x appstore
-```
-
-```bash
-./appstore --install
-```
-
-> [!IMPORTANT]
-> Only works with my Termux-Desktop setup
+### Or to install it manually, go to the [Releases](https://github.com/sabamdarif/Termux-AppStore/releases) section and download appropriate package
 
 ---
 
@@ -49,4 +32,3 @@ Special thanks to:
 
 - [Pi-Appps](https://github.com/Botspot/pi-apps)
 - [phoenixbyrd/App-Installer](https://github.com/phoenixbyrd/App-Installer)
-

@@ -202,38 +202,30 @@ if [[ "\$SELECTED_DISTRO" == "ubuntu" ]] || [[ "\$SELECTED_DISTRO" == "debian" ]
     filename="$filename_pattern"
     temp_download="\$TMPDIR/\${filename}"
     download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
+	pd_check_and_delete "/root/\${filename}"
+	"\${SELECTED_DISTRO_TYPE}"-distro login "\$SELECTED_DISTRO" -- cp "\$temp_download" "/root/\${filename}"
+
+	pd_update_sys
     distro_run "
-check_and_delete '/root/\${filename}'
+apt install /root/\${filename} -y
 "
-    if [[ "\$SELECTED_DISTRO_type" == "chroot" ]]; then
-        su -c "cp '\$temp_download' '\${working_dir}/\${filename}'"
-    else
-        cp "\$temp_download" "\${working_dir}/\${filename}"
-    fi
-    distro_run "
-sudo apt update -y -o Dpkg::Options::='--force-confnew'
-sudo apt install /root/\${filename} -y
-check_and_delete '/root/\${filename}'
-"
+pd_check_and_delete "/root/\${filename}"
+
 elif [[ "\$SELECTED_DISTRO" == "fedora" ]]; then
     filename="$filename_pattern"
     temp_download="\$TMPDIR/\${filename}"
     download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
-    distro_run "
-check_and_delete '/root/app_installer'
-check_and_delete '/root/\${filename}'
-"
-    if [[ "\$SELECTED_DISTRO_type" == "chroot" ]]; then
-        su -c "cp '\$temp_download' '\${working_dir}/\${filename}'"
-    else
-        cp "\$temp_download" "\${working_dir}/\${filename}"
-    fi
+	pd_check_and_delete "/root/app_installer"
+	pd_check_and_delete "/root/\${filename}"
+	"\${SELECTED_DISTRO_TYPE}"-distro login "\$SELECTED_DISTRO" -- cp "\$temp_download" "/root/\${filename}"
+
+	pd_package_install_and_check --just "ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3"
+
     distro_run "
 cd /root
 check_and_create_directory 'app_installer'
 mv \${filename} app_installer/
 cd app_installer
-sudo dnf install -y ar atk dbus-libs libnotify libXtst nss alsa-lib pulseaudio-libs libXScrnSaver glibc gtk3 mesa-libgbm libX11-xcb libappindicator-gtk3
 ar x \${filename}
 extract 'data.tar.xz'
 mv opt/* /opt
@@ -298,16 +290,11 @@ filename="$filename_pattern"
 temp_download="\$TMPDIR/\${filename}"
 download_file "\$temp_download" "\${page_url}/releases/download/\${version}/\${filename}"
 
-distro_run "
-check_and_delete '/opt/$package_name'
-check_and_create_directory '/opt/$package_name'
-"
+pd_check_and_delete "/opt/$package_name"
+pd_check_and_create_directory "/opt/$package_name"
 
-if [[ "\$SELECTED_DISTRO_type" == "chroot" ]]; then
-    su -c "cp '\$temp_download' '\${working_dir}/$package_name/\${filename}'"
-else
-    cp "\$temp_download" "\${working_dir}/$package_name/\${filename}"
-fi
+"\${SELECTED_DISTRO_TYPE}"-distro login "\$SELECTED_DISTRO" -- cp "\$temp_download" "\${working_dir}/$package_name/\${filename}"
+
 
 distro_run "
 cd /opt/$package_name
@@ -398,12 +385,10 @@ EOF
 
 if [[ "\$SELECTED_DISTRO" == "ubuntu" ]] || [[ "\$SELECTED_DISTRO" == "debian" ]]; then
     distro_run "
-sudo apt remove $package_name -y
+apt remove $package_name -y
 "
 elif [[ "\$SELECTED_DISTRO" == "fedora" ]]; then
-    distro_run "
-rm -rf '/opt/$package_name'
-"
+    pd_check_and_delete "/opt/$package_name"
 else
     print_failed "Unsupported distro"
 fi
@@ -416,11 +401,9 @@ EOF
 #!/data/data/com.termux/files/usr/bin/bash
 
 progress_phase "cleanup" 0 "Removing $package_name..."
-distro_run "
-check_and_delete '/opt/$package_name'
-"
+pd_check_and_delete '/opt/$package_name'
 
-check_and_delete "\${PRETERMUX_PREFIXFIX}/share/applications/pd_added/$package_name.desktop"
+check_and_delete "\${TERMUX_PREFIXFIX}/share/applications/pd_added/$package_name.desktop"
 progress_done
 EOF
 		fi

@@ -31,6 +31,18 @@ else
 	print_failed "Unable to get distro type..."
 	exit 1
 fi
+# shellcheck disable=SC1091
+if [[ -f "/data/data/com.termux/files/usr/bin/termux-setup-package-manager" ]]; then
+	source "/data/data/com.termux/files/usr/bin/termux-setup-package-manager"
+fi
+
+if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then
+	PACKAGE_MANAGER="apt"
+elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then
+	PACKAGE_MANAGER="pacman"
+else
+	PACKAGE_MANAGER="pkg"
+fi
 DISTRO_ROOT_PATH="$DISTRO_PATH/root"
 DISTRO_OPT_PATH="$DISTRO_PATH/opt"
 DISTRO_USER_HOME_PATH="$DISTRO_PATH/home/$USER_NAME"
@@ -306,23 +318,6 @@ function download_file() {
 	progress_error "Download failed: $dest_file"
 	print_failed "Failed to download the file after $max_retries attempts. Exiting."
 	return 1
-}
-
-function detact_package_manager() {
-	# shellcheck disable=SC1091
-	if [[ -f "/data/data/com.termux/files/usr/bin/termux-setup-package-manager" ]]; then
-		source "/data/data/com.termux/files/usr/bin/termux-setup-package-manager"
-	fi
-
-	if [[ "$TERMUX_APP_PACKAGE_MANAGER" == "apt" ]]; then
-		PACKAGE_MANAGER="apt"
-	elif [[ "$TERMUX_APP_PACKAGE_MANAGER" == "pacman" ]]; then
-		PACKAGE_MANAGER="pacman"
-	else
-		PACKAGE_MANAGER="pkg"
-		print_failed " Could not detect your package manager, Switching To pkg "
-	fi
-	log_debug "Package manager: $PACKAGE_MANAGER"
 }
 
 # will check if the package is already installed or not, if it installed then reinstall and print success/failed message
@@ -854,10 +849,10 @@ SELECTED_DISTRO="$SELECTED_DISTRO"
 EOF
 	fi
 	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore set_distro_paths | sudo tee -a "$script_path" >/dev/null
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore | sudo tee -a "$script_path" >/dev/null
 		echo "$shell_setup_content" | sudo tee -a "$script_path" >/dev/null
 	else
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file detact_package_manager package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option read_conf print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore set_distro_paths >>"$script_path"
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore >>"$script_path"
 		echo "$shell_setup_content" >>"$script_path"
 	fi
 	# Make script executable

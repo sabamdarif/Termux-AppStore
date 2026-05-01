@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Script execution engine with real-time progress tracking.
 
-Extracted from ``window.py`` to keep the main window module thin.
 Handles download → detect → run → progress → cleanup lifecycle
 for install/uninstall/update scripts.
 """
@@ -33,8 +32,7 @@ def run_script_with_progress(
     status_label,
     terminal_view,
     progress_dialog,
-    get_category_cb=None,
-    show_apps_cb=None,
+    refresh_view_cb=None,
 ):
     """Download and execute an install/uninstall script with real-time
     progress tracking.
@@ -58,8 +56,7 @@ def run_script_with_progress(
         status_label:     ``Gtk.Label`` for status text.
         terminal_view:    ``Gtk.TextView`` for terminal output.
         progress_dialog:  ``Gtk.Dialog`` hosting the progress UI.
-        get_category_cb:  Optional callable returning the selected category.
-        show_apps_cb:     Optional ``show_apps(category)`` callable.
+        refresh_view_cb:  Optional callable that refreshes the current view.
     """
     cancelled = False
     process = None
@@ -225,10 +222,9 @@ def run_script_with_progress(
                 )
                 GLib.idle_add(on_success)
 
-                # Refresh visible app list
-                if get_category_cb and show_apps_cb:
-                    cat = get_category_cb()
-                    GLib.idle_add(lambda c=cat: show_apps_cb(c))
+                # Refresh visible app list for current section
+                if refresh_view_cb:
+                    GLib.idle_add(refresh_view_cb)
 
                 GLib.idle_add(update_progress, 1.0, f"{action_label} complete!")
                 time.sleep(2)

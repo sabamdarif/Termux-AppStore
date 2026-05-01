@@ -10,6 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from termux_appstore._buildconf import PREFIX
 from termux_appstore.constants import TERMUX_PREFIX, TERMUX_TMP
 
 
@@ -29,16 +30,41 @@ def modify_script(script_path):
         with open(script_path, "r") as f:
             content = f.read()
 
-        # Resolve inbuild_functions path.
-        # Installed layout: <site-packages>/termux_appstore/inbuild_functions/
-        # Dev layout:       appstore/inbuild_functions/
+        # Resolve inbuild_functions path with multiple fallbacks.
+        # 1. Installed layout: <site-packages>/termux_appstore/inbuild_functions/
+        # 2. Dev layout:       appstore/inbuild_functions/
+        # 3. PREFIX-based:     <PREFIX>/lib/python*/site-packages/termux_appstore/inbuild_functions/
         pkg_root = Path(__file__).resolve().parent.parent  # termux_appstore/
-        inbuild_functions_path = pkg_root / "inbuild_functions" / "inbuild_functions"
-        if not inbuild_functions_path.exists():
-            # Fallback for development runs outside meson install
-            inbuild_functions_path = (
-                pkg_root.parent / "inbuild_functions" / "inbuild_functions"
-            )
+        candidates = [
+            pkg_root / "inbuild_functions" / "inbuild_functions",
+            pkg_root.parent / "inbuild_functions" / "inbuild_functions",
+        ]
+
+        # PREFIX-based fallback — glob for the python version directory
+        prefix_site = Path(PREFIX) / "lib"
+        if prefix_site.exists():
+            for pydir in sorted(
+                prefix_site.glob("python*/site-packages"), reverse=True
+            ):
+                candidates.append(
+                    pydir
+                    / "termux_appstore"
+                    / "inbuild_functions"
+                    / "inbuild_functions"
+                )
+                break  # Use newest python version
+
+        inbuild_functions_path = None
+        for candidate in candidates:
+            if candidate.exists():
+                inbuild_functions_path = candidate
+                break
+
+        if inbuild_functions_path is None:
+            print(f"Error: inbuild_functions not found. Searched:")
+            for c in candidates:
+                print(f"  - {c}")
+            return False
 
         for shebang in [
             f"#!{TERMUX_PREFIX}/bin/bash\n",

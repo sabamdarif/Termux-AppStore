@@ -653,8 +653,34 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             subprocess.Popen(["bash", "-c", run_cmd])
 
     def on_update_clicked(self, button, app):
-        """Handle update button — re-installs the app."""
-        self.on_install_clicked(button, app)
+        """Handle update button — re-runs install script and clears pending update."""
+        dlg = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text=f"Update {app['app_name']}?",
+        )
+        response = dlg.run()
+        dlg.destroy()
+        if response != Gtk.ResponseType.YES:
+            return
+
+        def _on_update_success():
+            # Mark as installed
+            self._mark_installed(app, True)
+            # Remove from pending updates
+            folder = app["folder_name"]
+            if folder in self.pending_updates:
+                del self.pending_updates[folder]
+                self.update_tracker.pending = self.pending_updates
+
+        self._run_script_thread(
+            app,
+            url_key="install_url",
+            action_label="Updating",
+            on_success=_on_update_success,
+        )
 
     def on_update_system(self, button):
         """Handle 'Check for Updates' button — delegates to update_check pipeline."""
@@ -791,6 +817,17 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             )
         )
 
+        def _refresh_current_view():
+            """Refresh the app list for whichever section is active."""
+            section = getattr(self, "current_section", "explore")
+            if section == "installed":
+                self.show_installed_apps()
+            elif section == "updates":
+                self.show_update_apps()
+            else:
+                cat = self._get_selected_category()
+                self.show_apps(cat)
+
         run_script_with_progress(
             app=app,
             url=url,
@@ -800,8 +837,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             status_label=status_label,
             terminal_view=terminal_view,
             progress_dialog=progress_dialog,
-            get_category_cb=self._get_selected_category,
-            show_apps_cb=self.show_apps,
+            refresh_view_cb=_refresh_current_view,
         )
 
     def _mark_installed(self, app, installed):

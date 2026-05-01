@@ -17,11 +17,7 @@ termux_step_post_get_source() {
 }
 
 termux_step_pre_configure() {
+	TERMUX_PKG_SRCDIR="$TERMUX_PKG_SRCDIR/appstore"
 	termux_setup_meson
 	termux_setup_glib_cross_pkg_config_wrapper
-}
-
-termux_step_configure() {
-	TERMUX_PKG_SRCDIR="$TERMUX_PKG_SRCDIR/appstore"
-	TERMUX_PKG_BUILDDIR="$TERMUX_PKG_SRCDIR/build"
 }

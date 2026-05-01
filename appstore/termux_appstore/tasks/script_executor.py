@@ -211,7 +211,7 @@ def run_script_with_progress(
                 if ProgressEngine.is_progress_token(line_stripped):
                     continue  # Don't show in terminal
 
-                GLib.idle_add(lambda l=line: update_terminal(terminal_view, l))
+                GLib.idle_add(lambda ln=line: update_terminal(terminal_view, ln))
 
             # 8. Finalize
             if process.wait() == 0 and not cancelled:

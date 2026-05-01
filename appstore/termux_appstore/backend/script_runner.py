@@ -61,7 +61,7 @@ def modify_script(script_path):
                 break
 
         if inbuild_functions_path is None:
-            print(f"Error: inbuild_functions not found. Searched:")
+            print("Error: inbuild_functions not found. Searched:")
             for c in candidates:
                 print(f"  - {c}")
             return False

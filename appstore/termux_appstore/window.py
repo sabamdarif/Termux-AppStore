@@ -6,14 +6,9 @@ terminal, and task modules into a working application window.
 """
 
 import os
-import platform
 import queue
-import signal
-import stat
 import subprocess
-import sys
 import threading
-import time
 
 import gi
 
@@ -47,7 +42,7 @@ from termux_appstore.tasks.task_manager import (
 )
 
 # Terminal
-from termux_appstore.terminal import CommandOutputWindow, show_command_output
+from termux_appstore.terminal import show_command_output
 
 # UI widgets
 from termux_appstore.ui.app_card import build_app_card
@@ -858,7 +853,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self, title="Installing...", allow_cancel=True, use_terminal=None
     ):
         if use_terminal is None:
-            use_terminal = self.get_setting("use_terminal_for_progress", False)
+            use_terminal = bool(self.get_setting("use_terminal_for_progress", False))
         d, sl, pb, tv, te, ls = create_progress_dialog(
             self, title, allow_cancel, use_terminal
         )

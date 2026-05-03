@@ -1,0 +1,1 @@
+Small and simple sound and music player that is well integrated with GNOME

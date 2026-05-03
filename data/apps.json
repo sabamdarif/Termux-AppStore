@@ -891,6 +891,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Lximage-qt/logo.png"
   },
   {
+    "app_name": "Morphosis",
+    "folder_name": "Morphosis",
+    "description": "Convert your documents",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "morphosis",
+    "supported_arch": "aarch64",
+    "version": "termux_local_version",
+    "package_name": "morphosis",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Morphosis/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Morphosis/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Morphosis/logo.png"
+  },
+  {
     "app_name": "Mousepad",
     "folder_name": "Mousepad",
     "description": "Simple text editor of the desktop environment Xfce",

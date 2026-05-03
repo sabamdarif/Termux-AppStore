@@ -1358,6 +1358,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Vesktop/logo.png"
   },
   {
+    "app_name": "Video downloader",
+    "folder_name": "Video-downloader",
+    "description": "Download videos from websites like YouTube and many others (based on yt-dlp)",
+    "categories": [
+      "Internet"
+    ],
+    "app_type": "native",
+    "run_cmd": "video-downloader",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "video-downloader",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Video-downloader/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Video-downloader/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Video-downloader/logo.png"
+  },
+  {
     "app_name": "Visual Studio Code",
     "folder_name": "Visual-Studio-Code",
     "description": "Visual Studio Code is a free source-code editor made by Microsoft with support for debugging, syntax highlighting, and intelligent code completion.",

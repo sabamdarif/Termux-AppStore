@@ -48,6 +48,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Alligator/logo.png"
   },
   {
+    "app_name": "Amberol",
+    "folder_name": "Amberol",
+    "description": "Small and simple sound and music player that is well integrated with GNOME",
+    "categories": [
+      "Multimedia"
+    ],
+    "app_type": "native",
+    "run_cmd": "amberol",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "amberol",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Amberol/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Amberol/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Amberol/logo.png"
+  },
+  {
     "app_name": "Antigravity",
     "folder_name": "Antigravity",
     "description": "Antigravity is a fully-featured AI IDE from Google",

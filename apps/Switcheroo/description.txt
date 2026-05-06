@@ -1,0 +1,1 @@
+Convert and manipulate images easily (GTK4/libadwaita frontend to ImageMagick)

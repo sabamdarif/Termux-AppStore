@@ -82,7 +82,7 @@ def read_file_content(app_folder, filename):
 def read_single_file(file_path):
     """Read content from a single file if it exists."""
     try:
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             return f.read().strip()
     except FileNotFoundError:
         return None
@@ -194,7 +194,7 @@ def get_app_metadata(app_folder):
 
     if install_sh_path.exists():
         try:
-            with open(install_sh_path, "r") as f:
+            with open(install_sh_path, "r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip().startswith("app_type="):
                         app_type = line.split("=")[1].strip().strip("\"'")
@@ -243,7 +243,7 @@ def update_metadata():
 
     apps_data = []
 
-    for app_folder in sorted(apps_dir.iterdir()):
+    for app_folder in sorted(apps_dir.iterdir(), key=lambda path: path.name):
         if not app_folder.is_dir():
             continue
 
@@ -256,7 +256,7 @@ def update_metadata():
     updated_apps = []
     if output_file.exists():
         try:
-            with open(output_file, "r") as f:
+            with open(output_file, "r", encoding="utf-8") as f:
                 old_data = json.load(f)
             old_versions = {app["folder_name"]: app.get("version") for app in old_data}
             for app in apps_data:
@@ -275,7 +275,7 @@ def update_metadata():
             for folder, old, new in updated_apps:
                 f.write(f"- {folder}: {old} -> {new}\n")
 
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(apps_data, f, indent=2)
 
     print(f"\nUpdated {output_file} with {len(apps_data)} apps")

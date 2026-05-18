@@ -1,0 +1,1 @@
+mGBA is a fast and accurate Game Boy Advance emulator. This entry installs the official Linux ARM64 AppImage inside the configured container.

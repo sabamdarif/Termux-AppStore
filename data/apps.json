@@ -1053,6 +1053,23 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/OrcaSlicer/logo.png"
   },
   {
+    "app_name": "Pokemon Romhack Dev Tools",
+    "folder_name": "Pokemon-Romhack-Dev-Tools",
+    "description": "GBA and NDS ROM hacking development bundle with Termux build tools, Python helper libraries, and devkitPro gba-dev/nds-dev installed inside a supported Linux container.",
+    "categories": [
+      "Development",
+      "Games"
+    ],
+    "app_type": "distro",
+    "supported_arch": "aarch64,arm64",
+    "version": "1.0.0",
+    "supported_distro": "debian,ubuntu,arch,archlinux",
+    "package_name": "gba-dev",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Pokemon-Romhack-Dev-Tools/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Pokemon-Romhack-Dev-Tools/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Pokemon-Romhack-Dev-Tools/logo.png"
+  },
+  {
     "app_name": "Pwasforfirefox",
     "folder_name": "Pwasforfirefox",
     "description": "PWAs for Firefox",
@@ -1556,6 +1573,22 @@
     "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen-browser/install.sh",
     "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen-browser/uninstall.sh",
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Zen-browser/logo.png"
+  },
+  {
+    "app_name": "mGBA",
+    "folder_name": "mGBA",
+    "description": "mGBA is a fast and accurate Game Boy Advance emulator. This entry installs the official Linux ARM64 AppImage inside the configured container.",
+    "categories": [
+      "Games"
+    ],
+    "app_type": "distro",
+    "run_cmd": "/usr/local/bin/mgba-appimage",
+    "supported_arch": "aarch64,arm64",
+    "version": "0.10.5",
+    "supported_distro": "all",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/mGBA/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/mGBA/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/mGBA/logo.png"
   },
   {
     "app_name": "ytdlp gui",

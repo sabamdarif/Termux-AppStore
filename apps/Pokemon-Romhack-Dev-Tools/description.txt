@@ -1,0 +1,1 @@
+GBA and NDS ROM hacking development bundle with Termux build tools, Python helper libraries, and devkitPro gba-dev/nds-dev installed inside a supported Linux container.

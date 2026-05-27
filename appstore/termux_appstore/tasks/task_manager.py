@@ -18,10 +18,6 @@ from termux_appstore.terminal.ansi_parser import AnsiColorParser
 from termux_appstore.terminal.command_runner import create_terminal_widget
 from termux_appstore.terminal.emulator import TerminalEmulator
 
-# ---------------------------------------------------------------------------
-# Terminal text helper
-# ---------------------------------------------------------------------------
-
 
 def update_terminal(terminal_view, text, log_state=None):
     """Update a terminal view with new text and optionally write to a log.
@@ -37,14 +33,12 @@ def update_terminal(terminal_view, text, log_state=None):
     if not text:
         return
 
-    # Ensure the terminal_emulator is attached
     if not hasattr(terminal_view, "terminal_emulator"):
         terminal_view.terminal_emulator = TerminalEmulator(terminal_view)
 
     if terminal_view.terminal_emulator:
         terminal_view.terminal_emulator.append_text(text)
 
-    # Continuous log file
     if log_state and log_state.get("active") and log_state.get("file"):
         try:
             clean_text = AnsiColorParser().strip_ansi(text)
@@ -61,11 +55,6 @@ def update_terminal(terminal_view, text, log_state=None):
             log_state["file"] = None
             log_state["active"] = False
             log_state["path"] = None
-
-
-# ---------------------------------------------------------------------------
-# Progress dialog factory
-# ---------------------------------------------------------------------------
 
 
 def create_progress_dialog(
@@ -93,7 +82,6 @@ def create_progress_dialog(
         title=title, parent=parent, modal=True, destroy_with_parent=True
     )
 
-    # Header bar
     header_bar = Gtk.HeaderBar()
     header_bar.set_show_close_button(False)
     header_bar.set_title(title)
@@ -124,12 +112,10 @@ def create_progress_dialog(
         cancel_btn = dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         cancel_btn.get_style_context().add_class("destructive-action")
 
-    # Stack: progress vs terminal
     stack = Gtk.Stack()
     stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
     stack.set_transition_duration(150)
 
-    # ---- Progress view ----
     progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
     progress_box.set_margin_start(10)
     progress_box.set_margin_end(10)
@@ -155,7 +141,6 @@ def create_progress_dialog(
     progress_bar.get_style_context().add_class("custom-progress")
     progress_box.pack_start(progress_bar, False, True, 0)
 
-    # ---- Terminal view ----
     terminal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
     terminal_box.set_margin_start(10)
     terminal_box.set_margin_end(10)
@@ -171,7 +156,6 @@ def create_progress_dialog(
 
     terminal_box.pack_start(terminal_scroll, True, True, 0)
 
-    # Clear button under terminal
     terminal_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
     terminal_btn_box.set_halign(Gtk.Align.END)
     terminal_btn_box.set_margin_top(5)
@@ -205,7 +189,6 @@ def create_progress_dialog(
     dialog.set_resizable(True)
     dialog.set_default_size(500, 300)
 
-    # ---- Toggle handler ----
     def _toggle_terminal(button):
         current = stack.get_visible_child_name()
         new_view = "terminal" if current == "progress" else "progress"
@@ -220,7 +203,6 @@ def create_progress_dialog(
 
     terminal_button.connect("clicked", _toggle_terminal)
 
-    # ---- Response handler (log cleanup) ----
     def _on_response(dlg, response_id):
         if log_state["active"] and log_state["file"]:
             try:
@@ -234,7 +216,6 @@ def create_progress_dialog(
 
     dialog.connect("response", _on_response)
 
-    # ---- Save log handler ----
     def _on_save_log(button):
         buf = terminal_view.get_buffer()
         start_iter, end_iter = buf.get_bounds()
@@ -269,10 +250,8 @@ def create_progress_dialog(
 
     save_button.connect("clicked", _on_save_log)
 
-    # ---- Continuous log handler ----
     def _on_log_control(button):
         if log_state["active"] and log_state["file"]:
-            # Stop logging
             try:
                 log_state["file"].write("\n--- Logging stopped ---\n")
                 log_state["file"].close()
@@ -349,11 +328,6 @@ def create_progress_dialog(
         terminal_emulator,
         log_state,
     )
-
-
-# ---------------------------------------------------------------------------
-# Progress parsing helper
-# ---------------------------------------------------------------------------
 
 
 def parse_progress_line(line):

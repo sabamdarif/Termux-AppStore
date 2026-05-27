@@ -20,9 +20,7 @@ class AnsiColorParser:
     # ANSI escape sequence regex
     ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[((?:\d+;)*\d+)?([A-Za-z])")
 
-    # Basic ANSI color codes
     COLORS = {
-        # Foreground colors
         "30": (0.0, 0.0, 0.0),  # Black
         "31": (0.8, 0.0, 0.0),  # Red
         "32": (0.0, 0.8, 0.0),  # Green
@@ -39,7 +37,6 @@ class AnsiColorParser:
         "95": (1.0, 0.0, 1.0),  # Bright Magenta
         "96": (0.0, 1.0, 1.0),  # Bright Cyan
         "97": (1.0, 1.0, 1.0),  # Bright White
-        # Background colors
         "40": (0.0, 0.0, 0.0),  # Black
         "41": (0.8, 0.0, 0.0),  # Red
         "42": (0.0, 0.8, 0.0),  # Green
@@ -58,7 +55,6 @@ class AnsiColorParser:
         "107": (1.0, 1.0, 1.0),  # Bright White
     }
 
-    # Text attributes
     ATTRIBUTES = {
         "0": {"name": "reset", "tags": []},
         "1": {"name": "bold", "tags": ["bold"]},
@@ -71,7 +67,6 @@ class AnsiColorParser:
     }
 
     def __init__(self):
-        # Initialize tag table for the TextView buffer
         self.active_tags = []
 
     def ensure_tag(self, buffer, tag_name, properties):
@@ -99,12 +94,10 @@ class AnsiColorParser:
                     self._insert_with_active_tags(buffer, plain_text)
                 break
 
-            # Insert any text before the escape sequence
             if match.start() > last_text_pos:
                 plain_text = text[last_text_pos : match.start()]
                 self._insert_with_active_tags(buffer, plain_text)
 
-            # Process the ANSI code
             codes = match.group(1)
             command = match.group(2)
 
@@ -112,10 +105,8 @@ class AnsiColorParser:
                 if codes:
                     self._process_sgr_codes(buffer, codes)
                 else:
-                    # Reset all attributes if no codes provided
                     self.active_tags = []
 
-            # Move past the escape sequence
             i = match.end()
             last_text_pos = i
 
@@ -133,7 +124,6 @@ class AnsiColorParser:
         new_end_iter = buffer.get_end_iter()
         start_iter = buffer.get_iter_at_mark(mark)
 
-        # Apply all active tags to the inserted text
         for tag_name in self.active_tags:
             tag = buffer.get_tag_table().lookup(tag_name)
             if tag:
@@ -149,12 +139,10 @@ class AnsiColorParser:
             if not code:
                 continue
 
-            # Handle reset
             if code == "0":
                 self.active_tags = []
                 continue
 
-            # Text attribute
             if code in self.ATTRIBUTES and code != "0":
                 for tag_type in self.ATTRIBUTES[code]["tags"]:
                     tag_name = f"ansi_{tag_type}"
@@ -185,7 +173,6 @@ class AnsiColorParser:
                     if tag_name not in self.active_tags:
                         self.active_tags.append(tag_name)
 
-            # Foreground color
             elif code.startswith("3") or code.startswith("9"):
                 if code in self.COLORS:
                     r, g, b = self.COLORS[code]
@@ -194,7 +181,6 @@ class AnsiColorParser:
                         buffer, tag_name, {"foreground-rgba": Gdk.RGBA(r, g, b, 1.0)}
                     )
 
-                    # Replace any existing foreground color
                     self.active_tags = [
                         tag
                         for tag in self.active_tags
@@ -202,7 +188,6 @@ class AnsiColorParser:
                     ]
                     self.active_tags.append(tag_name)
 
-            # Background color
             elif code.startswith("4") or code.startswith("10"):
                 if code in self.COLORS:
                     r, g, b = self.COLORS[code]
@@ -211,7 +196,6 @@ class AnsiColorParser:
                         buffer, tag_name, {"background-rgba": Gdk.RGBA(r, g, b, 1.0)}
                     )
 
-                    # Replace any existing background color
                     self.active_tags = [
                         tag
                         for tag in self.active_tags

@@ -26,38 +26,28 @@ class TerminalEmulator:
         self.buffer = text_view.get_buffer()
         self.ansi_parser = AnsiColorParser()
         self.last_line_was_animation = False
-        self.line_buffer = ""  # Buffer to accumulate partial lines
+        self.line_buffer = ""
 
-        # Ensure monospace font for terminal-like appearance
         self.text_view.set_monospace(True)
 
-        # Set initial terminal colors (will be overridden by CSS)
         self.text_view.override_background_color(
             Gtk.StateFlags.NORMAL, Gdk.RGBA(0, 0, 0, 1)
         )
         self.text_view.override_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(1, 1, 1, 1))
 
-        # Add terminal view style class
         self.text_view.get_style_context().add_class("terminal-view")
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def append_text(self, text, with_ansi=True):
         """Append text to the terminal view."""
         if not text:
             return
 
-        # Convert CR+LF to just LF
         text = text.replace("\r\n", "\n")
 
-        # Filter warning messages
         text = self._filter_warnings(text)
         if not text:
             return
 
-        # Special handling for carriage returns
         if "\r" in text:
             self._handle_carriage_returns(text, with_ansi)
         else:
@@ -107,7 +97,6 @@ class TerminalEmulator:
         )
         file_dialog.set_current_name(default_filename)
 
-        # Add file filters
         text_filter = Gtk.FileFilter()
         text_filter.set_name("Text files")
         text_filter.add_mime_type("text/plain")
@@ -137,10 +126,6 @@ class TerminalEmulator:
         file_dialog.destroy()
         return result
 
-    # ------------------------------------------------------------------
-    # Internal — warning filtering
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _filter_warnings(text):
         """Remove known warning lines from *text*."""
@@ -155,10 +140,6 @@ class TerminalEmulator:
             if any(w in text for w in TERMINAL_WARNING_FILTERS):
                 return ""
             return text
-
-    # ------------------------------------------------------------------
-    # Internal — carriage return / animation handling
-    # ------------------------------------------------------------------
 
     def _handle_carriage_returns(self, text, with_ansi):
         """Handle text with carriage returns (animations)."""
@@ -197,13 +178,11 @@ class TerminalEmulator:
 
         lines = text.split("\n")
 
-        # Handle all complete lines
         for i in range(len(lines) - 1):
             line = lines[i]
             self._append_segment(line + "\n", with_ansi)
             self.last_line_was_animation = False
 
-        # Handle the last line (might be incomplete)
         if lines[-1]:
             if text.endswith("\n"):
                 self._append_segment(lines[-1] + "\n", with_ansi)
@@ -211,10 +190,6 @@ class TerminalEmulator:
             else:
                 self.line_buffer = lines[-1]
                 self._append_segment(lines[-1], with_ansi)
-
-    # ------------------------------------------------------------------
-    # Internal — text insertion
-    # ------------------------------------------------------------------
 
     def _append_segment(self, text, with_ansi=True):
         """Append a segment of text to the terminal."""
@@ -226,7 +201,6 @@ class TerminalEmulator:
         if not text:
             return
 
-        # Add newline between non-animation content if needed
         if self.buffer.get_char_count() > 0 and not self.last_line_was_animation:
             end_iter = self.buffer.get_end_iter()
             start_iter = end_iter.copy()

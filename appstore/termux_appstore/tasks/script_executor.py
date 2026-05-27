@@ -62,7 +62,6 @@ def run_script_with_progress(
     process = None
     script_file = None
 
-    # ── Cancel handler ────────────────────────────────────────────────
     def on_cancel(*_args):
         nonlocal cancelled
         cancelled = True
@@ -84,7 +83,6 @@ def run_script_with_progress(
 
     progress_dialog.connect("response", on_cancel)
 
-    # ── Progress helpers ──────────────────────────────────────────────
     def update_progress(fraction, text):
         if not progress_dialog or not progress_dialog.get_window():
             return False
@@ -105,14 +103,12 @@ def run_script_with_progress(
         nonlocal script_file, process
 
         try:
-            # Derive operation type from action_label
             op = "install"
             if "uninstall" in action_label.lower():
                 op = "uninstall"
             elif "updat" in action_label.lower():
                 op = "update"
 
-            # 1. Create engine
             engine = ProgressEngine(
                 operation=op,
                 app_type=app.get("app_type", "native"),
@@ -124,7 +120,6 @@ def run_script_with_progress(
                 engine.current_message,
             )
 
-            # 2. Download script
             GLib.idle_add(
                 lambda: update_terminal(
                     terminal_view,
@@ -138,7 +133,6 @@ def run_script_with_progress(
                 GLib.idle_add(progress_dialog.destroy)
                 return
 
-            # 3. Auto-detect script type + advance past download phase
             try:
                 with open(script_file) as f:
                     engine.detect_script_type(f.read())
@@ -153,10 +147,8 @@ def run_script_with_progress(
                 engine.current_message,
             )
 
-            # 4. Make executable
             os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
 
-            # 5. Register heartbeat timer
             def heartbeat_cb():
                 if cancelled or engine.is_done:
                     return False  # Stop timer
@@ -175,7 +167,6 @@ def run_script_with_progress(
 
             GLib.timeout_add(500, heartbeat_cb)
 
-            # 6. Run script with PROGRESS_ENABLED=1
             script_env = {**os.environ, "PROGRESS_ENABLED": "1"}
 
             process = subprocess.Popen(
@@ -188,7 +179,6 @@ def run_script_with_progress(
                 env=script_env,
             )
 
-            # 7. Process output line by line
             while True:
                 if cancelled:
                     GLib.idle_add(progress_dialog.destroy)
@@ -204,16 +194,13 @@ def run_script_with_progress(
 
                 fraction, message = engine.process_line(line_stripped)
 
-                # Always update progress
                 GLib.idle_add(update_progress, fraction, message)
 
-                # Filter protocol tokens from terminal view
                 if ProgressEngine.is_progress_token(line_stripped):
                     continue  # Don't show in terminal
 
                 GLib.idle_add(lambda ln=line: update_terminal(terminal_view, ln))
 
-            # 8. Finalize
             if process.wait() == 0 and not cancelled:
                 GLib.idle_add(
                     update_progress,
@@ -222,7 +209,6 @@ def run_script_with_progress(
                 )
                 GLib.idle_add(on_success)
 
-                # Refresh visible app list for current section
                 if refresh_view_cb:
                     GLib.idle_add(refresh_view_cb)
 

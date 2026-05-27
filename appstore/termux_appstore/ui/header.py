@@ -52,7 +52,6 @@ def build_header_bar(on_section_clicked, on_menu_clicked, on_search_toggled):
     header.set_show_close_button(True)
     header.props.title = "Termux AppStore"
 
-    # Tab buttons
     tabs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
     tabs_box.get_style_context().add_class("header-tabs-box")
     header.set_custom_title(tabs_box)
@@ -65,7 +64,6 @@ def build_header_bar(on_section_clicked, on_menu_clicked, on_search_toggled):
     installed_btn.connect("clicked", on_section_clicked, "installed")
     updates_btn.connect("clicked", on_section_clicked, "updates")
 
-    # Mark explore as initially active
     explore_btn.get_style_context().add_class("active")
     explore_btn.get_style_context().add_class("selected")
 
@@ -73,7 +71,6 @@ def build_header_bar(on_section_clicked, on_menu_clicked, on_search_toggled):
     tabs_box.pack_start(installed_btn, False, False, 0)
     tabs_box.pack_start(updates_btn, False, False, 0)
 
-    # Menu button (hamburger)
     menu_button = Gtk.Button()
     menu_button.set_image(
         Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON)
@@ -82,7 +79,6 @@ def build_header_bar(on_section_clicked, on_menu_clicked, on_search_toggled):
     menu_button.connect("clicked", on_menu_clicked)
     header.pack_end(menu_button)
 
-    # Search toggle button
     search_button = Gtk.Button()
     search_button.set_image(
         Gtk.Image.new_from_icon_name("system-search-symbolic", Gtk.IconSize.BUTTON)

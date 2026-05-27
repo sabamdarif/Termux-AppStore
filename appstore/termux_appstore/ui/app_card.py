@@ -102,15 +102,12 @@ def build_app_card(
         card_box.set_margin_top(12)
         card_box.set_margin_bottom(12)
 
-        # Logo
         logo_image = _load_logo(app)
         if logo_image:
             card_box.pack_start(logo_image, False, False, 0)
 
-        # Info column
         info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
 
-        # Top row: name + source type
         top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
         name_label = Gtk.Label()
@@ -118,10 +115,8 @@ def build_app_card(
         name_label.set_halign(Gtk.Align.START)
         top_row.pack_start(name_label, False, False, 0)
 
-        # Spacer
         top_row.pack_start(Gtk.Label(), True, True, 0)
 
-        # Source type
         source_label = Gtk.Label()
         source_type = app.get("app_type", "unknown").capitalize()
         source_label.set_markup(f"Source: {GLib.markup_escape_text(source_type)}")
@@ -133,7 +128,6 @@ def build_app_card(
 
         info_box.pack_start(top_row, False, False, 0)
 
-        # Description (truncated)
         desc_text = app.get("description", "")
         if len(desc_text) > 100:
             desc_text = desc_text[:100] + "..."
@@ -142,13 +136,11 @@ def build_app_card(
         desc_label.set_halign(Gtk.Align.START)
         info_box.pack_start(desc_label, False, False, 0)
 
-        # Bottom row: buttons + version
         bottom_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         bottom_box.set_margin_top(6)
 
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
 
-        # Version label
         version_label = Gtk.Label()
         version_label.set_text(
             GLib.markup_escape_text(_format_version(app.get("version", "")))
@@ -158,7 +150,6 @@ def build_app_card(
         version_label.set_halign(Gtk.Align.CENTER)
         version_label.set_margin_end(6)
 
-        # Action buttons
         if is_installed:
             if has_update and app.get("install_url") and on_update:
                 update_button = Gtk.Button(label="Update")

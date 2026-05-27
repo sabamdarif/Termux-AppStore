@@ -19,10 +19,6 @@ class UpdateTracker:
         self._pending = {}
         self.load()
 
-    # ------------------------------------------------------------------
-    # Persistence
-    # ------------------------------------------------------------------
-
     def load(self):
         """Load pending updates from the tracking file."""
         try:
@@ -53,10 +49,6 @@ class UpdateTracker:
 
             traceback.print_exc()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     @property
     def pending(self):
         """Return the dict of ``{folder_name: new_version}``."""
@@ -83,10 +75,6 @@ class UpdateTracker:
     def has_updates(self):
         """Return ``True`` when there are pending updates."""
         return bool(self._pending)
-
-    # ------------------------------------------------------------------
-    # Version comparison
-    # ------------------------------------------------------------------
 
     @staticmethod
     def compare_versions(old_data, new_data):

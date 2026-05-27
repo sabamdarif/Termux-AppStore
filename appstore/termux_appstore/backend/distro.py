@@ -12,9 +12,7 @@ import subprocess
 
 from termux_appstore.constants import TERMUX_PREFIX
 
-# ---------------------------------------------------------------------------
 # Distro configuration
-# ---------------------------------------------------------------------------
 
 
 class DistroConfig:
@@ -83,11 +81,6 @@ class DistroConfig:
             return f"chroot-distro login {selected_distro} --shared-tmp -- /bin/bash -c"
         else:
             return f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c"
-
-
-# ---------------------------------------------------------------------------
-# Package installation checks
-# ---------------------------------------------------------------------------
 
 
 def check_package_installed(package_name):
@@ -209,6 +202,4 @@ def check_distro_app_installed_by_path(run_cmd, selected_distro):
     if not path_match:
         return False
 
-    # NOTE: The original code had an incomplete implementation here.
-    # path_match.group(0).strip() was called but the result was unused.
     return False

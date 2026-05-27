@@ -16,7 +16,6 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # type: ignore # noqa: E402
 
-# Backend
 from termux_appstore.backend.app_data import load_app_metadata
 from termux_appstore.backend.distro import DistroConfig
 from termux_appstore.backend.installed_apps import InstalledApps
@@ -24,7 +23,6 @@ from termux_appstore.backend.refresh import migrate_old_data, refresh_data
 from termux_appstore.backend.settings import Settings
 from termux_appstore.backend.updates import UpdateTracker
 
-# Constants & utils
 from termux_appstore.constants import (
     APP_NAME,
     APPSTORE_DIR,
@@ -35,16 +33,13 @@ from termux_appstore.constants import (
 )
 from termux_appstore.tasks.script_executor import run_script_with_progress
 
-# Tasks
 from termux_appstore.tasks.task_manager import (
     create_progress_dialog,
     update_terminal,
 )
 
-# Terminal
 from termux_appstore.terminal import show_command_output
 
-# UI widgets
 from termux_appstore.ui.app_card import build_app_card
 from termux_appstore.ui.dialogs import (
     show_about_dialog,
@@ -56,7 +51,6 @@ from termux_appstore.ui.search import SearchBar
 from termux_appstore.ui.sidebar import build_sidebar
 from termux_appstore.utils import get_current_arch
 
-# Fuzzy search
 try:
     from fuzzysearch import find_near_matches  # type: ignore
 except ImportError:
@@ -66,17 +60,12 @@ except ImportError:
 class AppStoreWindow(Gtk.ApplicationWindow):
     """Main window that composes all extracted modules."""
 
-    # ------------------------------------------------------------------
-    # Initialisation
-    # ------------------------------------------------------------------
 
     def __init__(self, app):
         Gtk.ApplicationWindow.__init__(self, application=app, title=APP_NAME)
 
-        # Settings
         self.settings_mgr = Settings()
 
-        # State flags
         self.is_refreshing = False
         self.connectivity_dialog_active = False
         self.cancellation_in_progress = False
@@ -88,16 +77,13 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.log_file = None
         self.log_file_path = None
 
-        # Architecture
         self.system_arch = get_current_arch()
 
-        # Data managers
         self.installed_tracker = InstalledApps()
         self.installed_apps = self.installed_tracker.apps
         self.update_tracker = UpdateTracker()
         self.pending_updates = self.update_tracker.pending
 
-        # App data
         self.categories = []
         self.apps_data = []
 
@@ -106,12 +92,10 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.selected_distro = self.distro_config.selected_distro
         self.distro_enabled = self.distro_config.distro_enabled
 
-        # Task queue
         self.task_queue = queue.Queue()
         self.task_running = False
         self.task_thread = None
 
-        # Window setup
         self.set_default_size(1000, 650)
         self.set_position(Gtk.WindowPosition.CENTER)
         icon_theme = Gtk.IconTheme.get_default()
@@ -119,7 +103,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.set_icon_name("system-software-install")
         self.set_wmclass("termux-appstore", APP_NAME)
 
-        # Keyboard accelerators
         accel = Gtk.AccelGroup()
         self.add_accel_group(accel)
         key, mod = Gtk.accelerator_parse("<Control>f")
@@ -139,9 +122,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self._show_error(f"Failed to initialize app store: {e}")
             raise
 
-    # ------------------------------------------------------------------
-    # CSS
-    # ------------------------------------------------------------------
 
     def _load_css(self):
         screen = Gdk.Screen.get_default()
@@ -163,13 +143,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         except Exception as e:
             print(f"Warning: CSS error: {e}")
 
-    # ------------------------------------------------------------------
-    # UI construction
-    # ------------------------------------------------------------------
 
     def _build_ui(self):
         """Build the complete UI from extracted modules."""
-        # Header bar
         hdr = build_header_bar(
             on_section_clicked=self.on_section_clicked,
             on_menu_clicked=self._on_menu_clicked,
@@ -182,7 +158,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.search_button = hdr["search_button"]
         self.header_tabs_box = hdr["tabs_box"]
 
-        # Main stack (content vs spinner)
         self.main_stack = Gtk.Stack()
         self.main_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.main_stack.set_transition_duration(150)
@@ -194,7 +169,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.main_box.pack_start(self.content_box, True, True, 0)
 
-        # Spinner page
         spinner_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         spinner_page.set_valign(Gtk.Align.CENTER)
         spinner_page.set_halign(Gtk.Align.CENTER)
@@ -212,9 +186,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         self.main_stack.set_visible_child_name("content")
 
-    # ------------------------------------------------------------------
-    # Settings proxies
-    # ------------------------------------------------------------------
 
     def get_setting(self, key, default=None):
         return self.settings_mgr.get(key, default)
@@ -222,9 +193,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def set_setting(self, key, value):
         self.settings_mgr.set(key, value)
 
-    # ------------------------------------------------------------------
-    # Directory setup + data loading
-    # ------------------------------------------------------------------
 
     def _setup_directories(self):
         os.makedirs(APPSTORE_DIR, exist_ok=True)
@@ -267,17 +235,14 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.main_box.pack_start(warning, False, False, 0)
             warning.show_all()
 
-        # Sidebar
         sb = build_sidebar(self.categories, self._on_category_clicked)
         self.sidebar = sb["sidebar"]
         self.category_buttons = sb["category_buttons"]
         self.content_box.pack_start(self.sidebar, False, True, 0)
 
-        # Right panel
         self.right_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.content_box.pack_start(self.right_panel, True, True, 0)
 
-        # Search bar
         self.search_bar = SearchBar(
             on_search=self._do_search,
             on_activate=lambda e: (
@@ -290,7 +255,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.search_entry = self.search_bar.entry
         self.right_panel.pack_start(self.search_box, False, True, 0)
 
-        # System update button (hidden by default)
         self.update_button = Gtk.Button(label="Check for Updates")
         self.update_button.get_style_context().add_class("system-update-button")
         self.update_button.connect("clicked", self.on_update_system)
@@ -301,7 +265,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.update_button.hide()
         self.right_panel.pack_start(self.update_button, False, False, 0)
 
-        # Scrolled app list
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolled.set_vexpand(True)
@@ -318,9 +281,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.content_box.show_all()
         self.update_button.hide()
 
-    # ------------------------------------------------------------------
-    # App display
-    # ------------------------------------------------------------------
 
     def show_apps(self, category=None):
         """Display apps filtered by category and search text."""
@@ -468,9 +428,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         ]
         return list({a["app_name"]: a for a in desc + cat}.values())
 
-    # ------------------------------------------------------------------
-    # Header / section handlers
-    # ------------------------------------------------------------------
 
     def on_section_clicked(self, button, section):
         self.current_section = section
@@ -570,9 +527,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         elif section == "updates":
             self.show_update_apps()
 
-    # ------------------------------------------------------------------
-    # Accelerators
-    # ------------------------------------------------------------------
 
     def _on_search_accel(self, *args):
         self._on_search_toggled(None)
@@ -582,9 +536,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.on_delete_event(None, None)
         return True
 
-    # ------------------------------------------------------------------
     # Action handlers (install / uninstall / open / update)
-    # ------------------------------------------------------------------
 
     def on_install_clicked(self, button, app):
         """Handle install button — runs install script in a background thread."""
@@ -662,9 +614,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             return
 
         def _on_update_success():
-            # Mark as installed
             self._mark_installed(app, True)
-            # Remove from pending updates
             folder = app["folder_name"]
             if folder in self.pending_updates:
                 del self.pending_updates[folder]
@@ -684,7 +634,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         button.set_sensitive(False)
         button.get_style_context().add_class("updating")
 
-        # Replace button label with spinner for initial phase
         spinner = Gtk.Spinner()
         spinner.set_size_request(16, 16)
         spinner.start()
@@ -779,16 +728,12 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         for i in range(10, 101, 10):
             button.get_style_context().remove_class(f"progress-{i}")
 
-        # Restore plain label
         child = button.get_child()
         if child:
             button.remove(child)
         button.add(Gtk.Label(label="Check for Updates"))
         button.show_all()
 
-    # ------------------------------------------------------------------
-    # Shared script execution engine
-    # ------------------------------------------------------------------
 
     def _run_script_thread(
         self, app, url_key, action_label, on_success, fallback_url_key=None
@@ -845,9 +790,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             del self.pending_updates[folder]
             self.update_tracker.pending = self.pending_updates
 
-    # ------------------------------------------------------------------
-    # Progress dialog proxies
-    # ------------------------------------------------------------------
 
     def _create_progress_dialog(
         self, title="Installing...", allow_cancel=True, use_terminal=None
@@ -862,9 +804,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def _update_terminal(self, terminal_view, text):
         update_terminal(terminal_view, text)
 
-    # ------------------------------------------------------------------
-    # Refresh
-    # ------------------------------------------------------------------
 
     def _start_refresh(self):
         """Run the full refresh pipeline on a background thread."""
@@ -872,7 +811,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.main_stack.set_visible_child_name("spinner")
         self.spinner.start()
 
-        # Migrate old data on first run
         migrate_old_data()
 
         def _refresh_thread():
@@ -892,7 +830,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.is_refreshing = False
         self.spinner.stop()
 
-        # Reload data from the freshly downloaded apps.json
         self.installed_apps = self.installed_tracker.apps
         self.pending_updates = self.update_tracker.pending
         self._load_and_display()
@@ -907,9 +844,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.main_stack.set_visible_child_name("content")
         self._show_error(f"Refresh failed: {message}")
 
-    # ------------------------------------------------------------------
-    # Task processor
-    # ------------------------------------------------------------------
 
     def _start_task_processor(self):
         self.task_running = True
@@ -931,9 +865,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
     def _stop_task_processor(self):
         self.task_running = False
 
-    # ------------------------------------------------------------------
-    # Window lifecycle
-    # ------------------------------------------------------------------
 
     def on_delete_event(self, widget, event):
         try:
@@ -955,3 +886,4 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         )
         dlg.run()
         dlg.destroy()
+

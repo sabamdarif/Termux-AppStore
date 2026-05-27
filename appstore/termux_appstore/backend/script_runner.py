@@ -31,8 +31,6 @@ def modify_script(script_path):
             content = f.read()
 
         # Resolve inbuild_functions path with multiple fallbacks.
-        # 1. Installed layout: <site-packages>/termux_appstore/inbuild_functions/
-        # 2. Dev layout:       appstore/inbuild_functions/
         # 3. PREFIX-based:     <PREFIX>/lib/python*/site-packages/termux_appstore/inbuild_functions/
         pkg_root = Path(__file__).resolve().parent.parent  # termux_appstore/
         candidates = [
@@ -52,7 +50,7 @@ def modify_script(script_path):
                     / "inbuild_functions"
                     / "inbuild_functions"
                 )
-                break  # Use newest python version
+                break
 
         inbuild_functions_path = None
         for candidate in candidates:
@@ -120,7 +118,6 @@ def download_script(url):
             print("Script file not found after download")
             return None
 
-        # Verify the file is valid UTF-8
         try:
             with open(script_path, "r", encoding="utf-8") as f:
                 f.read()

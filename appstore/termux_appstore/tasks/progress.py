@@ -19,8 +19,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
-# ─── Phase Weight Maps ────────────────────────────────────────────────────────
-
 PHASE_MAPS: Dict[str, Dict[str, Tuple[float, float]]] = {
     "native_install": {
         "script_download": (0.00, 0.08),
@@ -67,7 +65,6 @@ PHASE_MAPS: Dict[str, Dict[str, Tuple[float, float]]] = {
         "cleanup": (0.15, 0.90),
         "finalize": (0.90, 1.00),
     },
-    # Default map for unknown operation types
     "default": {
         "script_download": (0.00, 0.05),
         "prepare": (0.05, 0.15),
@@ -76,7 +73,6 @@ PHASE_MAPS: Dict[str, Dict[str, Tuple[float, float]]] = {
     },
 }
 
-# ─── Heuristic Keyword Rules ──────────────────────────────────────────────────
 
 KEYWORD_RULES = [
     # (regex pattern, phase_hint, bump_pct)
@@ -90,13 +86,11 @@ KEYWORD_RULES = [
     (re.compile(r"^(Installing|install_and_check)", re.I), "install", 3),
 ]
 
-# ─── Tool-specific structured output patterns ─────────────────────────────────
 
 RE_DPKG_PMSTATUS = re.compile(r"^(pmstatus|dlstatus|pmerror):([^:]+):([0-9.]+):(.+)$")
 RE_ARIA2C = re.compile(r"\(([0-9]+)%\)")
 RE_WGET = re.compile(r"\s+([0-9]+)%\s+\S+\s+")
 
-# ─── Human-readable phase labels for UI ───────────────────────────────────────
 
 PHASE_LABELS = {
     "script_download": "Preparing",
@@ -110,11 +104,7 @@ PHASE_LABELS = {
     "finalize": "Finishing up",
 }
 
-# Token prefixes used by the explicit progress protocol
 PROGRESS_TOKENS = ("__PROGRESS__", "__PHASE__", "__DONE__", "__ERROR__")
-
-
-# ─── ProgressEngine ───────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -190,8 +180,6 @@ class ProgressEngine:
         self._set_fraction(new_f)
         self.current_phase = phase_hint
 
-    # ── Public API ────────────────────────────────────────────────────────
-
     def heartbeat(self):
         """Called by a GTK timeout (~500 ms).  Provides very slow drift
         so the bar never completely freezes.
@@ -221,7 +209,6 @@ class ProgressEngine:
 
         stripped = line.strip()
 
-        # ── Layer 1: Explicit Protocol ────────────────────────────────
         if "__DONE__" in stripped:
             self._set_fraction(1.0, "Complete")
             self.is_done = True
@@ -255,7 +242,7 @@ class ProgressEngine:
                 self._set_fraction(new_f, msg or self.current_message)
                 return self.current_fraction, self.current_message
             except Exception:
-                pass  # Malformed token — fall through
+                pass
 
         if "__PHASE__" in stripped:
             try:
@@ -272,7 +259,6 @@ class ProgressEngine:
             except Exception:
                 pass
 
-        # ── Layer 2: Tool-specific structured lines ───────────────────
         m = RE_DPKG_PMSTATUS.match(stripped)
         if m:
             kind = m.group(1)
@@ -300,7 +286,6 @@ class ProgressEngine:
             self._set_fraction(new_f, f"Downloading... ({int(pct)}%)")
             return self.current_fraction, self.current_message
 
-        # ── Layer 3: Keyword heuristics ───────────────────────────────
         for pattern, phase_hint, bump in KEYWORD_RULES:
             if pattern.search(stripped):
                 self._apply_heuristic_bump(phase_hint, bump)
@@ -330,7 +315,6 @@ class ProgressEngine:
         elif "distro_run" in script_content:
             if self.script_type != "download":
                 self.script_type = "repo"
-        # Re-select map based on updated type info
         self._phase_map = self._select_phase_map()
 
     @staticmethod

@@ -250,7 +250,7 @@ def _compare_versions(new_apps_data, old_apps_data, installed_apps):
             old_ver = old_app.get("version")
             if old_ver in skip:
                 continue
-            if old_ver != new_ver:
+            if old_ver not in skip and old_ver < new_ver:
                 new_updates[folder] = new_ver
                 print(f"Update found: {new_app['app_name']} {old_ver} → {new_ver}")
     return new_updates

@@ -22,7 +22,6 @@ from termux_appstore.backend.installed_apps import InstalledApps
 from termux_appstore.backend.refresh import migrate_old_data, refresh_data
 from termux_appstore.backend.settings import Settings
 from termux_appstore.backend.updates import UpdateTracker
-
 from termux_appstore.constants import (
     APP_NAME,
     APPSTORE_DIR,
@@ -32,14 +31,11 @@ from termux_appstore.constants import (
     TERMUX_PREFIX,
 )
 from termux_appstore.tasks.script_executor import run_script_with_progress
-
 from termux_appstore.tasks.task_manager import (
     create_progress_dialog,
     update_terminal,
 )
-
 from termux_appstore.terminal import show_command_output
-
 from termux_appstore.ui.app_card import build_app_card
 from termux_appstore.ui.dialogs import (
     show_about_dialog,
@@ -59,7 +55,6 @@ except ImportError:
 
 class AppStoreWindow(Gtk.ApplicationWindow):
     """Main window that composes all extracted modules."""
-
 
     def __init__(self, app):
         Gtk.ApplicationWindow.__init__(self, application=app, title=APP_NAME)
@@ -122,7 +117,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self._show_error(f"Failed to initialize app store: {e}")
             raise
 
-
     def _load_css(self):
         screen = Gdk.Screen.get_default()
         css_provider = Gtk.CssProvider()
@@ -142,7 +136,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             )
         except Exception as e:
             print(f"Warning: CSS error: {e}")
-
 
     def _build_ui(self):
         """Build the complete UI from extracted modules."""
@@ -186,13 +179,11 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         self.main_stack.set_visible_child_name("content")
 
-
     def get_setting(self, key, default=None):
         return self.settings_mgr.get(key, default)
 
     def set_setting(self, key, value):
         self.settings_mgr.set(key, value)
-
 
     def _setup_directories(self):
         os.makedirs(APPSTORE_DIR, exist_ok=True)
@@ -229,6 +220,30 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             lbl = Gtk.Label()
             lbl.set_markup(
                 f"Architecture <b>{self.system_arch}</b> might have compatibility issues"
+            )
+            wbox.pack_start(lbl, False, False, 0)
+            warning.get_content_area().add(wbox)
+            self.main_box.pack_start(warning, False, False, 0)
+            warning.show_all()
+
+        termux_desktop_config = os.path.join(
+            TERMUX_PREFIX, "etc", "termux-desktop", "configuration.conf"
+        )
+        if not os.path.exists(termux_desktop_config):
+            warning = Gtk.InfoBar()
+            warning.set_message_type(Gtk.MessageType.WARNING)
+            warning.set_show_close_button(True)
+            warning.connect("response", lambda bar, r: bar.destroy())
+            wbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            wbox.pack_start(
+                Gtk.Image.new_from_icon_name("dialog-warning", Gtk.IconSize.MENU),
+                False,
+                False,
+                0,
+            )
+            lbl = Gtk.Label()
+            lbl.set_markup(
+                "<b>Termux desktop config not found.</b> Distro support disabled."
             )
             wbox.pack_start(lbl, False, False, 0)
             warning.get_content_area().add(wbox)
@@ -280,7 +295,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.show_apps(None)
         self.content_box.show_all()
         self.update_button.hide()
-
 
     def show_apps(self, category=None):
         """Display apps filtered by category and search text."""
@@ -428,7 +442,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         ]
         return list({a["app_name"]: a for a in desc + cat}.values())
 
-
     def on_section_clicked(self, button, section):
         self.current_section = section
         for btn in (self.explore_button, self.installed_button, self.updates_button):
@@ -526,7 +539,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             self.show_installed_apps()
         elif section == "updates":
             self.show_update_apps()
-
 
     def _on_search_accel(self, *args):
         self._on_search_toggled(None)
@@ -734,7 +746,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         button.add(Gtk.Label(label="Check for Updates"))
         button.show_all()
 
-
     def _run_script_thread(
         self, app, url_key, action_label, on_success, fallback_url_key=None
     ):
@@ -790,7 +801,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             del self.pending_updates[folder]
             self.update_tracker.pending = self.pending_updates
 
-
     def _create_progress_dialog(
         self, title="Installing...", allow_cancel=True, use_terminal=None
     ):
@@ -803,7 +813,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def _update_terminal(self, terminal_view, text):
         update_terminal(terminal_view, text)
-
 
     def _start_refresh(self):
         """Run the full refresh pipeline on a background thread."""
@@ -844,7 +853,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.main_stack.set_visible_child_name("content")
         self._show_error(f"Refresh failed: {message}")
 
-
     def _start_task_processor(self):
         self.task_running = True
         self.task_thread = threading.Thread(target=self._process_tasks, daemon=True)
@@ -864,7 +872,6 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
     def _stop_task_processor(self):
         self.task_running = False
-
 
     def on_delete_event(self, widget, event):
         try:
@@ -886,4 +893,3 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         )
         dlg.run()
         dlg.destroy()
-

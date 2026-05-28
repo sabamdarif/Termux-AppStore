@@ -4,33 +4,104 @@ readonly TERMUX_HOME=${HOME:-/data/data/com.termux/files/home}
 readonly TERMUX_PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 
 cd "$TERMUX_HOME" || exit 1
+
+LOG_FILE="$TERMUX_HOME/termux-appstore-$(date +%Y%m%d_%H%M%S).log"
+
+function log_warn() {
+	local timestamp
+	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local message="$1"
+	echo "$timestamp - $message" >>"$LOG_FILE"
+}
+
+function log_error() {
+	local timestamp
+	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local message="$1"
+	echo "$timestamp - $message" >>"$LOG_FILE"
+}
+
+function log_debug() {
+	local timestamp
+	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local message="$1"
+	echo "$timestamp - $message" >>"$LOG_FILE"
+}
+
+function print_success() {
+	local msg
+	msg="$1"
+	echo "[✓] $msg "
+	log_debug "$msg"
+}
+
+function print_failed() {
+	local msg
+	msg="$1"
+	echo "[☓] $msg "
+	log_debug "$msg"
+}
+
+function print_warn() {
+	local msg
+	msg="$1"
+	echo "[!] $msg "
+	log_debug "$msg"
+}
+
+function print_msg() {
+	local msg
+	msg="$1"
+	echo "[-] $msg "
+	log_debug "$msg"
+}
+
 ############### Define basic initial values ######################
 TERMUX_DESKTOP_PATH="$TERMUX_PREFIX/etc/termux-desktop"
 CONFIG_FILE="$TERMUX_DESKTOP_PATH/configuration.conf"
+
+DISTRO_ADD_ANSWER=""
+SELECTED_DISTRO=""
+SELECTED_DISTRO_TYPE=""
+PD_AUDIO_CONFIG_ANSWER=""
+PD_USERADD_ANSWER=""
+USER_NAME=""
+PD_PASS_TYPE=""
+PASS=""
+
 if [[ ! -f "$CONFIG_FILE" ]]; then
-	echo " Configuration file CONFIG_FILE not found"
-	exit 1
+	print_warn "Configuration file $CONFIG_FILE not found. Distro support disabled."
+else
+	# shellcheck disable=SC1090
+	source "$CONFIG_FILE"
+	DISTRO_ADD_ANSWER="${distro_add_answer:-}"
+	SELECTED_DISTRO="${selected_distro:-}"
+	SELECTED_DISTRO_TYPE="${selected_distro_type:-}"
+	PD_AUDIO_CONFIG_ANSWER="${pd_audio_config_answer:-}"
+	PD_USERADD_ANSWER="${pd_useradd_answer:-}"
+	USER_NAME="${user_name:-}"
+	PD_PASS_TYPE="${pd_pass_type:-}"
+	PASS="${pass:-}"
 fi
-# shellcheck disable=SC1090
-source "$CONFIG_FILE"
-LOG_FILE="$TERMUX_HOME/termux-appstore-$(date +%Y%m%d_%H%M%S).log"
-DISTRO_ADD_ANSWER="${distro_add_answer:-}"
-SELECTED_DISTRO="${selected_distro:-}"
-SELECTED_DISTRO_TYPE="${selected_distro_type:-}"
-PD_AUDIO_CONFIG_ANSWER="${pd_audio_config_answer:-}"
-PD_USERADD_ANSWER="${pd_useradd_answer:-}"
-USER_NAME="${user_name:-}"
-PD_PASS_TYPE="${pd_pass_type:-}"
-PASS="${pass:-}"
 
 if [[ "$SELECTED_DISTRO_TYPE" == "proot" ]]; then
 	DISTRO_PATH="$TERMUX_PREFIX/var/lib/proot-distro/installed-rootfs/$SELECTED_DISTRO"
 elif [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
 	DISTRO_PATH="/data/local/chroot-distro/installed-rootfs/$SELECTED_DISTRO"
 else
-	print_failed "Unable to get distro type..."
-	exit 1
+	DISTRO_PATH=""
 fi
+
+if [[ -n "$DISTRO_PATH" ]]; then
+	DISTRO_ROOT_PATH="$DISTRO_PATH/root"
+	DISTRO_OPT_PATH="$DISTRO_PATH/opt"
+	DISTRO_USER_HOME_PATH="$DISTRO_PATH/home/$USER_NAME"
+else
+	DISTRO_ROOT_PATH=""
+	DISTRO_OPT_PATH=""
+	DISTRO_USER_HOME_PATH=""
+fi
+
 # shellcheck disable=SC1091
 if [[ -f "/data/data/com.termux/files/usr/bin/termux-setup-package-manager" ]]; then
 	source "/data/data/com.termux/files/usr/bin/termux-setup-package-manager"
@@ -106,56 +177,6 @@ function check_termux() {
 		echo "[☓] Please run this script inside Termux."
 		exit 1
 	fi
-}
-
-function log_warn() {
-	local timestamp
-	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-	local message="$1"
-	echo "$timestamp - $message" >>"$LOG_FILE"
-}
-
-function log_error() {
-	local timestamp
-	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-	local message="$1"
-	echo "$timestamp - $message" >>"$LOG_FILE"
-}
-
-function log_debug() {
-	local timestamp
-	timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-	local message="$1"
-	echo "$timestamp - $message" >>"$LOG_FILE"
-}
-
-function print_success() {
-	local msg
-	msg="$1"
-	echo "[✓] $msg "
-	log_debug "$msg"
-}
-
-function print_failed() {
-	local msg
-	msg="$1"
-	echo "[☓] $msg "
-	log_debug "$msg"
-}
-
-function print_warn() {
-	local msg
-	msg="$1"
-	echo "[!] $msg "
-	log_debug "$msg"
-}
-
-function print_msg() {
-	local msg
-	msg="$1"
-	echo "[-] $msg "
-	log_debug "$msg"
-
 }
 
 function wait_for_keypress() {

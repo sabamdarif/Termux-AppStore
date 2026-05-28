@@ -234,12 +234,31 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
             os.remove(APPSTORE_JSON)
 
         print("Downloading new apps.json...")
-        command = (
-            f"aria2c -x 16 -s 16 {GITHUB_APPS_JSON} -d {APPSTORE_DIR} -o apps.json"
-        )
-        result = subprocess.run(command)
-        if result != 0:
-            print("Error downloading apps.json")
+        download_success = False
+        apps_json_path = os.path.normpath(os.path.join(APPSTORE_DIR, "apps.json"))
+
+        for tool, cmd in [
+            (
+                "aria2c",
+                f"aria2c -x 16 -s 16 '{GITHUB_APPS_JSON}' -d '{APPSTORE_DIR}' -o 'apps.json'",
+            ),
+            ("wget", f"wget '{GITHUB_APPS_JSON}' -O '{apps_json_path}'"),
+            ("curl", f"curl -L '{GITHUB_APPS_JSON}' -o '{apps_json_path}'"),
+        ]:
+            try:
+                print(f"Trying {tool} to download apps.json...")
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                if result.returncode == 0:
+                    download_success = True
+                    print(f"Download with {tool} successful")
+                    break
+                else:
+                    print(f"{tool} failed: {result.stderr}")
+            except Exception as e:
+                print(f"Error using {tool}: {e}")
+
+        if not download_success:
+            print("All download methods failed for apps.json")
             if on_error:
                 on_error("Failed to download apps.json")
             return False

@@ -15,7 +15,7 @@ import time
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import GLib  # type: ignore # noqa: E402
+from gi.repository import GLib, Gtk  # type: ignore # noqa: E402
 
 from termux_appstore.backend.script_runner import download_script
 from termux_appstore.tasks.progress import PHASE_LABELS, ProgressEngine
@@ -89,6 +89,10 @@ def run_script_with_progress(
         status_label.set_text(text)
         progress_bar.set_fraction(fraction)
         progress_bar.set_text(f"{int(fraction * 100)}%")
+
+        cancel_btn = progress_dialog.get_widget_for_response(Gtk.ResponseType.CANCEL)
+        if cancel_btn:
+            cancel_btn.set_sensitive(fraction > 0.8)
         return False
 
     def update_phase_label(phase):

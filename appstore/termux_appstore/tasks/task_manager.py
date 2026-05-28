@@ -39,6 +39,9 @@ def update_terminal(terminal_view, text, log_state=None):
     if terminal_view.terminal_emulator:
         terminal_view.terminal_emulator.append_text(text)
 
+    if log_state is None:
+        log_state = getattr(terminal_view, "log_state", None)
+
     if log_state and log_state.get("active") and log_state.get("file"):
         try:
             clean_text = AnsiColorParser().strip_ansi(text)
@@ -96,15 +99,8 @@ def create_progress_dialog(
     save_button = Gtk.Button.new_from_icon_name(
         "document-save-symbolic", Gtk.IconSize.BUTTON
     )
-    save_button.set_tooltip_text("Save Log to File")
+    save_button.set_tooltip_text("Save Log continuously")
     header_bar.pack_end(save_button)
-
-    log_control_button = Gtk.Button.new_from_icon_name(
-        "media-record-symbolic", Gtk.IconSize.BUTTON
-    )
-    log_control_button.set_tooltip_text("Start Continuous Logging")
-    log_control_button.get_style_context().add_class("destructive-action")
-    header_bar.pack_end(log_control_button)
 
     dialog.set_titlebar(header_bar)
 
@@ -153,6 +149,7 @@ def create_progress_dialog(
     terminal_scroll.set_hexpand(True)
 
     terminal_view = terminal_emulator.text_view
+    terminal_view.log_state = log_state
 
     terminal_box.pack_start(terminal_scroll, True, True, 0)
 
@@ -217,10 +214,6 @@ def create_progress_dialog(
     dialog.connect("response", _on_response)
 
     def _on_save_log(button):
-        buf = terminal_view.get_buffer()
-        start_iter, end_iter = buf.get_bounds()
-        text = buf.get_text(start_iter, end_iter, False)
-
         file_dialog = Gtk.FileChooserDialog(
             title="Save Log File",
             parent=dialog,
@@ -237,86 +230,35 @@ def create_progress_dialog(
 
         response = file_dialog.run()
         if response == Gtk.ResponseType.OK:
-            filename = file_dialog.get_filename()
+            log_state["path"] = file_dialog.get_filename()
             try:
-                clean_text = AnsiColorParser().strip_ansi(text)
-                with open(filename, "w") as f:
-                    f.write(clean_text)
-                current_text = status_label.get_text()
-                status_label.set_text(f"{current_text}\nLog saved to: {filename}")
+                buf = terminal_view.get_buffer()
+                start_iter, end_iter = buf.get_bounds()
+                existing_text = buf.get_text(start_iter, end_iter, False)
+                clean_text = AnsiColorParser().strip_ansi(existing_text)
+
+                log_state["file"] = open(log_state["path"], "w")
+                if clean_text:
+                    log_state["file"].write(clean_text)
+                    log_state["file"].flush()
+
+                log_state["active"] = True
+
+                button.set_sensitive(False)
+                button.set_tooltip_text(f"Logging continuously to: {log_state['path']}")
+
+                terminal_emulator.append_text(
+                    f"\n--- Continuous logging started - saving to {log_state['path']} ---\n"
+                )
             except Exception as e:
-                terminal_emulator.append_text(f"\nError saving log: {e}\n")
+                terminal_emulator.append_text(
+                    f"\n--- Error setting up continuous logging: {e} ---\n"
+                )
+                log_state["file"] = None
+                log_state["active"] = False
         file_dialog.destroy()
 
     save_button.connect("clicked", _on_save_log)
-
-    def _on_log_control(button):
-        if log_state["active"] and log_state["file"]:
-            try:
-                log_state["file"].write("\n--- Logging stopped ---\n")
-                log_state["file"].close()
-            except Exception:
-                pass
-            log_state["file"] = None
-            log_state["active"] = False
-
-            button.set_tooltip_text("Start Continuous Logging")
-            button.set_image(
-                Gtk.Image.new_from_icon_name(
-                    "media-record-symbolic", Gtk.IconSize.BUTTON
-                )
-            )
-            button.get_style_context().add_class("destructive-action")
-            button.get_style_context().remove_class("suggested-action")
-            terminal_emulator.append_text("\n--- Continuous logging stopped ---\n")
-        else:
-            # Start logging — pick file
-            file_dialog = Gtk.FileChooserDialog(
-                title="Save Continuous Log",
-                parent=dialog,
-                action=Gtk.FileChooserAction.SAVE,
-            )
-            file_dialog.add_buttons(
-                Gtk.STOCK_CANCEL,
-                Gtk.ResponseType.CANCEL,
-                Gtk.STOCK_SAVE,
-                Gtk.ResponseType.OK,
-            )
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_dialog.set_current_name(f"appstore_continuous_log_{timestamp}.txt")
-
-            response = file_dialog.run()
-            if response == Gtk.ResponseType.OK:
-                log_state["path"] = file_dialog.get_filename()
-                try:
-                    log_state["file"] = open(log_state["path"], "w")
-                    log_state["file"].write(
-                        f"--- Continuous logging started at "
-                        f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n\n"
-                    )
-                    log_state["active"] = True
-
-                    button.set_tooltip_text("Stop Continuous Logging")
-                    button.set_image(
-                        Gtk.Image.new_from_icon_name(
-                            "media-playback-stop-symbolic", Gtk.IconSize.BUTTON
-                        )
-                    )
-                    button.get_style_context().remove_class("destructive-action")
-                    button.get_style_context().add_class("suggested-action")
-                    terminal_emulator.append_text(
-                        f"\n--- Continuous logging started - "
-                        f"saving to {log_state['path']} ---\n"
-                    )
-                except Exception as e:
-                    terminal_emulator.append_text(
-                        f"\n--- Error setting up logging: {e} ---\n"
-                    )
-                    log_state["file"] = None
-                    log_state["active"] = False
-            file_dialog.destroy()
-
-    log_control_button.connect("clicked", _on_log_control)
 
     dialog.show_all()
 

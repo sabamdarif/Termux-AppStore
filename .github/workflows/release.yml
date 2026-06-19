@@ -22,7 +22,7 @@ jobs:
             is_prerelease: ${{ steps.check.outputs.is_prerelease }}
         steps:
             - name: Checkout AppStore
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
               with:
                   path: repo
 
@@ -62,12 +62,12 @@ jobs:
             fail-fast: false
         steps:
             - name: Checkout AppStore
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
               with:
                   path: appstore
 
             - name: Checkout termux-packages
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
               with:
                   repository: termux/termux-packages
                   path: termux-packages
@@ -118,7 +118,7 @@ jobs:
             contents: write
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
               with:
                   fetch-depth: 0
 

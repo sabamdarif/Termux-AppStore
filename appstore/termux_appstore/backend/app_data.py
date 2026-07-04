@@ -15,10 +15,6 @@ from termux_appstore.constants import (
 )
 from termux_appstore.utils import get_current_arch
 
-# ---------------------------------------------------------------------------
-# Termux Desktop config reader  (shared helper, no GTK)
-# ---------------------------------------------------------------------------
-
 TERMUX_DESKTOP_CONFIG = os.path.join(
     TERMUX_PREFIX, "etc", "termux-desktop", "configuration.conf"
 )
@@ -81,11 +77,6 @@ def read_termux_desktop_config():
     return distro_enabled, selected_distro, selected_distro_type
 
 
-# ---------------------------------------------------------------------------
-# App metadata loading
-# ---------------------------------------------------------------------------
-
-
 def load_app_metadata():
     """Load and filter app metadata from ``apps.json``.
 
@@ -103,7 +94,7 @@ def load_app_metadata():
         print(f"Compatible architectures: {compatible_archs}")
 
         distro_enabled, selected_distro, _ = read_termux_desktop_config()
-        print(f"\nConfiguration status:")
+        print("Configuration status:")
         print(f"Distro enabled: {distro_enabled}")
         print(f"Selected distro: {selected_distro}")
 

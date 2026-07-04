@@ -18,10 +18,6 @@ class Settings:
         self._data = {}
         self.load()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def load(self):
         """Load settings from disk, filling in defaults for missing keys."""
         try:

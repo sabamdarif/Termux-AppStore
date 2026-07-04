@@ -11,9 +11,6 @@ import urllib.request
 
 from termux_appstore.constants import ARCH_COMPATIBILITY
 
-# ---------------------------------------------------------------------------
-# Architecture helpers
-# ---------------------------------------------------------------------------
 
 
 def get_current_arch():
@@ -49,9 +46,6 @@ def is_arch_compatible(app_arch, system_arch=None):
     return any(arch in compatible for arch in supported)
 
 
-# ---------------------------------------------------------------------------
-# Logo validation
-# ---------------------------------------------------------------------------
 
 
 def validate_logo_size(logo_path):
@@ -87,9 +81,6 @@ def validate_logo_size(logo_path):
         return False
 
 
-# ---------------------------------------------------------------------------
-# Network helpers
-# ---------------------------------------------------------------------------
 
 
 def check_internet_connection():
@@ -104,7 +95,6 @@ def check_internet_connection():
     Returns:
         bool: ``True`` when at least one connection succeeds.
     """
-    # Fast TCP checks first
     for host in ("8.8.8.8", "1.1.1.1"):
         try:
             socket.create_connection((host, 53), timeout=3)
@@ -113,7 +103,6 @@ def check_internet_connection():
         except (socket.timeout, socket.error, OSError) as e:
             print(f"Connection to {host} failed: {e}")
 
-    # Fall back to HTTP(S) endpoints
     for url in ("https://www.google.com", "https://github.com"):
         try:
             urllib.request.urlopen(url, timeout=3)
@@ -124,3 +113,4 @@ def check_internet_connection():
 
     print("All connection attempts failed, no internet connectivity detected")
     return False
+

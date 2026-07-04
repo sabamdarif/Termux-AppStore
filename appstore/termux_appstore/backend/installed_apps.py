@@ -21,10 +21,6 @@ class InstalledApps:
         self._apps = []
         self.load()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def load(self):
         """Load the installed-apps list from disk."""
         try:

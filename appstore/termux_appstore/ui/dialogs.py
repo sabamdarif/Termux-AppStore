@@ -18,10 +18,6 @@ from gi.repository import GLib, Gtk  # type: ignore # noqa: E402
 from termux_appstore.backend.distro import check_package_installed
 from termux_appstore.constants import APP_NAME, APP_VERSION
 
-# ---------------------------------------------------------------------------
-# About dialog
-# ---------------------------------------------------------------------------
-
 
 def show_about_dialog(parent):
     """Show the standard About dialog.
@@ -41,11 +37,6 @@ def show_about_dialog(parent):
 
     about_dialog.run()
     about_dialog.destroy()
-
-
-# ---------------------------------------------------------------------------
-# Settings dialog
-# ---------------------------------------------------------------------------
 
 
 def show_settings_dialog(parent, get_setting, set_setting):
@@ -74,7 +65,6 @@ def show_settings_dialog(parent, get_setting, set_setting):
     title_label.set_margin_bottom(10)
     settings_box.pack_start(title_label, False, False, 0)
 
-    # Setting rows
     _SETTINGS = [
         ("use_terminal_for_progress", "Use terminal for progress", False),
         ("enable_auto_refresh", "Enable auto-refresh", True),
@@ -122,10 +112,6 @@ def show_settings_dialog(parent, get_setting, set_setting):
     dialog.run()
     dialog.destroy()
 
-
-# ---------------------------------------------------------------------------
-# Manage Repos dialog
-# ---------------------------------------------------------------------------
 
 _REPOS = [
     {
@@ -180,7 +166,6 @@ def show_repos_dialog(parent, create_progress_dialog, update_terminal):
     list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
     content.pack_start(list_box, True, True, 0)
 
-    # ---- toggled handler ----
     def on_repo_toggled(button, repo_name, label_name):
         is_active = button.get_active()
 
@@ -261,7 +246,6 @@ def show_repos_dialog(parent, create_progress_dialog, update_terminal):
                     lambda e=err: update_terminal(terminal_view, f"\nError: {e}\n")
                 )
 
-            # Re-open dialog to refresh state
             GLib.idle_add(
                 lambda: show_repos_dialog(
                     parent, create_progress_dialog, update_terminal
@@ -271,7 +255,6 @@ def show_repos_dialog(parent, create_progress_dialog, update_terminal):
         threading.Thread(target=_thread, daemon=True).start()
         progress_dialog.run()
 
-    # ---- build rows ----
     for repo in _REPOS:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
@@ -301,7 +284,6 @@ def show_repos_dialog(parent, create_progress_dialog, update_terminal):
             lambda btn, rn=repo["name"], rl=repo["label"]: on_repo_toggled(btn, rn, rl),
         )
 
-    # Close button
     button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
     button_box.set_halign(Gtk.Align.END)
     close_btn = Gtk.Button(label="Close")

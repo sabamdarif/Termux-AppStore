@@ -34,10 +34,6 @@ from termux_appstore.constants import (
 )
 from termux_appstore.utils import get_current_arch
 
-# ---------------------------------------------------------------------------
-# Logo handling
-# ---------------------------------------------------------------------------
-
 
 def download_and_extract_logos():
     """Download and extract the logos zip archive.
@@ -83,7 +79,6 @@ def download_and_extract_logos():
                 return True
             return False
 
-        # Extract
         os.makedirs(APPSTORE_LOGO_DIR, exist_ok=True)
         print("Extracting logos...")
         try:
@@ -114,11 +109,6 @@ def download_and_extract_logos():
             print("Using existing logo directory since an error occurred")
             return True
         return False
-
-
-# ---------------------------------------------------------------------------
-# Data migration
-# ---------------------------------------------------------------------------
 
 
 def migrate_old_data():
@@ -170,11 +160,6 @@ def migrate_old_data():
         traceback.print_exc()
 
 
-# ---------------------------------------------------------------------------
-# Refresh interval check
-# ---------------------------------------------------------------------------
-
-
 def should_auto_refresh():
     """Determine whether an automatic refresh is needed.
 
@@ -213,9 +198,7 @@ def record_refresh_timestamp():
         print(f"Error writing refresh timestamp: {e}")
 
 
-# ---------------------------------------------------------------------------
 # Main refresh pipeline  (runs on a background thread)
-# ---------------------------------------------------------------------------
 
 
 def refresh_data(installed_apps_manager, update_tracker, on_error=None):
@@ -242,29 +225,44 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
         system_arch = get_current_arch()
         compatible_archs = ARCH_COMPATIBILITY.get(system_arch, [system_arch])
 
-        # 1. Ensure old_json directory exists
         os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
         old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, "apps.json")
 
-        # 2. Back up current apps.json
         if os.path.exists(APPSTORE_JSON):
             print("Backing up current apps.json...")
             shutil.copy2(APPSTORE_JSON, old_json_path)
             os.remove(APPSTORE_JSON)
 
-        # 3. Download new apps.json
         print("Downloading new apps.json...")
-        command = (
-            f"aria2c -x 16 -s 16 {GITHUB_APPS_JSON} -d {APPSTORE_DIR} -o apps.json"
-        )
-        result = os.system(command)
-        if result != 0:
-            print("Error downloading apps.json")
+        download_success = False
+        apps_json_path = os.path.normpath(os.path.join(APPSTORE_DIR, "apps.json"))
+
+        for tool, cmd in [
+            (
+                "aria2c",
+                f"aria2c -x 16 -s 16 '{GITHUB_APPS_JSON}' -d '{APPSTORE_DIR}' -o 'apps.json'",
+            ),
+            ("wget", f"wget '{GITHUB_APPS_JSON}' -O '{apps_json_path}'"),
+            ("curl", f"curl -L '{GITHUB_APPS_JSON}' -o '{apps_json_path}'"),
+        ]:
+            try:
+                print(f"Trying {tool} to download apps.json...")
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                if result.returncode == 0:
+                    download_success = True
+                    print(f"Download with {tool} successful")
+                    break
+                else:
+                    print(f"{tool} failed: {result.stderr}")
+            except Exception as e:
+                print(f"Error using {tool}: {e}")
+
+        if not download_success:
+            print("All download methods failed for apps.json")
             if on_error:
                 on_error("Failed to download apps.json")
             return False
 
-        # 4. Handle logos
         if os.path.exists(APPSTORE_LOGO_DIR):
             print("Removing existing logos...")
             shutil.rmtree(APPSTORE_LOGO_DIR)
@@ -276,7 +274,6 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
                 on_error("Failed to update logos")
             return False
 
-        # 5. Filter apps by architecture
         print("Filtering apps based on architecture...")
         with open(APPSTORE_JSON, "r") as f:
             all_apps = json.load(f)
@@ -295,7 +292,6 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
             else:
                 print(f"Skipped incompatible app: {app['app_name']} ({app_arch})")
 
-        # 6. Check installed packages and resolve versions
         print("Checking installed packages and versions...")
         distro_enabled, selected_distro, _ = read_termux_desktop_config()
         distro_config = DistroConfig()
@@ -309,20 +305,17 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
                 filtered_apps, installed_apps, selected_distro, distro_config
             )
 
-        # 7. Save results
         with open(APPSTORE_JSON, "w") as f:
             json.dump(filtered_apps, f, indent=2)
 
         installed_apps_manager.apps = list(installed_apps)
 
-        # 8. Restore preserved pending updates
         for app_id, version in existing_updates.items():
             if app_id in installed_apps:
                 update_tracker.add(app_id, version)
         update_tracker.save()
         print(f"Restored pending updates: {update_tracker.pending}")
 
-        # 9. Record timestamp
         record_refresh_timestamp()
 
         print("Refresh completed successfully!")
@@ -336,11 +329,6 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
         if on_error:
             on_error(str(e))
         return False
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _check_native_packages(apps, installed_apps):
@@ -435,7 +423,6 @@ def _check_distro_packages(apps, installed_apps, selected_distro, distro_config)
                 print(f"Found installed distro app by path: {run_cmd}")
                 installed_apps.add(app["folder_name"])
 
-        # Resolve version
         if app.get("version") == "distro_local_version":
             _resolve_distro_version(app, package_name, selected_distro, distro_config)
 

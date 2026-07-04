@@ -125,7 +125,6 @@ def run_update_pipeline(
             except Exception as e:
                 print(f"Error testing distro: {e}")
 
-        # Step 2: Download new app data (35%)
         _progress(35, "Downloading updates...")
         old_json_path = os.path.join(APPSTORE_OLD_JSON_DIR, "apps.json")
         old_apps_data = []
@@ -133,7 +132,6 @@ def run_update_pipeline(
             with open(old_json_path, "r") as f:
                 old_apps_data = json.load(f)
 
-        # Backup current → old
         if os.path.exists(APPSTORE_JSON):
             os.makedirs(APPSTORE_OLD_JSON_DIR, exist_ok=True)
             shutil.copy2(APPSTORE_JSON, old_json_path)
@@ -160,7 +158,6 @@ def run_update_pipeline(
         with open(APPSTORE_JSON, "r") as f:
             new_apps_data = json.load(f)
 
-        # Step 3: Resolve versions
         _progress(50, "Checking versions...")
         installed_set = set(installed_apps)
         _check_native_packages(new_apps_data, installed_set)
@@ -174,11 +171,9 @@ def run_update_pipeline(
                 distro_config,
             )
 
-        # Save resolved versions
         with open(APPSTORE_JSON, "w") as f:
             json.dump(new_apps_data, f, indent=2)
 
-        # Step 4: Compare versions for installed apps
         _progress(70, "Comparing versions...")
         new_updates = _compare_versions(
             new_apps_data,
@@ -186,22 +181,18 @@ def run_update_pipeline(
             installed_apps,
         )
 
-        # Merge into tracker
         for folder, ver in new_updates.items():
             update_tracker.add(folder, ver)
         update_tracker.save()
 
-        # Step 5: Update logos
         _progress(80, "Updating app logos...")
         _update_logos()
 
-        # Step 6: Save last check timestamp
         _progress(90, "Finishing up...")
         os.makedirs(os.path.dirname(LAST_VERSION_CHECK_FILE), exist_ok=True)
         with open(LAST_VERSION_CHECK_FILE, "w") as f:
             f.write(str(datetime.now().timestamp()))
 
-        # Step 7: Reload data
         _progress(100, "Check for Updates")
         apps_data, categories = load_app_metadata()
 
@@ -221,11 +212,6 @@ def run_update_pipeline(
         if on_error:
             on_error(f"Update check failed: {e}")
         return None
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _distro_update_cmd(distro, base_cmd):
@@ -264,7 +250,7 @@ def _compare_versions(new_apps_data, old_apps_data, installed_apps):
             old_ver = old_app.get("version")
             if old_ver in skip:
                 continue
-            if old_ver != new_ver:
+            if old_ver not in skip and old_ver < new_ver:
                 new_updates[folder] = new_ver
                 print(f"Update found: {new_app['app_name']} {old_ver} → {new_ver}")
     return new_updates

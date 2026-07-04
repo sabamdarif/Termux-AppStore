@@ -7,9 +7,6 @@ live here so they can be imported by any module without circular deps.
 
 import os
 
-# ---------------------------------------------------------------------------
-# Application identity
-# ---------------------------------------------------------------------------
 from termux_appstore._buildconf import APP_ID, APP_NAME, APP_VERSION, PREFIX
 
 APP_COMMENT = "A modern graphical package manager for Termux"
@@ -21,9 +18,6 @@ APP_ICON_NAME = "system-software-install"
 TERMUX_PREFIX = PREFIX
 TERMUX_TMP = os.path.join(TERMUX_PREFIX, "tmp")
 
-# ---------------------------------------------------------------------------
-# App store local data paths  (all under ~/.appstore)
-# ---------------------------------------------------------------------------
 APPSTORE_DIR = os.path.expanduser("~/.appstore")
 APPSTORE_LOGO_DIR = os.path.join(APPSTORE_DIR, "logo")
 APPSTORE_JSON = os.path.join(APPSTORE_DIR, "apps.json")
@@ -34,17 +28,12 @@ INSTALLED_APPS_FILE = os.path.join(APPSTORE_DIR, "installed_apps.json")
 LAST_VERSION_CHECK_FILE = os.path.join(APPSTORE_DIR, "last_version_check")
 SETTINGS_FILE = os.path.join(APPSTORE_DIR, "settings.json")
 
-# ---------------------------------------------------------------------------
-# Remote URLs
-# ---------------------------------------------------------------------------
 GITHUB_APPS_JSON = "https://github.com/sabamdarif/Termux-AppStore/releases/download/apps_data/apps.json"
 GITHUB_LOGOS_ZIP = (
     "https://github.com/sabamdarif/Termux-AppStore/releases/download/logos/logos.zip"
 )
 
-# ---------------------------------------------------------------------------
 # Architecture compatibility mapping
-# ---------------------------------------------------------------------------
 ARCH_COMPATIBILITY = {
     "aarch64": ["aarch64", "arm64", "arm", "all", "any"],
     "armv8l": ["arm", "armv7", "armhf", "all", "any"],
@@ -53,9 +42,6 @@ ARCH_COMPATIBILITY = {
     "i686": ["x86", "i686", "i386", "all", "any"],
 }
 
-# ---------------------------------------------------------------------------
-# Default settings values
-# ---------------------------------------------------------------------------
 DEFAULT_SETTINGS = {
     "use_terminal_for_progress": False,
     "enable_auto_refresh": True,
@@ -64,9 +50,6 @@ DEFAULT_SETTINGS = {
     "last_category": "All Apps",
 }
 
-# ---------------------------------------------------------------------------
-# Termux repository definitions
-# ---------------------------------------------------------------------------
 TERMUX_REPOS = [
     {
         "name": "x11-repo",
@@ -90,10 +73,9 @@ TERMUX_REPOS = [
     },
 ]
 
-# ---------------------------------------------------------------------------
 # Terminal warning filters (messages to suppress in terminal output)
-# ---------------------------------------------------------------------------
 TERMINAL_WARNING_FILTERS = [
     "proot warning: can't sanitize binding",
     "WARNING: apt does not have a stable CLI interface",
 ]
+

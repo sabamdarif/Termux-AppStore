@@ -25,15 +25,10 @@ from gi.repository import Gdk, GLib, Gtk  # type: ignore # noqa: E402
 from termux_appstore.constants import TERMUX_PREFIX
 from termux_appstore.terminal.emulator import TerminalEmulator
 
-# ---------------------------------------------------------------------------
-# CSS helpers
-# ---------------------------------------------------------------------------
-
 
 def find_terminal_css_path():
     """Find the terminal CSS file path with fallback options."""
     possible_paths = [
-        # Inside the package (meson-installed)
         os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "..",
@@ -99,11 +94,6 @@ def apply_terminal_css(widget):
     style_context.add_provider(css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
-# ---------------------------------------------------------------------------
-# Widget factory
-# ---------------------------------------------------------------------------
-
-
 def create_terminal_widget():
     """Create a scrolled window with a terminal view ready to use.
 
@@ -126,11 +116,6 @@ def create_terminal_widget():
     command_runner = CommandRunner(terminal_emulator)
 
     return scrolled_window, terminal_emulator, command_runner
-
-
-# ---------------------------------------------------------------------------
-# CommandRunner
-# ---------------------------------------------------------------------------
 
 
 class CommandRunner:
@@ -168,10 +153,8 @@ class CommandRunner:
         self.terminal.append_text(f"Running: {command}\n\n")
 
         try:
-            # Create a pseudo-terminal for interactive commands
             self.master_fd, self.slave_fd = pty.openpty()
 
-            # Configure terminal size
             fcntl.ioctl(
                 self.slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0)
             )
@@ -180,7 +163,6 @@ class CommandRunner:
             flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
             fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
-            # Set up environment
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
             env["COLUMNS"] = "80"
@@ -198,11 +180,9 @@ class CommandRunner:
                 preexec_fn=os.setsid,
             )
 
-            # Close slave end in the parent
             os.close(self.slave_fd)
             self.slave_fd = None
 
-            # Set up IO watch
             self.io_watch_id = GLib.io_add_watch(
                 self.master_fd,
                 GLib.PRIORITY_DEFAULT,
@@ -243,10 +223,6 @@ class CommandRunner:
             self._cleanup()
             return True
         return False
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
 
     def _on_pty_output(self, fd, condition):
         """Handle output from the pty."""
@@ -328,11 +304,6 @@ class CommandRunner:
         self.is_running = False
 
 
-# ---------------------------------------------------------------------------
-# TerminalWindow (standalone demo window)
-# ---------------------------------------------------------------------------
-
-
 class TerminalWindow(Gtk.Window):
     """Simple terminal window for demonstration / standalone usage."""
 
@@ -343,11 +314,9 @@ class TerminalWindow(Gtk.Window):
         self.load_css()
         self.get_style_context().add_class("terminal-window")
 
-        # Main box
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.add(main_box)
 
-        # Command entry
         entry_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         entry_box.set_margin_start(10)
         entry_box.set_margin_end(10)
@@ -370,7 +339,6 @@ class TerminalWindow(Gtk.Window):
 
         main_box.pack_start(entry_box, False, False, 0)
 
-        # Terminal view
         scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_hexpand(True)
@@ -431,11 +399,6 @@ class TerminalWindow(Gtk.Window):
         return False
 
 
-# ---------------------------------------------------------------------------
-# CommandOutputWindow
-# ---------------------------------------------------------------------------
-
-
 class CommandOutputWindow(Gtk.Window):
     """Window to display command output with terminal emulation."""
 
@@ -459,29 +422,24 @@ class CommandOutputWindow(Gtk.Window):
 
         apply_terminal_css(self)
 
-        # Set window icon
         icon_name = "utilities-terminal"
         icon_theme = Gtk.IconTheme.get_default()
         if icon_theme.has_icon(icon_name):
             self.set_icon_name(icon_name)
 
-        # Main box
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.add(self.main_box)
 
-        # Terminal widget
         self.scrolled_window, self.terminal_emulator, self.command_runner = (
             create_terminal_widget()
         )
         self.main_box.pack_start(self.scrolled_window, True, True, 0)
 
-        # Button box
         self.button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.button_box.set_halign(Gtk.Align.END)
         self.button_box.set_margin_top(12)
         self.main_box.pack_start(self.button_box, False, False, 0)
 
-        # Clear button
         self.clear_button = Gtk.Button()
         self.clear_button.set_tooltip_text("Clear terminal output")
         clear_icon = Gtk.Image.new_from_icon_name(
@@ -491,7 +449,6 @@ class CommandOutputWindow(Gtk.Window):
         self.clear_button.get_style_context().add_class("command-output-clear-button")
         self.button_box.pack_start(self.clear_button, False, False, 0)
 
-        # Save button
         self.save_button = Gtk.Button()
         self.save_button.set_tooltip_text("Save terminal output to file")
         save_icon = Gtk.Image.new_from_icon_name(
@@ -501,7 +458,6 @@ class CommandOutputWindow(Gtk.Window):
         self.save_button.get_style_context().add_class("command-output-save-button")
         self.button_box.pack_start(self.save_button, False, False, 0)
 
-        # Connect buttons
         self.clear_button.connect("clicked", lambda b: self.terminal_emulator.clear())
         self.save_button.connect(
             "clicked", lambda b: self.terminal_emulator.save_terminal_output(self)
@@ -529,11 +485,6 @@ class CommandOutputWindow(Gtk.Window):
         return False
 
 
-# ---------------------------------------------------------------------------
-# Convenience function
-# ---------------------------------------------------------------------------
-
-
 def show_command_output(command, app_name=None, parent=None):
     """Show a command output window and run the command.
 
@@ -550,11 +501,6 @@ def show_command_output(command, app_name=None, parent=None):
     )
     window.run_command(command, app_name)
     return window
-
-
-# ---------------------------------------------------------------------------
-# Standalone entry point
-# ---------------------------------------------------------------------------
 
 
 def main():

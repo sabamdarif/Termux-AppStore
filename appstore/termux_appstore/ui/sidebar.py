@@ -28,7 +28,6 @@ def build_sidebar(categories, on_category_clicked):
     sidebar.set_margin_top(10)
     sidebar.set_margin_bottom(10)
 
-    # Header label
     categories_label = Gtk.Label()
     categories_label.set_markup("<b>Categories</b>")
     categories_label.set_xalign(0)
@@ -37,7 +36,6 @@ def build_sidebar(categories, on_category_clicked):
     categories_label.set_margin_bottom(10)
     sidebar.pack_start(categories_label, False, True, 0)
 
-    # "All Apps" button — selected by default
     all_button = Gtk.Button(label="All Apps")
     all_button.connect("clicked", on_category_clicked)
     all_button.set_size_request(180, 40)

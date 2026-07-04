@@ -13,9 +13,7 @@ import subprocess
 
 from termux_appstore.constants import TERMUX_PREFIX
 
-# ---------------------------------------------------------------------------
 # Distro configuration
-# ---------------------------------------------------------------------------
 
 
 class DistroConfig:
@@ -84,11 +82,6 @@ class DistroConfig:
             return f"chroot-distro login {selected_distro} --shared-tmp -- /bin/bash -c"
         else:
             return f"proot-distro login {selected_distro} --shared-tmp -- /bin/bash -c"
-
-
-# ---------------------------------------------------------------------------
-# Package installation checks
-# ---------------------------------------------------------------------------
 
 
 def check_package_installed(package_name):

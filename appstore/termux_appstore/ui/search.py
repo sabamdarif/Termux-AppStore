@@ -33,7 +33,6 @@ class SearchBar:
         self._debounce_ms = debounce_ms
         self._timeout_id = None
 
-        # Build widgets
         self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.box.set_margin_start(10)
         self.box.set_margin_end(10)
@@ -57,10 +56,6 @@ class SearchBar:
 
         # Start hidden
         self.box.hide()
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def toggle(self, search_button):
         """Toggle visibility and update the search button icon.
@@ -90,10 +85,6 @@ class SearchBar:
     def text(self):
         """Return the current search text (lowercase)."""
         return self.entry.get_text().lower()
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
 
     def _on_changed(self, entry):
         """Handle entry text changes with debounce."""

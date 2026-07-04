@@ -417,7 +417,9 @@ def _check_distro_packages(apps, installed_apps, selected_distro, distro_config)
             installed_apps.add(app["folder_name"])
         elif app.get("run_cmd"):
             run_cmd = app.get(f"{selected_distro}_run_cmd") or app.get("run_cmd")
-            if check_distro_app_installed_by_path(run_cmd, selected_distro):
+            if check_distro_app_installed_by_path(
+                run_cmd, selected_distro, distro_config
+            ):
                 print(f"Found installed distro app by path: {run_cmd}")
                 installed_apps.add(app["folder_name"])
 
@@ -436,7 +438,7 @@ def _resolve_distro_version(app, package_name, selected_distro, distro_config):
     elif selected_distro == "fedora":
         inner = f"dnf info {package_name} 2>/dev/null | awk -F': ' '/^Version/ {{print \\$2}}' | tr -d '\\n'"
         version_cmd = f'{base_cmd} "{inner}"'
-    elif selected_distro == "archlinux":
+    elif selected_distro in ("arch", "archlinux"):
         inner = f"pacman -Si {package_name} 2>/dev/null | grep Version | awk '{{print \\$3}}' | tr -d '\\n'"
         version_cmd = f'{base_cmd} "{inner}"'
 

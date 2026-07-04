@@ -7,6 +7,7 @@ to check whether native or distro packages are installed.
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 
@@ -173,7 +174,7 @@ def check_distro_package_installed(package_name, selected_distro, distro_config)
             cmd += f'apt list --installed 2>/dev/null | grep -q "^{package_name}/"\''
         elif selected_distro == "fedora":
             cmd += f" 'rpm -q {package_name} >/dev/null 2>&1'"
-        elif selected_distro == "archlinux":
+        elif selected_distro in ("arch", "archlinux"):
             cmd += f" 'pacman -Qi {package_name} >/dev/null 2>&1 || "
             cmd += f"pacman -Q {package_name} >/dev/null 2>&1'"
 
@@ -185,7 +186,7 @@ def check_distro_package_installed(package_name, selected_distro, distro_config)
         return False
 
 
-def check_distro_app_installed_by_path(run_cmd, selected_distro):
+def check_distro_app_installed_by_path(run_cmd, selected_distro, distro_config=None):
     """Check if a distro app is installed by verifying executable path.
 
     Args:
@@ -193,13 +194,43 @@ def check_distro_app_installed_by_path(run_cmd, selected_distro):
         selected_distro: Distro name.
 
     Returns:
-        bool: ``True`` when the path exists (currently incomplete upstream).
+        bool: ``True`` when the executable path exists inside the distro.
     """
     if not run_cmd or not selected_distro:
         return False
 
-    path_match = re.search(r"/[^ ]+", run_cmd)
-    if not path_match:
+    try:
+        parts = shlex.split(run_cmd)
+    except ValueError:
+        parts = run_cmd.split()
+
+    executable_path = None
+    for part in parts:
+        if part.startswith("/"):
+            executable_path = part
+            break
+
+    if not executable_path:
+        path_match = re.search(r"/[^ ]+", run_cmd)
+        if path_match:
+            executable_path = path_match.group(0).strip()
+
+    if not executable_path:
         return False
 
-    return False
+    try:
+        if distro_config is None:
+            distro_config = DistroConfig()
+
+        inner = f"test -e {shlex.quote(executable_path)}"
+        cmd = f"{distro_config.get_command(selected_distro)} {shlex.quote(inner)}"
+        result = subprocess.run(
+            ["bash", "-c", cmd],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except Exception as e:
+        print(f"Error checking distro app path {executable_path}: {e}")
+        return False

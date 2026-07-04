@@ -79,6 +79,7 @@ progress_phase "install" 50 "Installing packages..."
 update_sys
 
 progress_phase "install" 70 "Installing OBS Studio and dependencies..."
+package_install_and_check "mbedtls luajit"
 apt install ./*.deb -y 2>&1 | while IFS= read -r line; do
 	echo "$line"
 	if [[ "${line,,}" == *"unpacking"* ]]; then

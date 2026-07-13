@@ -32,3 +32,4 @@ Special thanks to:
 
 - [Pi-Appps](https://github.com/Botspot/pi-apps)
 - [phoenixbyrd/App-Installer](https://github.com/phoenixbyrd/App-Installer)
+- [taleinat/fuzzysearch](https://github.com/taleinat/fuzzysearch) — the bundled `termux_appstore/fuzzysearch.py` module is a lightweight pure-Python port of this library (MIT License, Copyright (c) 2013-2024 taleinat).

@@ -47,10 +47,7 @@ from termux_appstore.ui.search import SearchBar
 from termux_appstore.ui.sidebar import build_sidebar
 from termux_appstore.utils import get_current_arch
 
-try:
-    from fuzzysearch import find_near_matches  # type: ignore
-except ImportError:
-    find_near_matches = None
+from termux_appstore.fuzzysearch import find_near_matches
 
 
 class AppStoreWindow(Gtk.ApplicationWindow):
@@ -392,7 +389,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
         self.app_list_box.pack_start(box, True, True, 0)
 
     def _get_fuzzy_score(self, search_text, text):
-        if not search_text or not text or not find_near_matches:
+        if not search_text or not text:
             return 0
         search_len = len(search_text)
         if search_len <= 2:
@@ -410,7 +407,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             return 0
 
     def _apply_search_filter(self, apps, search_text):
-        if self.get_setting("enable_fuzzy_search", False) and find_near_matches:
+        if self.get_setting("enable_fuzzy_search", False):
             threshold = 60
             scored = []
             for app in apps:

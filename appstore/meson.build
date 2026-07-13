@@ -34,6 +34,7 @@ termux_appstore_sources = files(
   'termux_appstore/__main__.py',
   'termux_appstore/application.py',
   'termux_appstore/constants.py',
+  'termux_appstore/fuzzysearch.py',
   'termux_appstore/main.py',
   'termux_appstore/utils.py',
   'termux_appstore/window.py',

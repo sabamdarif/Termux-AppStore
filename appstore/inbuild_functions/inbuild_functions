@@ -39,7 +39,15 @@ function print_failed() {
 	local msg
 	msg="$1"
 	echo "[☓] $msg "
-	log_debug "$msg"
+	log_error "$msg"
+	# Surface the failure to the app store UI. Under the runner's strict
+	# mode (set -e) + ERR trap, returning non-zero aborts the whole script,
+	# so this is fatal in practice while still composing with `cmd || ...`.
+	# Mark the error as already reported so the ERR trap does not overwrite
+	# this (meaningful) message with a generic one.
+	__APPSTORE_ERR_REPORTED=1
+	progress_error "$msg"
+	return 1
 }
 
 function print_warn() {
@@ -153,6 +161,49 @@ progress_error() {
 	_progress_emit "__ERROR__ ${1:-Unknown error}"
 }
 # ==================== END PROGRESS SYSTEM ====================
+
+# ==================== FAILURE / LIFECYCLE ====================
+# The Python runner enables `set -Eeo pipefail` and calls __appstore_begin
+# right after sourcing this file, then __appstore_end at the very end of the
+# script. Any unhandled command failure trips the ERR trap, which emits an
+# __ERROR__ token and exits non-zero so the app store never falsely reports
+# success. __DONE__ is emitted only when the script reaches the end cleanly.
+
+__APPSTORE_FAILED=0
+__APPSTORE_ERR_REPORTED=0
+
+_appstore_err_trap() {
+	local ec=$?
+	local cmd=$BASH_COMMAND
+	local line=${BASH_LINENO[0]:-?}
+	__APPSTORE_FAILED=1
+	# If print_failed already emitted a meaningful __ERROR__, don't clobber
+	# it with a generic one — just abort.
+	if [[ "$__APPSTORE_ERR_REPORTED" != "1" ]]; then
+		progress_error "Step failed at line ${line} (exit ${ec}): ${cmd}"
+	fi
+	echo "[☓] Command failed (exit ${ec}) at line ${line}: ${cmd}"
+	log_error "ERR trap: line ${line} exit ${ec}: ${cmd}"
+	exit "$ec"
+}
+
+# Call after sourcing this file to arm failure handling.
+__appstore_begin() {
+	trap '_appstore_err_trap' ERR
+}
+
+# Call at the very end of a script; emits __DONE__ only on a clean run.
+__appstore_end() {
+	if [[ "$__APPSTORE_FAILED" == "0" ]]; then
+		progress_done
+	fi
+}
+
+# Run a command whose failure is non-fatal (best-effort). Use sparingly.
+soft_run() {
+	"$@" || return 0
+}
+# ==================== END FAILURE / LIFECYCLE ====================
 
 # ==================== BASE FUNCTIONS ====================
 
@@ -321,7 +372,7 @@ function download_file() {
 			successful_attempt=$attempt
 			break
 		else
-			print_failed "Download failed. Retrying... ($attempt/$max_retries)"
+			print_warn "Download failed. Retrying... ($attempt/$max_retries)"
 		fi
 		((attempt++))
 	done
@@ -349,6 +400,7 @@ function package_install_and_check {
 	local packs_list
 	# Properly splits on spaces
 	IFS=' ' read -r -a packs_list <<<"$*"
+	local overall_failed=0
 
 	# pacman part
 	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
@@ -398,6 +450,11 @@ function package_install_and_check {
 					print_warn "Failed to install package: ${package}. Trying again... ($retry_count)"
 				fi
 			done
+
+			if [[ "$install_success" == false ]]; then
+				overall_failed=1
+				print_warn "Giving up on package after ${max_retries} attempts: $package"
+			fi
 		done
 	else
 		#apt part
@@ -447,9 +504,20 @@ function package_install_and_check {
 					apt-get install --fix-missing -y 2>/dev/null
 				fi
 			done
+
+			if [[ "$install_success" == false ]]; then
+				overall_failed=1
+				print_warn "Giving up on package after ${max_retries} attempts: $package"
+			fi
 		done
 	fi
 	progress_phase "install" 100 "Package installation complete"
+
+	if [[ "$overall_failed" != "0" ]]; then
+		progress_error "One or more packages failed to install"
+		return 1
+	fi
+	return 0
 }
 
 # will check the package is installed or not then remove it
@@ -764,7 +832,7 @@ function select_an_option() {
 			break
 		else
 			echo
-			print_failed " Invalid input, Please enter a number between 1 and $max_options"
+			print_warn " Invalid input, Please enter a number between 1 and $max_options"
 		fi
 	done
 }
@@ -856,6 +924,7 @@ TERMUX_DESKTOP_PATH="$TERMUX_DESKTOP_PATH"
 CONFIG_FILE="$CONFIG_FILE"
 LOG_FILE="$LOG_FILE"
 SELECTED_DISTRO="$SELECTED_DISTRO"
+PROGRESS_ENABLED="${PROGRESS_ENABLED:-0}"
 EOF
 	else
 		cat <<EOF >"$script_path"
@@ -867,13 +936,22 @@ TERMUX_DESKTOP_PATH="$TERMUX_DESKTOP_PATH"
 CONFIG_FILE="$CONFIG_FILE"
 LOG_FILE="$LOG_FILE"
 SELECTED_DISTRO="$SELECTED_DISTRO"
+PROGRESS_ENABLED="${PROGRESS_ENABLED:-0}"
 EOF
 	fi
 	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore | sudo tee -a "$script_path" >/dev/null
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore | sudo tee -a "$script_path" >/dev/null
+		{
+			echo "set -Eeo pipefail"
+			echo "__appstore_begin"
+		} | sudo tee -a "$script_path" >/dev/null
 		echo "$shell_setup_content" | sudo tee -a "$script_path" >/dev/null
 	else
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore >>"$script_path"
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore >>"$script_path"
+		{
+			echo "set -Eeo pipefail"
+			echo "__appstore_begin"
+		} >>"$script_path"
 		echo "$shell_setup_content" >>"$script_path"
 	fi
 	# Make script executable
@@ -947,6 +1025,7 @@ function _pd_package_install_and_check_internal() {
 
 	# shellcheck disable=SC2206
 	local packs_list=($@)
+	local overall_failed=0
 
 	if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
 		local all_packages=()
@@ -992,6 +1071,11 @@ function _pd_package_install_and_check_internal() {
 					apt-get install --fix-missing -y 2>/dev/null
 				fi
 			done
+
+			if [[ "$install_success" == false ]]; then
+				overall_failed=1
+				print_warn "Giving up on distro package after ${max_retries} attempts: $package"
+			fi
 		done
 
 	elif [[ "$SELECTED_DISTRO" == "arch" ]]; then
@@ -1036,6 +1120,11 @@ function _pd_package_install_and_check_internal() {
 					print_warn "Failed to install distro package: ${package}. Trying again... ($retry_count)"
 				fi
 			done
+
+			if [[ "$install_success" == false ]]; then
+				overall_failed=1
+				print_warn "Giving up on distro package after ${max_retries} attempts: $package"
+			fi
 		done
 
 	elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
@@ -1077,9 +1166,20 @@ function _pd_package_install_and_check_internal() {
 					print_warn "Failed to install distro package: ${package}. Trying again... ($retry_count)"
 				fi
 			done
+
+			if [[ "$install_success" == false ]]; then
+				overall_failed=1
+				print_warn "Giving up on distro package after ${max_retries} attempts: $package"
+			fi
 		done
 	fi
 	progress_phase "install" 100 "Distro package installation complete"
+
+	if [[ "$overall_failed" != "0" ]]; then
+		progress_error "One or more distro packages failed to install"
+		return 1
+	fi
+	return 0
 }
 
 function _pd_package_remove_and_check_internal() {

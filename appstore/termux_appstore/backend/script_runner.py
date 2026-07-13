@@ -15,7 +15,13 @@ from termux_appstore.constants import TERMUX_PREFIX, TERMUX_TMP
 
 
 def modify_script(script_path):
-    """Inject ``source inbuild_functions`` after the shebang line.
+    """Prepare a downloaded script for reliable execution.
+
+    Inserts, right after the shebang: ``set -Eeo pipefail``, a ``source``
+    of the shared ``inbuild_functions`` library, and ``__appstore_begin``
+    (which arms the ERR trap). Appends ``__appstore_end`` at EOF so a clean
+    run emits ``__DONE__`` and any failure emits ``__ERROR__`` + non-zero
+    exit.
 
     Supports both ``#!/data/data/com.termux/files/usr/bin/bash`` and
     ``#!/bin/bash`` shebangs.
@@ -69,9 +75,23 @@ def modify_script(script_path):
             "#!/bin/bash\n",
         ]:
             if shebang in content:
-                new_content = content.replace(
-                    shebang, f"{shebang}source {inbuild_functions_path}\n"
+                # After the shebang: enable strict mode, source the shared
+                # library, then arm the failure trap. `set -Eeo pipefail`
+                # (deliberately NOT -u, to avoid breaking scripts that
+                # reference maybe-unset vars) makes any unhandled command
+                # failure abort the script; the ERR trap emits __ERROR__ and
+                # exits non-zero. __appstore_end at EOF emits __DONE__ only on
+                # a clean run, so the app store never falsely reports success.
+                header = (
+                    f"{shebang}"
+                    "set -Eeo pipefail\n"
+                    f"source {inbuild_functions_path}\n"
+                    "__appstore_begin\n"
                 )
+                new_content = content.replace(shebang, header, 1)
+                if not new_content.endswith("\n"):
+                    new_content += "\n"
+                new_content += "__appstore_end\n"
                 with open(script_path, "w") as f:
                     f.write(new_content)
                 return True

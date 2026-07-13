@@ -260,6 +260,78 @@ def create_progress_dialog(
 
     save_button.connect("clicked", _on_save_log)
 
+    def _set_error(action_label, full_log, exit_code, reason):
+        """Convert the dialog into a persistent error state.
+
+        Shows the full log in the terminal view, marks the status red, swaps
+        the Cancel button for Close, and makes the Save button export the
+        complete failure log.
+        """
+        # Force the terminal (log) view so the user sees everything.
+        stack.set_visible_child_name("terminal")
+        terminal_button.set_tooltip_text("Show Progress")
+
+        # Replace the terminal contents with the full accumulated log so the
+        # transcript is complete even if some lines were filtered live.
+        try:
+            terminal_emulator.clear()
+        except Exception:
+            pass
+        terminal_emulator.append_text(full_log + "\n")
+
+        code_txt = "" if exit_code is None else f" (exit code {exit_code})"
+        safe_label = GLib.markup_escape_text(action_label)
+        safe_reason = GLib.markup_escape_text(reason) if reason else ""
+        detail = f"\n{safe_reason}" if safe_reason else ""
+        status_label.set_markup(
+            f"<b>{safe_label} failed{code_txt}.</b>{detail}\n"
+            "Review the log below and use the Save button to keep a copy."
+        )
+        status_label.get_style_context().add_class("error")
+
+        # Save button: export the full failure log directly.
+        def _save_failure_log(_button):
+            file_dialog = Gtk.FileChooserDialog(
+                title="Save Failure Log",
+                parent=dialog,
+                action=Gtk.FileChooserAction.SAVE,
+            )
+            file_dialog.add_buttons(
+                Gtk.STOCK_CANCEL,
+                Gtk.ResponseType.CANCEL,
+                Gtk.STOCK_SAVE,
+                Gtk.ResponseType.OK,
+            )
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_dialog.set_current_name(f"appstore_failure_{timestamp}.log")
+            if file_dialog.run() == Gtk.ResponseType.OK:
+                path = file_dialog.get_filename()
+                try:
+                    clean = AnsiColorParser().strip_ansi(full_log)
+                    with open(path, "w") as fh:
+                        fh.write(f"{action_label} failed{code_txt}\n")
+                        if reason:
+                            fh.write(f"Reason: {reason}\n")
+                        fh.write("\n" + clean + "\n")
+                    terminal_emulator.append_text(f"\n--- Log saved to {path} ---\n")
+                except Exception as exc:
+                    terminal_emulator.append_text(f"\n--- Error saving log: {exc} ---\n")
+            file_dialog.destroy()
+
+        save_button.disconnect_by_func(_on_save_log)
+        save_button.connect("clicked", _save_failure_log)
+        save_button.set_sensitive(True)
+        save_button.set_tooltip_text("Save the full failure log")
+
+        # Swap Cancel -> Close (Cancel had a >80% sensitivity gate).
+        cancel_btn = dialog.get_widget_for_response(Gtk.ResponseType.CANCEL)
+        if cancel_btn:
+            cancel_btn.set_label("Close")
+            cancel_btn.set_sensitive(True)
+            cancel_btn.get_style_context().remove_class("destructive-action")
+
+    dialog.appstore_set_error = _set_error
+
     dialog.show_all()
 
     return (

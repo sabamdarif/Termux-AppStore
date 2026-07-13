@@ -22,6 +22,23 @@ from termux_appstore.tasks.progress import PHASE_LABELS, ProgressEngine
 from termux_appstore.tasks.task_manager import update_terminal
 
 
+def _show_failure(progress_dialog, action_label, log_lines, exit_code, reason):
+    """Switch the progress dialog into a persistent error state on the main
+    thread, showing the full accumulated log with a working Save button.
+
+    The dialog is NOT destroyed — the user reads/saves the log and closes it.
+    """
+    full_log = "\n".join(log_lines)
+
+    def _apply():
+        setter = getattr(progress_dialog, "appstore_set_error", None)
+        if setter:
+            setter(action_label, full_log, exit_code, reason)
+        return False
+
+    GLib.idle_add(_apply)
+
+
 def run_script_with_progress(
     *,
     app,
@@ -61,6 +78,7 @@ def run_script_with_progress(
     cancelled = False
     process = None
     script_file = None
+    log_lines = []
 
     def on_cancel(*_args):
         nonlocal cancelled
@@ -196,6 +214,10 @@ def run_script_with_progress(
                 if not line_stripped:
                     continue
 
+                # Keep the full transcript in memory so it survives dialog
+                # destruction and can be shown/saved on failure.
+                log_lines.append(line_stripped)
+
                 fraction, message = engine.process_line(line_stripped)
 
                 GLib.idle_add(update_progress, fraction, message)
@@ -205,7 +227,23 @@ def run_script_with_progress(
 
                 GLib.idle_add(lambda ln=line: update_terminal(terminal_view, ln))
 
-            if process.wait() == 0 and not cancelled:
+            exit_code = process.wait()
+
+            # Success requires ALL of: clean exit, an explicit __DONE__ token,
+            # no __ERROR__ token, and not cancelled. Exit code alone is not
+            # trusted — a script can exit 0 after a tolerated sub-failure.
+            succeeded = (
+                exit_code == 0
+                and engine.is_done
+                and not engine.has_error
+                and not cancelled
+            )
+
+            if cancelled:
+                GLib.idle_add(progress_dialog.destroy)
+                return
+
+            if succeeded:
                 GLib.idle_add(
                     update_progress,
                     0.95,
@@ -218,18 +256,24 @@ def run_script_with_progress(
 
                 GLib.idle_add(update_progress, 1.0, f"{action_label} complete!")
                 time.sleep(2)
+                GLib.idle_add(progress_dialog.destroy)
             else:
-                if not cancelled:
-                    GLib.idle_add(update_progress, 1.0, f"{action_label} failed!")
-                    time.sleep(2)
-
-            GLib.idle_add(progress_dialog.destroy)
+                reason = engine.current_message if engine.has_error else ""
+                _show_failure(
+                    progress_dialog,
+                    action_label,
+                    log_lines,
+                    exit_code,
+                    reason,
+                )
+                # Do NOT destroy — leave the dialog open so the user can read
+                # and save the full log.
 
         except Exception as e:
             print(f"{action_label} error: {e}")
-            GLib.idle_add(update_progress, 1.0, f"Error: {e}")
-            time.sleep(2)
-            GLib.idle_add(progress_dialog.destroy)
+            log_lines.append(f"\n[appstore] Unexpected error: {e}")
+            _show_failure(progress_dialog, action_label, log_lines, None, str(e))
+            # Leave the dialog open with the accumulated log.
 
         finally:
             if process:

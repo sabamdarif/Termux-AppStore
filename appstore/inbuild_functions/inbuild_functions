@@ -311,11 +311,66 @@ function check_and_restore() {
 	done
 }
 
+# ==================== SHA256 DOWNLOAD INTEGRITY (Part C-bis) ====================
+# APPSTORE_REQUIRE_SHA256 gates the *missing*-hash policy (CB4):
+#   0 (migration default) -> a missing hash warns and continues.
+#   1 (target)            -> a missing hash is fatal.
+# A hash that is present but does NOT match is always fatal, regardless.
+: "${APPSTORE_REQUIRE_SHA256:=0}"
+
+# _verify_sha256 <file> <expected-hex> -> 0 match / 1 mismatch
+function _verify_sha256() {
+	local file="$1" expected="${2,,}" actual
+	if command -v sha256sum &>/dev/null; then
+		actual="$(sha256sum -- "$file" | awk '{print $1}')"
+	elif command -v shasum &>/dev/null; then
+		actual="$(shasum -a 256 -- "$file" | awk '{print $1}')"
+	else
+		print_warn "No sha256sum/shasum available; cannot verify $file"
+		return 0
+	fi
+	[[ "$actual" == "$expected" ]]
+}
+
+# _resolve_expected_sha <dest_file> [explicit-arg] -> prints expected hash or ""
+# Resolution order (CB2): explicit 3rd arg > sha256["<file>"] map > scalar $sha256.
+function _resolve_expected_sha() {
+	local dest_file="$1" explicit="${2:-}"
+	if [[ -n "$explicit" ]]; then
+		echo "$explicit"
+		return 0
+	fi
+	# Associative-array header: sha256["<filename>"]="<hex>"
+	if declare -p sha256 &>/dev/null 2>&1; then
+		if [[ "$(declare -p sha256 2>/dev/null)" == "declare -A"* ]]; then
+			echo "${sha256[$dest_file]:-}"
+			return 0
+		fi
+		# Scalar header: sha256="<hex>" (or "skip")
+		echo "${sha256:-}"
+		return 0
+	fi
+	echo ""
+}
+
+# _handle_missing_hash <dest_file> -> 0 continue / non-zero fatal (via print_failed)
+function _handle_missing_hash() {
+	local dest_file="$1"
+	if [[ "$APPSTORE_REQUIRE_SHA256" == "1" ]]; then
+		progress_error "No SHA256 pinned for $dest_file"
+		print_failed "SHA256 required but not pinned for $dest_file (set sha256=... or sha256=\"skip\")."
+		return 1
+	fi
+	print_warn "SHA256 not pinned for $dest_file — skipping verification"
+	return 0
+}
+
 function download_file() {
-	local dest url dest_dir dest_file
+	local dest url dest_dir dest_file expected_sha
 	local max_retries=5
 	local attempt=1
 	local successful_attempt=0
+	local verify_attempt=1 verify_max=3
 
 	if [[ -z "$2" ]]; then
 		url="$1"
@@ -335,61 +390,96 @@ function download_file() {
 	dest_dir="$(dirname "$dest")"
 	dest_file="$(basename "$dest")"
 
+	# CB2: resolve the expected hash once (explicit 3rd arg wins, then header).
+	expected_sha="$(_resolve_expected_sha "$dest_file" "${3:-}")"
+
 	progress_phase "download" 0 "Starting download: $dest_file"
 
-	while [[ $attempt -le $max_retries ]]; do
-		print_msg "Downloading $dest_file..."
-		if [[ ! -s "$dest" ]]; then
-			check_and_delete "$dest"
+	# Outer loop = verification attempts (CB3). Each iteration re-runs the full
+	# network-retry download so a corrupted file gets re-fetched, not reused.
+	while :; do
+		attempt=1
+		successful_attempt=0
+
+		while [[ $attempt -le $max_retries ]]; do
+			print_msg "Downloading $dest_file..."
+			if [[ ! -s "$dest" ]]; then
+				check_and_delete "$dest"
+			fi
+
+			if command -v aria2c &>/dev/null; then
+				aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 \
+					--dir="$dest_dir" -o "$dest_file" "$url" 2>&1 |
+					while IFS= read -r line; do
+						echo "$line"
+						if [[ "$line" =~ \(([0-9]+)%\) ]]; then
+							progress_phase "download" "ASH_REMATCH[1]}" "Downloading $dest_file (ASH_REMATCH[1]}%)"
+						fi
+					done
+				download_status="${PIPESTATUS[0]}"
+			elif command -v wget &>/dev/null; then
+				wget --tries=5 --timeout=15 --retry-connrefused --progress=bar:force \
+					-O "$dest" "$url" 2>&1 |
+					while IFS= read -r line; do
+						echo "$line"
+						if [[ "$line" =~ ([0-9]+)% ]]; then
+							progress_phase "download" "ASH_REMATCH[1]}" "Downloading $dest_file (ASH_REMATCH[1]}%)"
+						fi
+					done
+				download_status="${PIPESTATUS[0]}"
+			else
+				curl -# -L "$url" -o "$dest"
+				download_status=$?
+			fi
+
+			if [[ -f "$dest" && -s "$dest" ]]; then
+				successful_attempt=$attempt
+				break
+			else
+				print_warn "Download failed. Retrying... ($attempt/$max_retries)"
+			fi
+			((attempt++))
+		done
+
+		if [[ ! -f "$dest" || ! -s "$dest" ]]; then
+			progress_error "Download failed: $dest_file"
+			print_failed "Failed to download the file after $max_retries attempts. Exiting."
+			return 1
 		fi
 
-		if command -v aria2c &>/dev/null; then
-			aria2c --summary-interval=1 -x16 -s16 --retry-wait=15 --max-tries=5 \
-				--dir="$dest_dir" -o "$dest_file" "$url" 2>&1 |
-				while IFS= read -r line; do
-					echo "$line"
-					if [[ "$line" =~ \(([0-9]+)%\) ]]; then
-						progress_phase "download" "ASH_REMATCH[1]}" "Downloading $dest_file (ASH_REMATCH[1]}%)"
-					fi
-				done
-			download_status="${PIPESTATUS[0]}"
-		elif command -v wget &>/dev/null; then
-			wget --tries=5 --timeout=15 --retry-connrefused --progress=bar:force \
-				-O "$dest" "$url" 2>&1 |
-				while IFS= read -r line; do
-					echo "$line"
-					if [[ "$line" =~ ([0-9]+)% ]]; then
-						progress_phase "download" "ASH_REMATCH[1]}" "Downloading $dest_file (ASH_REMATCH[1]}%)"
-					fi
-				done
-			download_status="${PIPESTATUS[0]}"
-		else
-			curl -# -L "$url" -o "$dest"
-			download_status=$?
-		fi
-
-		if [[ -f "$dest" && -s "$dest" ]]; then
-			successful_attempt=$attempt
+		# ---- CB2/CB3/CB4: verify integrity ----
+		if [[ -z "$expected_sha" ]]; then
+			# No hash configured for this file — apply the missing-hash policy.
+			_handle_missing_hash "$dest_file" || return 1
 			break
-		else
-			print_warn "Download failed. Retrying... ($attempt/$max_retries)"
 		fi
-		((attempt++))
+		if [[ "$expected_sha" == "skip" ]]; then
+			print_warn "SHA256 verification skipped for $dest_file (sha256=\"skip\")"
+			break
+		fi
+		if _verify_sha256 "$dest" "$expected_sha"; then
+			break
+		fi
+
+		local actual_sha
+		actual_sha="$( { command -v sha256sum &>/dev/null && sha256sum -- "$dest"; } | awk '{print $1}')"
+		print_warn "Checksum mismatch (attempt $verify_attempt/$verify_max) for $dest_file: expected ${expected_sha,,}, got ${actual_sha}"
+		check_and_delete "$dest"
+		if ((verify_attempt >= verify_max)); then
+			progress_error "Checksum verification failed: $dest_file"
+			print_failed "SHA256 mismatch after $verify_max attempts for $dest_file (expected ${expected_sha,,}, got ${actual_sha})."
+			return 1
+		fi
+		((verify_attempt++))
 	done
 
-	if [[ -f "$dest" ]]; then
-		progress_phase "download" 100 "Download complete: $dest_file"
-		if [[ $successful_attempt -eq 1 ]]; then
-			print_success "File downloaded successfully."
-		else
-			print_success "File downloaded successfully on attempt $successful_attempt."
-		fi
-		return 0
+	progress_phase "download" 100 "Download complete: $dest_file"
+	if [[ $successful_attempt -eq 1 ]]; then
+		print_success "File downloaded successfully."
+	else
+		print_success "File downloaded successfully on attempt $successful_attempt."
 	fi
-
-	progress_error "Download failed: $dest_file"
-	print_failed "Failed to download the file after $max_retries attempts. Exiting."
-	return 1
+	return 0
 }
 
 # will check if the package is already installed or not, if it installed then reinstall and print success/failed message
@@ -940,14 +1030,14 @@ PROGRESS_ENABLED="${PROGRESS_ENABLED:-0}"
 EOF
 	fi
 	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore _resolve_icon_path create_desktop_entry detect_arch install_deb_into_distro install_archive_into_opt install_deb_into_termux install_deb_in_termux_pacman standard_uninstall | sudo tee -a "$script_path" >/dev/null
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file _verify_sha256 _resolve_expected_sha _handle_missing_hash package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore _resolve_icon_path create_desktop_entry detect_arch install_deb_into_distro install_archive_into_opt install_deb_into_termux install_deb_in_termux_pacman standard_uninstall | sudo tee -a "$script_path" >/dev/null
 		{
 			echo "set -Eeo pipefail"
 			echo "__appstore_begin"
 		} | sudo tee -a "$script_path" >/dev/null
 		echo "$shell_setup_content" | sudo tee -a "$script_path" >/dev/null
 	else
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore _resolve_icon_path create_desktop_entry detect_arch install_deb_into_distro install_archive_into_opt install_deb_into_termux install_deb_in_termux_pacman standard_uninstall >>"$script_path"
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file _verify_sha256 _resolve_expected_sha _handle_missing_hash package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore _resolve_icon_path create_desktop_entry detect_arch install_deb_into_distro install_archive_into_opt install_deb_into_termux install_deb_in_termux_pacman standard_uninstall >>"$script_path"
 		{
 			echo "set -Eeo pipefail"
 			echo "__appstore_begin"

@@ -10,7 +10,7 @@ page_url="https://github.com/th-ch/youtube-music"
 run_cmd="/opt/AppImageLauncher/youtube-music/youtube-music --no-sandbox"
 
 app_arch=$(uname -m)
-case " $app_arch" in
+case "$app_arch" in
 aarch64) archtype="arm64" ;;
 *)
 	print_failed "Unsupported architectures"

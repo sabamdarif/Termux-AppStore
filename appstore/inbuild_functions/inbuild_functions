@@ -1628,4 +1628,146 @@ function detect_arch() {
 
 	echo "$token"
 }
+
+# C3. install_deb_into_distro — download a .deb/.rpm and install it inside the
+# selected distro, auto-selecting apt vs dnf. Encapsulates the download ->
+# copy-into-/root -> update -> install -> cleanup dance.
+#
+#   install_deb_into_distro "<url>" "<filename>" [<sha256>]
+#
+# The optional trailing <sha256> is forwarded to download_file (verified once
+# Part C-bis lands). Requires a selected distro.
+function install_deb_into_distro() {
+	local url="$1"
+	local filename="$2"
+	local sha="${3:-}"
+
+	if [[ -z "$url" || -z "$filename" ]]; then
+		print_failed "install_deb_into_distro: <url> and <filename> are required"
+		return 1
+	fi
+	if [[ -z "$SELECTED_DISTRO" ]]; then
+		print_failed "install_deb_into_distro: no distro selected"
+		return 1
+	fi
+
+	local temp_download="$TMPDIR/${filename}"
+	progress_phase "download" 0 "Downloading ${filename}..."
+	check_and_delete "$temp_download"
+	download_file "$temp_download" "$url" "$sha"
+
+	pd_check_and_delete "/root/${filename}"
+	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/root/${filename}"
+
+	# Pick the installer: dnf for fedora / .rpm payloads, apt otherwise.
+	local mgr="apt"
+	case "$SELECTED_DISTRO" in
+	fedora) mgr="dnf" ;;
+	*)
+		case "$filename" in
+		*.rpm) mgr="dnf" ;;
+		esac
+		;;
+	esac
+
+	progress_phase "install" 0 "Installing ${filename} into ${SELECTED_DISTRO}..."
+	if [[ "$mgr" == "dnf" ]]; then
+		distro_run "dnf install /root/${filename} -y"
+	else
+		pd_update_sys
+		distro_run "apt install /root/${filename} -y"
+	fi
+
+	pd_check_and_delete "/root/${filename}"
+	check_and_delete "$temp_download"
+	progress_phase "install" 100 "Installed ${filename}"
+}
+
+# C4. install_archive_into_opt — download an archive and extract it into
+# /opt/<pkg> inside the selected distro. Encapsulates the Brave/Void/Windsurf
+# dance (clear /opt/<pkg>, copy archive in via distro login, extract, clean up).
+#
+#   install_archive_into_opt "<pkg>" "<url>" [<sha256>]
+function install_archive_into_opt() {
+	local pkg="$1"
+	local url="$2"
+	local sha="${3:-}"
+
+	if [[ -z "$pkg" || -z "$url" ]]; then
+		print_failed "install_archive_into_opt: <pkg> and <url> are required"
+		return 1
+	fi
+	if [[ -z "$SELECTED_DISTRO" ]]; then
+		print_failed "install_archive_into_opt: no distro selected"
+		return 1
+	fi
+
+	local filename="${url##*/}"
+	local temp_download="$TMPDIR/${filename}"
+
+	progress_phase "configure" 0 "Preparing /opt/${pkg}..."
+	distro_run "
+check_and_delete '/opt/${pkg}'
+check_and_create_directory '/opt/${pkg}'
+"
+
+	progress_phase "download" 0 "Downloading ${filename}..."
+	check_and_delete "$temp_download"
+	download_file "$temp_download" "$url" "$sha"
+
+	# Copy into the distro via `distro login -- cp` (works for both proot and
+	# chroot, unlike writing to the host-side rootfs path directly).
+	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/opt/${pkg}/${filename}"
+
+	progress_phase "extract" 0 "Extracting ${filename}..."
+	distro_run "
+cd /opt/${pkg}
+extract '${filename}'
+check_and_delete '${filename}'
+"
+
+	check_and_delete "$temp_download"
+	progress_phase "install" 100 "Installed ${pkg}"
+}
+
+# C5. install_deb_into_termux — download a .deb and install it into Termux
+# itself. On apt Termux it uses dpkg/apt directly; on pacman Termux (which has
+# no dpkg) it delegates to install_deb_in_termux_pacman.
+#
+#   install_deb_into_termux "<url>" [<sha256>]
+function install_deb_into_termux() {
+	local url="$1"
+	local sha="${2:-}"
+
+	if [[ -z "$url" ]]; then
+		print_failed "install_deb_into_termux: <url> is required"
+		return 1
+	fi
+
+	local filename="${url##*/}"
+	cd "$TMPDIR" || {
+		print_failed "install_deb_into_termux: cannot cd to \$TMPDIR"
+		return 1
+	}
+	check_and_delete "$TMPDIR/${filename}"
+
+	progress_phase "download" 0 "Downloading ${filename}..."
+	download_file "${filename}" "$url" "$sha"
+
+	progress_phase "install" 0 "Installing ${filename}..."
+	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
+		if ! command -v install_deb_in_termux_pacman >/dev/null 2>&1; then
+			print_failed "install_deb_into_termux: pacman .deb support unavailable"
+			return 1
+		fi
+		install_deb_in_termux_pacman "$TMPDIR/${filename}"
+	else
+		dpkg --configure -a
+		apt --fix-broken install -y
+		apt install "./${filename}" -y
+	fi
+
+	check_and_delete "$TMPDIR/${filename}"
+	progress_phase "install" 100 "Installed ${filename}"
+}
 # ==================== END HIGH-LEVEL APP HELPERS ====================

@@ -1470,3 +1470,162 @@ check_and_delete '${appimage_file_name}'
 "
 	progress_report 80 "AppImage setup complete"
 }
+
+# ==================== HIGH-LEVEL APP HELPERS ====================
+# These fold the repetitive boilerplate (icon resolution, desktop entries,
+# arch detection, the download+install dances) into a small, hard-to-misuse
+# API so app scripts stay short. They emit their own progress phase tokens,
+# so app scripts almost never need to call progress_phase by hand.
+
+# Resolve an app's icon path using the logo.png -> logo.svg -> logo fallback.
+# Usage: _resolve_icon_path <logo-dir-name>
+# Prints the resolved path (always prints something so Icon= is never empty).
+function _resolve_icon_path() {
+	local logo_dir="$1"
+	local base="$TERMUX_HOME/.appstore/logo/${logo_dir}"
+	if [[ -f "$base/logo.png" ]]; then
+		echo "$base/logo.png"
+	elif [[ -f "$base/logo.svg" ]]; then
+		echo "$base/logo.svg"
+	else
+		echo "$base/logo"
+	fi
+}
+
+# C1. create_desktop_entry — write a .desktop file into pd_added, folding in
+# icon resolution and the pdrun prefix. Replaces the hand-written heredocs.
+#
+#   create_desktop_entry \
+#       --name "Vesktop" --pkg "vesktop" \
+#       --exec "vesktop --no-sandbox" \
+#       --wmclass "vesktop" --comment "Custom Discord app" \
+#       --categories "Network;InstantMessaging;" \
+#       --mime "x-scheme-handler/sgnl;" \
+#       [--no-pdrun] [--terminal] [--logo-dir "Vesktop"]
+#
+# Required: --name, --pkg, --exec. --logo-dir defaults to --name (pass it
+# explicitly when the logo folder casing differs from the app name).
+function create_desktop_entry() {
+	local name="" pkg="" exec_cmd="" wmclass="" comment="" categories="" mime=""
+	local logo_dir="" terminal="false" use_pdrun=1
+
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--name)
+			name="$2"
+			shift 2
+			;;
+		--pkg)
+			pkg="$2"
+			shift 2
+			;;
+		--exec)
+			exec_cmd="$2"
+			shift 2
+			;;
+		--wmclass)
+			wmclass="$2"
+			shift 2
+			;;
+		--comment)
+			comment="$2"
+			shift 2
+			;;
+		--categories)
+			categories="$2"
+			shift 2
+			;;
+		--mime)
+			mime="$2"
+			shift 2
+			;;
+		--logo-dir)
+			logo_dir="$2"
+			shift 2
+			;;
+		--no-pdrun)
+			use_pdrun=0
+			shift
+			;;
+		--terminal)
+			terminal="true"
+			shift
+			;;
+		*)
+			print_warn "create_desktop_entry: ignoring unknown option '$1'"
+			shift
+			;;
+		esac
+	done
+
+	if [[ -z "$name" || -z "$pkg" || -z "$exec_cmd" ]]; then
+		print_failed "create_desktop_entry: --name, --pkg and --exec are required"
+		return 1
+	fi
+
+	progress_phase "desktop" 0 "Creating desktop entry..."
+	print_success "Creating desktop entry..."
+
+	[[ -z "$logo_dir" ]] && logo_dir="$name"
+	[[ -z "$comment" ]] && comment="$name"
+
+	local icon_path
+	icon_path="$(_resolve_icon_path "$logo_dir")"
+
+	local exec_line="$exec_cmd"
+	[[ "$use_pdrun" == "1" ]] && exec_line="pdrun ${exec_cmd}"
+
+	local dest_dir="$TERMUX_PREFIX/share/applications/pd_added"
+	check_and_create_directory "$dest_dir"
+	local dest="$dest_dir/${pkg}.desktop"
+
+	{
+		echo "[Desktop Entry]"
+		echo "Name=${name}"
+		echo "Exec=${exec_line}"
+		echo "Terminal=${terminal}"
+		echo "Type=Application"
+		echo "Icon=${icon_path}"
+		if [[ -n "$wmclass" ]]; then echo "StartupWMClass=${wmclass}"; fi
+		echo "Comment=${comment}"
+		if [[ -n "$mime" ]]; then echo "MimeType=${mime}"; fi
+		if [[ -n "$categories" ]]; then echo "Categories=${categories}"; fi
+	} >"$dest"
+
+	print_success "Desktop entry created: $dest"
+	progress_phase "desktop" 100 "Desktop entry created"
+}
+
+# C2. detect_arch — map `uname -m` to a token via a parameterized list, or
+# fail fatally on an unsupported architecture. Keys may be glob patterns.
+#
+#   archtype=$(detect_arch aarch64=arm64 'armv7*=armv7l' arm=armhf)
+#
+# Prints the matched token on stdout; on no match, reports the failure on
+# stderr (so it is not captured into the assignment) and returns 1, which
+# aborts the script under the runner's strict mode.
+function detect_arch() {
+	local app_arch pair key val token=""
+	app_arch=$(uname -m)
+
+	for pair in "$@"; do
+		key="${pair%%=*}"
+		val="${pair#*=}"
+		# Unquoted $key so callers can pass glob patterns (e.g. 'armv7*').
+		# shellcheck disable=SC2254
+		case "$app_arch" in
+		$key)
+			token="$val"
+			break
+			;;
+		esac
+	done
+
+	if [[ -z "$token" ]]; then
+		print_failed "Unsupported architecture: $app_arch" >&2
+		return 1
+	fi
+
+	echo "$token"
+}
+# ==================== END HIGH-LEVEL APP HELPERS ====================

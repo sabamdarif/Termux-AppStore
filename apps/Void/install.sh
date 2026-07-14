@@ -10,6 +10,12 @@ supported_distro="all"
 page_url="https://github.com/voideditor/binaries"
 working_dir="${distro_path}/opt"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+declare -A sha256=(
+	["Void-linux-arm64-1.99.30044.tar.gz"]="d2c818f1d73125e7afe3c6082c8f33116296bf6e73bd106830e0433840e70a4c"
+	["Void-linux-armhf-1.99.30044.tar.gz"]="a7017b482e157d34ce3c2f712855da8fa0dff07ad531b80fc9061c2507820b7e"
+)
+
 if [ -z "$SELECTED_DISTRO" ]; then
 	print_failed "Error: No distro selected"
 fi

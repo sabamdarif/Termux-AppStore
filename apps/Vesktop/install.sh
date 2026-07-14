@@ -10,6 +10,9 @@ supported_distro="all"
 page_url="https://github.com/Vencord/Vesktop"
 working_dir="${distro_path}/root"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+sha256="3ba8e5b14d4eafa641f407c8720fb0ec489a9ee6276423f98e967218b5d6cd38"
+
 progress_phase "prepare" 0 "Preparing..."
 
 if [[ "$SELECTED_DISTRO" == "ubuntu" ]] || [[ "$SELECTED_DISTRO" == "debian" ]]; then

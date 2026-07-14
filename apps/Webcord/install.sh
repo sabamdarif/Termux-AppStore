@@ -8,6 +8,12 @@ app_type="distro"
 supported_distro="all"
 page_url="https://github.com/SpacingBat3/WebCord"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+declare -A sha256=(
+	["WebCord-4.13.2-arm64.AppImage"]="c2992de5bb379efe1546d42a112ceb334cd5c10868cf7be1547b53aedd3ad493"
+	["WebCord-4.13.2-armv7l.AppImage"]="587236a6ec6110303306f365fa2f659ab26d173727a73e10a69e24e99f40f261"
+)
+
 cd ${TMPDIR}
 
 app_arch=$(uname -m)

@@ -7,6 +7,9 @@ supported_distro="all"
 page_url="https://github.com/mgba-emu/mgba"
 run_cmd="/usr/local/bin/mgba-appimage"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+sha256="de3cbf437be1d5324c3853baba0dafea3311322a23829355d583308947e058e8"
+
 progress_phase "prepare" 0 "Preparing mGBA..."
 
 if [ -z "$SELECTED_DISTRO" ]; then

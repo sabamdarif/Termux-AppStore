@@ -9,6 +9,9 @@ page_url="https://github.com/brave/brave-browser"
 working_dir="${distro_path}/opt"
 supported_distro="all"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+sha256="bb8a87897da73e9acb190805d5184bdf1a161dd5a0a4857d25a084ddd838f996"
+
 if [ -z "$SELECTED_DISTRO" ]; then
 	print_failed "Error: No distro selected"
 fi

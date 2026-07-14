@@ -8,6 +8,9 @@ supported_distro="all"
 page_url="https://github.com/dennisameling/Signal-Desktop"
 working_dir="${distro_path}/root"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+sha256="1b648e89555542ae355943dca9c412c6f816c723f53ce520b695539004954001"
+
 progress_phase "prepare" 0 "Preparing..."
 
 app_arch=$(uname -m)

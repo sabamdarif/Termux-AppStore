@@ -220,7 +220,7 @@
       "Internet"
     ],
     "app_type": "native",
-    "run_cmd": "/data/data/com.termux/files/usr/bin/chromium-browser --enable-features",
+    "run_cmd": "/data/data/com.termux/files/usr/bin/chromium-browser --enable-features=Vulkan",
     "supported_arch": "aarch64,arm",
     "version": "termux_local_version",
     "package_name": "chromium",
@@ -931,7 +931,7 @@
       "Multimedia"
     ],
     "app_type": "native",
-    "run_cmd": "mpv --player-operation-mode",
+    "run_cmd": "mpv --player-operation-mode=pseudo-gui",
     "supported_arch": "aarch64,arm",
     "version": "termux_local_version",
     "package_name": "mpv-x",

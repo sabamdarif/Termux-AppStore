@@ -313,10 +313,13 @@ function check_and_restore() {
 
 # ==================== SHA256 DOWNLOAD INTEGRITY (Part C-bis) ====================
 # APPSTORE_REQUIRE_SHA256 gates the *missing*-hash policy (CB4):
-#   0 (migration default) -> a missing hash warns and continues.
-#   1 (target)            -> a missing hash is fatal.
+#   0 -> a missing hash warns and continues (migration escape hatch).
+#   1 (default) -> a missing hash is fatal.
 # A hash that is present but does NOT match is always fatal, regardless.
-: "${APPSTORE_REQUIRE_SHA256:=0}"
+# Strict by default now that every downloader carries a pinned hash and the
+# auto-updater re-pins on version bumps (CB6). Set =0 only to bypass verification
+# temporarily (e.g. debugging a new downloader before its hash is pinned).
+: "${APPSTORE_REQUIRE_SHA256:=1}"
 
 # _verify_sha256 <file> <expected-hex> -> 0 match / 1 mismatch
 function _verify_sha256() {

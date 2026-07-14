@@ -5,7 +5,7 @@ version="V2.3.0"
 app_type="distro"
 supported_distro="ubuntu,debian"
 working_dir="${distro_path}/root"
-page_url="https://github.com/CodeMasterCody3D/OrcaSlicer/releases"
+page_url="https://github.com/CodeMasterCody3D/OrcaSlicer"
 run_cmd="orca-slicer"
 
 progress_phase "prepare" 0 "Preparing..."

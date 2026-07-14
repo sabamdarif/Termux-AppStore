@@ -15,7 +15,7 @@ armv7* | arm | armv8l) archtype="arm" ;;
 *) print_failed "Unsupported architectures" ;;
 esac
 
-deb_file_name=" refine_${version}_${archtype}.deb"
+deb_file_name="refine_${version}_${archtype}.deb"
 check_and_delete "$deb_file_name"
 download_file "https://github.com/sabamdarif/Termux-AppStore/releases/download/files/${deb_file_name}"
 dpkg --configure -a

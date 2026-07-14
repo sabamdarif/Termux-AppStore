@@ -940,14 +940,14 @@ PROGRESS_ENABLED="${PROGRESS_ENABLED:-0}"
 EOF
 	fi
 	if [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore | sudo tee -a "$script_path" >/dev/null
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore _resolve_icon_path create_desktop_entry detect_arch install_deb_into_distro install_archive_into_opt install_deb_into_termux install_deb_in_termux_pacman standard_uninstall | sudo tee -a "$script_path" >/dev/null
 		{
 			echo "set -Eeo pipefail"
 			echo "__appstore_begin"
 		} | sudo tee -a "$script_path" >/dev/null
 		echo "$shell_setup_content" | sudo tee -a "$script_path" >/dev/null
 	else
-		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore >>"$script_path"
+		typeset -f _progress_emit progress_report progress_phase progress_done progress_error _appstore_err_trap __appstore_begin __appstore_end soft_run check_termux log_warn log_error log_debug print_success print_failed print_warn print_msg wait_for_keypress check_and_create_directory check_and_delete check_and_backup check_and_restore download_file package_install_and_check package_remove_and_check get_file_name_number extract download_and_extract count_subfolders get_latest_release install_font_for_style select_an_option print_to_config update_sys fix_exec install_appimage get_latest_version _pd_package_install_and_check_internal _pd_package_remove_and_check_internal _pd_update_sys_internal distro_run pd_check_and_create_directory pd_check_and_delete pd_check_and_backup pd_check_and_restore _resolve_icon_path create_desktop_entry detect_arch install_deb_into_distro install_archive_into_opt install_deb_into_termux install_deb_in_termux_pacman standard_uninstall >>"$script_path"
 		{
 			echo "set -Eeo pipefail"
 			echo "__appstore_begin"
@@ -1769,5 +1769,181 @@ function install_deb_into_termux() {
 
 	check_and_delete "$TMPDIR/${filename}"
 	progress_phase "install" 100 "Installed ${filename}"
+}
+
+# C7. install_deb_in_termux_pacman — install a .deb into a pacman-based Termux,
+# which has no dpkg. Extracts the package with `ar`, installs its Debian
+# dependencies with pacman (names match across Termux apt/pacman), then unpacks
+# the data payload into the Termux prefix tree.
+#
+#   install_deb_in_termux_pacman "<path-to.deb>"
+function install_deb_in_termux_pacman() {
+	local deb="$1"
+	if [[ -z "$deb" || ! -f "$deb" ]]; then
+		print_failed "install_deb_in_termux_pacman: .deb not found: $deb"
+		return 1
+	fi
+
+	# ar comes from binutils; bsdtar from libarchive. Ensure both are present.
+	if ! command -v ar >/dev/null 2>&1; then
+		print_msg "Installing binutils (provides ar)..."
+		package_install_and_check "binutils"
+	fi
+	if ! command -v bsdtar >/dev/null 2>&1; then
+		print_msg "Installing libarchive (provides bsdtar)..."
+		package_install_and_check "libarchive"
+	fi
+
+	local deb_abs workdir
+	deb_abs="$(realpath -m "$deb")"
+	workdir="$(mktemp -d "$TMPDIR/deb-XXXXXX")"
+
+	progress_phase "install" 10 "Unpacking $(basename "$deb")..."
+	(cd "$workdir" && ar x "$deb_abs")
+
+	# ---- control archive: read Depends: ----
+	local control_archive
+	control_archive="$(find "$workdir" -maxdepth 1 -name 'control.tar.*' | head -n1)"
+	if [[ -z "$control_archive" ]]; then
+		print_failed "install_deb_in_termux_pacman: control archive missing in .deb"
+		return 1
+	fi
+	check_and_create_directory "$workdir/control"
+	bsdtar -xf "$control_archive" -C "$workdir/control"
+
+	local depends_line
+	depends_line="$(awk -F': ' '/^Depends:/{print $2; exit}' "$workdir/control/control" 2>/dev/null)"
+
+	local deps=()
+	if [[ -n "$depends_line" ]]; then
+		local raw_deps d name
+		local IFS=','
+		read -ra raw_deps <<<"$depends_line"
+		unset IFS
+		for d in "${raw_deps[@]}"; do
+			name="${d%%|*}"     # first of alternatives (a | b -> a)
+			name="${name%%(*}"  # drop version constraint (>= x)
+			name="${name%%:*}"  # drop :any / multiarch qualifier
+			# trim surrounding whitespace
+			name="${name#"${name%%[![:space:]]*}"}"
+			name="${name%"${name##*[![:space:]]}"}"
+			[[ -n "$name" ]] && deps+=("$name")
+		done
+	fi
+
+	if [[ ${#deps[@]} -gt 0 ]]; then
+		progress_phase "install" 40 "Installing ${#deps[@]} dependencies..."
+		print_msg "Dependencies: ${deps[*]}"
+		# Reuse package_install_and_check for retries/lock handling. Tolerate a
+		# dep that has no pacman counterpart (warn instead of aborting) since
+		# Debian dep lists occasionally name packages Termux pacman lacks.
+		package_install_and_check "${deps[*]}" ||
+			print_warn "One or more dependencies were unavailable under pacman"
+	fi
+
+	# ---- data archive: unpack payload into the prefix ----
+	local data_archive
+	data_archive="$(find "$workdir" -maxdepth 1 -name 'data.tar.*' | head -n1)"
+	if [[ -z "$data_archive" ]]; then
+		print_failed "install_deb_in_termux_pacman: data archive missing in .deb"
+		return 1
+	fi
+	check_and_create_directory "$workdir/data"
+	bsdtar -xf "$data_archive" -C "$workdir/data"
+
+	progress_phase "install" 80 "Installing files into the Termux prefix..."
+	# Debian payloads are rooted at /usr, /opt, /etc. The Termux prefix IS the
+	# usr tree, so ./usr/* maps onto $TERMUX_PREFIX/*; other tops go under it.
+	if [[ -d "$workdir/data/usr" ]]; then
+		cp -a "$workdir/data/usr/." "$TERMUX_PREFIX/"
+	fi
+	local top
+	for top in opt etc bin lib share; do
+		if [[ -d "$workdir/data/$top" ]]; then
+			check_and_create_directory "$TERMUX_PREFIX/$top"
+			cp -a "$workdir/data/$top/." "$TERMUX_PREFIX/$top/"
+		fi
+	done
+
+	check_and_delete "$workdir"
+	progress_phase "install" 100 "Installed $(basename "$deb")"
+}
+
+# C6. standard_uninstall — remove a package (native or distro) and its
+# pd_added desktop entry in one line. Collapses the ~90 uninstall scripts.
+#
+#   standard_uninstall <pkg> [<desktop-name>]
+#   standard_uninstall --distro vesktop
+#   standard_uninstall --opt /opt/brave-browser --desktop brave-browser
+#
+# Mode is taken from --native/--distro/--opt, else auto-detected from the
+# `app_type` header variable (distro -> pd removal, anything else -> native).
+# <desktop-name> defaults to <pkg>; a missing .desktop is a safe no-op.
+function standard_uninstall() {
+	local pkg="" desktop="" mode="" opt_path=""
+
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--native)
+			mode="native"
+			shift
+			;;
+		--distro)
+			mode="distro"
+			shift
+			;;
+		--opt)
+			mode="opt"
+			opt_path="$2"
+			shift 2
+			;;
+		--desktop)
+			desktop="$2"
+			shift 2
+			;;
+		--*)
+			print_warn "standard_uninstall: ignoring unknown option '$1'"
+			shift
+			;;
+		*)
+			if [[ -z "$pkg" ]]; then
+				pkg="$1"
+			elif [[ -z "$desktop" ]]; then
+				desktop="$1"
+			fi
+			shift
+			;;
+		esac
+	done
+
+	if [[ -z "$mode" ]]; then
+		if [[ "${app_type:-}" == "distro" ]]; then
+			mode="distro"
+		else
+			mode="native"
+		fi
+	fi
+
+	[[ -z "$desktop" && -n "$pkg" ]] && desktop="$pkg"
+
+	progress_phase "cleanup" 0 "Removing ${pkg:-$desktop}..."
+
+	case "$mode" in
+	native)
+		[[ -n "$pkg" ]] && package_remove_and_check "$pkg"
+		;;
+	distro)
+		[[ -n "$pkg" ]] && pd_package_remove_and_check "$pkg"
+		;;
+	opt)
+		[[ -n "$opt_path" ]] && pd_check_and_delete "$opt_path"
+		;;
+	esac
+
+	if [[ -n "$desktop" ]]; then
+		check_and_delete "$TERMUX_PREFIX/share/applications/pd_added/${desktop}.desktop"
+	fi
+
+	progress_phase "cleanup" 100 "Removed ${pkg:-$desktop}"
 }
 # ==================== END HIGH-LEVEL APP HELPERS ====================

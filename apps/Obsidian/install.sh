@@ -8,6 +8,9 @@ supported_distro="all"
 page_url="https://github.com/obsidianmd/obsidian-releases"
 run_cmd="/opt/AppImageLauncher/Obsidian/obsidian --no-sandbox"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+sha256="2a40943a2402cf1f38e71845f294a78d300a78ff21ea4c2103335bca7fbdcbe0"
+
 progress_phase "prepare" 0 "Preparing..."
 cd ${TMPDIR}
 # Get the correct filename that will be downloaded

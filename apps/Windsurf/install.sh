@@ -9,6 +9,9 @@ page_url="https://github.com/rodriguezst/windsurf-arm"
 working_dir="${distro_path}/opt"
 supported_distro="all"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+sha256="d945a6bb53e0dfcacd3cb0593f24f09c55a3f3585c401b0f86127f77eac83c6a"
+
 if [ -z "$SELECTED_DISTRO" ]; then
 	print_failed "Error: No distro selected"
 fi

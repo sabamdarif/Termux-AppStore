@@ -9,6 +9,9 @@ supported_distro="all"
 page_url="https://github.com/th-ch/youtube-music"
 run_cmd="/opt/AppImageLauncher/youtube-music/youtube-music --no-sandbox"
 
+# SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
+sha256="834962b462cbefe5bdff0b16fb684875503879ed37a54ff1f6d84164fe6b1dd6"
+
 app_arch=$(uname -m)
 case "$app_arch" in
 aarch64) archtype="arm64" ;;

@@ -48,6 +48,15 @@ jobs:
                     echo "Update app versions with latest releases from GitHub" > .git/commit_msg.txt
                   fi
 
+                  # CB6: report bumps skipped because their SHA256 refresh failed
+                  # (kept out of the commit; the version bump was already reverted).
+                  if [ -f skipped_apps.txt ]; then
+                    echo "" >> .git/commit_msg.txt
+                    echo "Skipped (hash refresh failed):" >> .git/commit_msg.txt
+                    cat skipped_apps.txt >> .git/commit_msg.txt
+                    rm skipped_apps.txt
+                  fi
+
                   git add -A
                   git commit -F .git/commit_msg.txt
 

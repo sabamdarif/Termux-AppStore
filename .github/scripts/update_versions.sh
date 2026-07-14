@@ -5,7 +5,7 @@ set -x
 
 CHANGES_MADE=false
 
-rm -f updated_apps.txt
+rm -f updated_apps.txt skipped_apps.txt
 
 echo "Current directory: $(pwd)"
 echo "Directory contents:"
@@ -68,8 +68,18 @@ for app_folder in apps/*; do
 		NEW_VERSION=$(grep '^version=' "$install_file" | head -n1 | cut -d '"' -f2)
 		if [[ "$NEW_VERSION" == "$LATEST_VERSION" ]]; then
 			echo "Successfully updated version for $app_name"
-			echo "- ${app_name}: ${CURRENT_VERSION} -> ${LATEST_VERSION}" >>updated_apps.txt
-			CHANGES_MADE=true
+
+			# CB6: re-pin SHA256 for the NEW version in the SAME change. A bump
+			# whose hash refresh fails is reverted — never commit a new version=
+			# with a stale hash. sha256="skip"/no-header apps refresh trivially.
+			if python3 "$(dirname "$0")/refresh_hashes.py" "$install_file"; then
+				echo "- ${app_name}: ${CURRENT_VERSION} -> ${LATEST_VERSION}" >>updated_apps.txt
+				CHANGES_MADE=true
+			else
+				echo "Hash refresh FAILED for $app_name; reverting version bump"
+				git checkout -- "$install_file"
+				echo "- ${app_name}: ${CURRENT_VERSION} -> ${LATEST_VERSION} (hash refresh failed)" >>skipped_apps.txt
+			fi
 		else
 			echo "Failed to update version for $app_name"
 		fi

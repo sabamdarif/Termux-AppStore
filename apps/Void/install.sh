@@ -10,16 +10,17 @@ supported_distro="all"
 page_url="https://github.com/voideditor/binaries"
 working_dir="${distro_path}/opt"
 
-progress_phase "prepare" 0 "Preparing..."
+if [ -z "$SELECTED_DISTRO" ]; then
+	print_failed "Error: No distro selected"
+fi
 
+progress_phase "configure" 0 "Configuring..."
 if [[ "$SELECTED_DISTRO" == "ubuntu" ]] || [[ "$SELECTED_DISTRO" == "debian" ]]; then
-	progress_phase "configure" 0 "Configuring..."
 	distro_run "
 sudo apt update -y -o Dpkg::Options::='--force-confnew'
 sudo apt install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libdrm2 libxcb-dri3-0 libxshmfence1
 "
 elif [[ "$SELECTED_DISTRO" == "fedora" ]]; then
-	progress_phase "configure" 0 "Configuring..."
 	distro_run "
 sudo dnf install -y nss atk at-spi2-atk gtk3 mesa-libgbm alsa-lib libX11-xcb libXcomposite libXdamage libXrandr libdrm libxcb libxshmfence libxkbcommon --skip-unavailable
 "
@@ -27,55 +28,15 @@ else
 	print_failed "Unsupported distro"
 fi
 
-app_arch=$(uname -m)
-case "$app_arch" in
-aarch64) archtype="arm64" ;;
-armv7* | arm | armv8l) archtype="armhf" ;;
-*) print_failed "Unsupported architectures" ;;
-esac
-
+archtype=$(detect_arch aarch64=arm64 'armv7*=armhf' arm=armhf armv8l=armhf)
 filename="Void-linux-${archtype}-${version}.tar.gz"
-temp_download="$TMPDIR/${filename}"
-progress_phase "download" 0 "Downloading..."
-download_file "$temp_download" "${page_url}/releases/download/${version}/${filename}"
 
-progress_phase "configure" 0 "Configuring..."
-distro_run "
-check_and_delete '/opt/void'
-check_and_create_directory '/opt/void'
-"
+install_archive_into_opt "void" "${page_url}/releases/download/${version}/${filename}"
 
-"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- cp "$temp_download" "/opt/void/${filename}"
-
-progress_phase "extract" 0 "Extracting..."
-distro_run "
-cd /opt/void
-extract '${filename}'
-check_and_delete '${filename}'
-"
-
-# Determine which logo file to use
-if [ -f "${HOME}/.appstore/logo/void/logo.png" ]; then
-	icon_path="${HOME}/.appstore/logo/void/logo.png"
-elif [ -f "${HOME}/.appstore/logo/void/logo.svg" ]; then
-	icon_path="${HOME}/.appstore/logo/void/logo.svg"
-else
-	icon_path="${HOME}/.appstore/logo/void/logo"
-fi
-
-progress_phase "desktop" 0 "Creating desktop entry..."
-print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee "${TERMUX_PREFIX}"/share/applications/pd_added/void.desktop >/dev/null
-[Desktop Entry]
-Name=Void
-Exec=pdrun ${run_cmd}
-Terminal=false
-Type=Application
-Icon=${icon_path}
-StartupWMClass=void
-Comment=Void an open source Cursor alternative.
-MimeType=x-scheme-handler/void;
-Categories=Development;
-DESKTOP_EOF
-
-progress_done
+create_desktop_entry \
+	--name "Void" --pkg "void" --logo-dir "void" \
+	--exec "${run_cmd}" \
+	--wmclass "void" \
+	--comment "Void an open source Cursor alternative." \
+	--categories "Development;" \
+	--mime "x-scheme-handler/void;"

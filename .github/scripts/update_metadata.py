@@ -196,23 +196,27 @@ def get_app_metadata(app_folder):
         try:
             with open(install_sh_path, "r", encoding="utf-8") as f:
                 for line in f:
-                    if line.strip().startswith("app_type="):
-                        app_type = line.split("=")[1].strip().strip("\"'")
+                    stripped = line.strip()
+                    # Split on the first '=' only: run_cmd values legitimately
+                    # contain '=' (e.g. `--enable-features=Vulkan`), and a plain
+                    # split("=")[1] would silently truncate them.
+                    if stripped.startswith("app_type="):
+                        app_type = stripped.split("=", 1)[1].strip().strip("\"'")
                         metadata["app_type"] = app_type
-                    elif line.strip().startswith("run_cmd="):
-                        run_cmd = line.split("=")[1].strip().strip("\"'")
+                    elif stripped.startswith("run_cmd="):
+                        run_cmd = stripped.split("=", 1)[1].strip().strip("\"'")
                         metadata["run_cmd"] = run_cmd
-                    elif line.strip().startswith("supported_arch="):
-                        supported_arch = line.split("=")[1].strip().strip("\"'")
+                    elif stripped.startswith("supported_arch="):
+                        supported_arch = stripped.split("=", 1)[1].strip().strip("\"'")
                         metadata["supported_arch"] = supported_arch
-                    elif line.strip().startswith("version="):
-                        version = line.split("=")[1].strip().strip("\"'")
+                    elif stripped.startswith("version="):
+                        version = stripped.split("=", 1)[1].strip().strip("\"'")
                         metadata["version"] = version
-                    elif line.strip().startswith("supported_distro="):
-                        supported_distro = line.split("=")[1].strip().strip("\"'")
+                    elif stripped.startswith("supported_distro="):
+                        supported_distro = stripped.split("=", 1)[1].strip().strip("\"'")
                         metadata["supported_distro"] = supported_distro
-                    elif line.strip().startswith("package_name="):
-                        package_name = line.split("=")[1].strip().strip("\"'")
+                    elif stripped.startswith("package_name="):
+                        package_name = stripped.split("=", 1)[1].strip().strip("\"'")
                         metadata["package_name"] = package_name
 
             if metadata.get("app_type") == "native":

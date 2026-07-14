@@ -13,6 +13,10 @@ on:
             - ".github/workflows/release.yml"
     workflow_dispatch:
 
+# Least privilege by default; only the release job elevates to contents: write.
+permissions:
+    contents: read
+
 jobs:
     check-env:
         runs-on: ubuntu-latest

@@ -7,9 +7,17 @@ on:
         paths:
             - "apps/**"
     workflow_dispatch:
+
+# Least privilege by default; the job below only needs to read the tree to
+# validate a PR. The write path (releases + push) is exercised on push only.
+permissions:
+    contents: read
+
 jobs:
     update-metadata:
         runs-on: ubuntu-latest
+        permissions:
+            contents: write
         steps:
             - uses: actions/checkout@v7
               with:
@@ -48,6 +56,7 @@ jobs:
                   done
                   cd logo && zip -r ../logos.zip * && cd ..
             - name: Create Logos Release
+              if: github.event_name != 'pull_request'
               uses: softprops/action-gh-release@v3
               with:
                   files: logos.zip
@@ -56,6 +65,7 @@ jobs:
                   body: Archive of all app logos
                   token: ${{ secrets.GITHUB_TOKEN }}
             - name: Create Apps Data Release
+              if: github.event_name != 'pull_request'
               uses: softprops/action-gh-release@v3
               with:
                   files: data/apps.json
@@ -64,7 +74,7 @@ jobs:
                   body: Apps metadata JSON file
                   token: ${{ secrets.GITHUB_TOKEN }}
             - name: Commit and push if changed
-              if: steps.check_changes.outputs.changes == 'true'
+              if: steps.check_changes.outputs.changes == 'true' && github.event_name != 'pull_request'
               run: |
                   git config --local user.email "github-actions[bot]@users.noreply.github.com"
                   git config --local user.name "GitHub Action"
@@ -83,9 +93,7 @@ jobs:
 
                     git commit -F .git/commit_msg.txt
 
-                    if [ "${{ github.event_name }}" != "pull_request" ]; then
-                      git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:$BRANCH_NAME
-                    else
-                      echo "Dry run: Skipping push for Pull Request"
-                    fi
+                    # Push via the checkout-persisted credential (G3): never
+                    # interpolate github.actor into the remote URL.
+                    git push origin "HEAD:$BRANCH_NAME"
                   )

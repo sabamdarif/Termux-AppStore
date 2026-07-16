@@ -11,32 +11,18 @@ run_cmd="/opt/AppImageLauncher/Obsidian/obsidian --no-sandbox"
 # SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
 sha256="2a40943a2402cf1f38e71845f294a78d300a78ff21ea4c2103335bca7fbdcbe0"
 
-progress_phase "prepare" 0 "Preparing..."
 cd ${TMPDIR}
-# Get the correct filename that will be downloaded
 appimage_filename="Obsidian-${version#v}-${supported_arch}.AppImage"
 
-check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/obsidian.desktop"
+check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/pd_added/obsidian.desktop"
 
-print_success "Downloading Obsidian AppImage..."
-progress_phase "download" 0 "Downloading..."
-download_file "${page_url}/releases/download/${version}/Obsidian-${version#v}-${supported_arch}.AppImage"
-progress_phase "configure" 0 "Configuring..."
+download_file "${page_url}/releases/download/${version}/${appimage_filename}"
 install_appimage "$appimage_filename" "Obsidian"
 
-progress_phase "desktop" 0 "Creating desktop entry..."
-print_success "Creating desktop entry..."
-cat <<EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/obsidian.desktop >/dev/null
-[Desktop Entry]
-Name=Obsidian
-Exec=pdrun ${run_cmd}
-Terminal=false
-Type=Application
-Icon=${HOME}/.appstore/logo/Obsidian/logo.png
-StartupWMClass=obsidian
-Comment=Obsidian
-MimeType=x-scheme-handler/obsidian;
-Categories=Office;
-EOF
-
-progress_done
+create_desktop_entry \
+	--name "Obsidian" --pkg "obsidian" --logo-dir "Obsidian" \
+	--exec "${run_cmd}" \
+	--wmclass "obsidian" \
+	--comment "Obsidian" \
+	--categories "Office;" \
+	--mime "x-scheme-handler/obsidian;"

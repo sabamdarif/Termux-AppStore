@@ -16,31 +16,18 @@ declare -A sha256=(
 
 cd ${TMPDIR}
 
-app_arch=$(uname -m)
-case "$app_arch" in
-aarch64) archtype="arm64" ;;
-armv7*|arm) archtype="armv7l" ;;
-esac
-
+archtype=$(detect_arch aarch64=arm64 'armv7*=armv7l' arm=armv7l)
 appimage_filename="WebCord-${version#v}-${archtype}.AppImage"
 
 check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/pd_added/webcord.desktop"
 
-progress_phase "download" 0 "Downloading WebCord AppImage..."
 download_file "${page_url}/releases/download/${version}/${appimage_filename}"
 install_appimage "$appimage_filename" "webcord"
 
-progress_phase "desktop" 0 "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/webcord.desktop >/dev/null
-[Desktop Entry]
-Name=Webcord
-Exec=pdrun ${run_cmd}
-Terminal=false
-Type=Application
-Icon=${HOME}/.appstore/logo/Webcord/logo.png
-StartupWMClass=webcord
-Comment=webcord
-MimeType=x-scheme-handler/webcord;
-Categories=Internet;
-DESKTOP_EOF
-progress_done
+create_desktop_entry \
+	--name "Webcord" --pkg "webcord" --logo-dir "Webcord" \
+	--exec "${run_cmd}" \
+	--wmclass "webcord" \
+	--comment "webcord" \
+	--categories "Internet;" \
+	--mime "x-scheme-handler/webcord;"

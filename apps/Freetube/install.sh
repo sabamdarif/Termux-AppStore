@@ -14,39 +14,21 @@ declare -A sha256=(
 	["freetube-0.23.1-armv7l.AppImage"]="c66c9939856c1a10bc7d92a1d2af669144be157a3cf20064fc3a18feb1171050"
 )
 
-progress_phase "prepare" 0 "Preparing..."
 cd "${TMPDIR}"
 
-app_arch=$(uname -m)
-case "$app_arch" in
-aarch64) archtype="arm64" ;;
-armv7*|arm) archtype="armv7l" ;;
-esac
-
+archtype=$(detect_arch aarch64=arm64 'armv7*=armv7l' arm=armv7l)
 version_no_beta="$(echo "${version#v}" | sed 's/-.*$//')"
 appimage_filename="freetube-${version_no_beta}-${archtype}.AppImage"
 
 check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/pd_added/freetube.desktop"
 
-print_success "Downloading FreeTube AppImage..."
-progress_phase "download" 0 "Downloading..."
 download_file "${page_url}/releases/download/${version}/${appimage_filename}"
-progress_phase "configure" 0 "Configuring..."
 install_appimage "$appimage_filename" "FreeTube"
 
-progress_phase "desktop" 0 "Creating desktop entry..."
-print_success "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee "${TERMUX_PREFIX}/share/applications/pd_added/freetube.desktop" >/dev/null
-[Desktop Entry]
-Name=FreeTube
-Exec=pdrun ${run_cmd}
-Terminal=false
-Type=Application
-Icon=${HOME}/.appstore/logo/Freetube/logo.png
-StartupWMClass=freetube
-Comment=YouTube app for privacy
-MimeType=x-scheme-handler/;
-Categories=Internet;
-DESKTOP_EOF
-
-progress_done
+create_desktop_entry \
+	--name "FreeTube" --pkg "freetube" --logo-dir "Freetube" \
+	--exec "${run_cmd}" \
+	--wmclass "freetube" \
+	--comment "YouTube app for privacy" \
+	--categories "Internet;" \
+	--mime "x-scheme-handler/;"

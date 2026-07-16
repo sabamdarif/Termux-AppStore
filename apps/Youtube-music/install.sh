@@ -12,14 +12,7 @@ run_cmd="/opt/AppImageLauncher/youtube-music/youtube-music --no-sandbox"
 # SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
 sha256="834962b462cbefe5bdff0b16fb684875503879ed37a54ff1f6d84164fe6b1dd6"
 
-app_arch=$(uname -m)
-case "$app_arch" in
-aarch64) archtype="arm64" ;;
-*)
-	print_failed "Unsupported architectures"
-	exit 1
-	;;
-esac
+archtype=$(detect_arch aarch64=arm64)
 
 cd ${TMPDIR}
 
@@ -27,30 +20,13 @@ appimage_filename="YouTube-Music-${version#v}-${archtype}.AppImage"
 
 check_and_delete "${TMPDIR}/${appimage_filename} ${TERMUX_PREFIX}/share/applications/pd_added/youtube-music.desktop"
 
-progress_phase "download" 0 "Downloading YouTube-Music AppImage..."
 download_file "${page_url}/releases/download/${version}/$appimage_filename"
 install_appimage "$appimage_filename" "youtube-music"
 
-# Determine which logo file to use
-if [ -f "${HOME}/.appstore/logo/Youtube-music/logo.png" ]; then
-	icon_path="${HOME}/.appstore/logo/Youtube-music/logo.png"
-elif [ -f "${HOME}/.appstore/logo/Youtube-music/logo.svg" ]; then
-	icon_path="${HOME}/.appstore/logo/Youtube-music/logo.svg"
-else
-	icon_path="${HOME}/.appstore/logo/Youtube-music/logo"
-fi
-
-progress_phase "desktop" 0 "Creating desktop entry..."
-cat <<DESKTOP_EOF | tee ${TERMUX_PREFIX}/share/applications/pd_added/youtube-music.desktop >/dev/null
-[Desktop Entry]
-Name=Youtube-music
-Exec=pdrun "${run_cmd}"
-Terminal=false
-Type=Application
-Icon=${icon_path}
-StartupWMClass=youtube-music
-Comment=youtube-music
-MimeType=x-scheme-handler/youtube-music;
-Categories=Multimedia;
-DESKTOP_EOF
-progress_done
+create_desktop_entry \
+	--name "Youtube-music" --pkg "youtube-music" --logo-dir "Youtube-music" \
+	--exec "${run_cmd}" \
+	--wmclass "youtube-music" \
+	--comment "youtube-music" \
+	--categories "Multimedia;" \
+	--mime "x-scheme-handler/youtube-music;"

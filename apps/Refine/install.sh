@@ -12,18 +12,6 @@ declare -A sha256=(
 	["refine_0.5.10_arm.deb"]="9813db2ee5610467a908450ed17fb146a6e51e8104d80fe1d0011640aeacbcc6"
 )
 
-cd ${TMPDIR}
-
-app_arch=$(uname -m)
-case "$app_arch" in
-aarch64) archtype="aarch64" ;;
-armv7* | arm | armv8l) archtype="arm" ;;
-*) print_failed "Unsupported architectures" ;;
-esac
-
+archtype=$(detect_arch aarch64=aarch64 'armv7*=arm' arm=arm armv8l=arm)
 deb_file_name="refine_${version}_${archtype}.deb"
-check_and_delete "$deb_file_name"
-download_file "https://github.com/sabamdarif/Termux-AppStore/releases/download/files/${deb_file_name}"
-dpkg --configure -a
-apt --fix-broken install -y
-apt install ./${deb_file_name} -y
+install_deb_into_termux "https://github.com/sabamdarif/Termux-AppStore/releases/download/files/${deb_file_name}"

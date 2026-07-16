@@ -12,17 +12,6 @@ declare -A sha256=(
 	["linuxthemestore-git_1.0.4_arm.deb"]="d70848781f51fe0e59ee1075048b1f7f86a86a7daac899bbfe90633e68ffa4e0"
 )
 
-app_arch=$(uname -m)
-case "$app_arch" in
-aarch64) archtype="aarch64" ;;
-armv7* | arm) archtype="arm" ;;
-*) print_failed "Unsupported architectures" ;;
-esac
-
+archtype=$(detect_arch aarch64=aarch64 'armv7*=arm' arm=arm)
 deb_file_name="linuxthemestore-git_${version#v}_${archtype}.deb"
-progress_phase "prepare" 0 "Preparing to install linuxthemestore-git..."
-download_file "https://github.com/sabamdarif/linuxthemestore/releases/download/${version#v}-termux/${deb_file_name}"
-dpkg --configure -a
-apt --fix-broken install -y
-apt install ./${deb_file_name} -y
-progress_done
+install_deb_into_termux "https://github.com/sabamdarif/linuxthemestore/releases/download/${version#v}-termux/${deb_file_name}"

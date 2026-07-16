@@ -8,68 +8,19 @@ working_dir="${distro_path}/root"
 page_url="https://github.com/CodeMasterCody3D/OrcaSlicer"
 run_cmd="orca-slicer"
 
-progress_phase "prepare" 0 "Preparing..."
-echo "Downloading install script..."
-echo "Preparing installation..."
+# ponytail: upstream fork has zero releases (artifacts 404) — intentionally
+# unpinned; fails at the missing-hash check until the user picks a real source.
+sha256="skip"
 
-# Get OS details inside PRoot
-OS_INFO=$(pdrun cat /etc/os-release)
-
-# Extract OS ID and ID_LIKE
-ID=$(echo "$OS_INFO" | grep '^ID=' | cut -d= -f2 | tr -d '"')
-ID_LIKE=$(echo "$OS_INFO" | grep '^ID_LIKE=' | cut -d= -f2 | tr -d '"')
-
-echo "Detected OS: $ID"
-echo "ID_LIKE: $ID_LIKE"
-
-# Check if running on Ubuntu
-if [[ "$SELECTED_DISTRO" == "ubuntu" || "$SELECTED_DISTRO" == "debian"* ]]; then
-    cd $working_dir
-    filename="OrcaSlicer_UbuntuLinux_${version}-dev${supported_arch}.deb"
-    # --- Step 1: Download and Install OrcaSlicer ---
-    echo "Downloading OrcaSlicer deb file..."
-    progress_phase "download" 0 "Downloading..."
-    download_file "${page_url}/releases/download/${supported_arch}/${filename}"
-    progress_phase "configure" 0 "Configuring..."
-    distro_run "sudo dpkg -i ${filename}"
-    distro_run "sudo apt-get install -f -y"
-    check_and_delete "${working_dir}/${filename}"
-else
-    echo "This application is only supported on Ubuntu!"
-    exit 1
+if [[ "$SELECTED_DISTRO" != "ubuntu" && "$SELECTED_DISTRO" != "debian" ]]; then
+	print_failed "OrcaSlicer is only supported on Ubuntu/Debian"
 fi
 
-# --- Step 4: Copy the PNG Icon to the Icons Directory ---
-# ICON_DIR="/data/data/com.termux/files/usr/share/icons/hicolor/256x256/apps/"
+filename="OrcaSlicer_UbuntuLinux_${version}-dev${supported_arch}.deb"
+install_deb_into_distro "${page_url}/releases/download/${supported_arch}/${filename}" "${filename}"
 
-# echo "Ensuring icon directory exists at $ICON_DIR..."
-# mkdir -p "$ICON_DIR"
-
-# echo "Copying PNG icon to $ICON_DIR..."
-# cp "$PNG_FILE_PATH" "$ICON_DIR"
-
-# --- Step 5: Create the Desktop Shortcut ---
-DESKTOP_DIR="$HOME/Desktop"
-SHORTCUT_FILE="$DESKTOP_DIR/OrcaSlicer.desktop"
-
-echo "Ensuring Desktop directory exists..."
-mkdir -p "$DESKTOP_DIR"
-
-progress_phase "desktop" 0 "Creating desktop entry..."
-echo "Creating desktop shortcut for OrcaSlicer..."
-cat <<EOF > "$SHORTCUT_FILE"
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=OrcaSlicer
-Exec=pdrun ${run_cmd}
-Icon=${HOME}/.appstore/logo/OrcaSlicer/logo.png
-Terminal=false
-Categories=Graphics;3DPrinting;
-EOF
-
-chmod +x "$SHORTCUT_FILE"
-cp "$SHORTCUT_FILE" ${TERMUX_PREFIX}/share/applications/pd_added/
-echo "Desktop shortcut created successfully at $SHORTCUT_FILE"
-
-progress_done
+create_desktop_entry \
+	--name "OrcaSlicer" --pkg "OrcaSlicer" --logo-dir "OrcaSlicer" \
+	--exec "${run_cmd}" \
+	--comment "OrcaSlicer" \
+	--categories "Graphics;3DPrinting;"

@@ -809,22 +809,20 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Leafpad/logo.png"
   },
   {
-    "app_name": "LibreOffice",
-    "folder_name": "LibreOffice",
-    "description": "LibreOffice is a free office suite including a word editor, slideshow, spreadsheet, database, and image editor.",
+    "app_name": "Libreoffice",
+    "folder_name": "Libreoffice",
+    "description": "LibreOffice is a free open source office suite.",
     "categories": [
-      "Productivity",
       "Office"
     ],
-    "app_type": "distro",
+    "app_type": "native",
     "run_cmd": "libreoffice",
     "supported_arch": "aarch64,arm",
-    "version": "distro_local_version",
-    "supported_distro": "all",
+    "version": "termux_local_version",
     "package_name": "libreoffice",
-    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/install.sh",
-    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/uninstall.sh",
-    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/LibreOffice/icon-64.png"
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Libreoffice/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Libreoffice/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Libreoffice/logo.png"
   },
   {
     "app_name": "Librewolf",

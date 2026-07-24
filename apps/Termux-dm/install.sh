@@ -2,9 +2,11 @@
 
 supported_arch="aarch64"
 package_name="termux-dm"
-run_cmd="wget https://raw.githubusercontent.com/Superchavo/termux-display-manager-repo/refs/heads/master/tdmautoinstall.sh && chmod +x ./tdmautoinstall.sh && ./tdmautoinstall.sh"
-version="5.0"
+run_cmd="termux-dm"
+version="v6-LTS"
 app_type="native"
-progress_phase "prepare" 0 "Preparing to install..."
-package_install_and_check "$package_name"
-progress_done
+
+sha256="9b7494a37d3e9ce2788c427a2a03b42b493ce88496e3ac02bb1e7bfaddf72f54"
+
+package_install_and_check "xdotool python libpng libjpeg-turbo python-tkinter python-pillow"
+install_deb_into_termux "https://github.com/Superchavo/termux-display-manager-repo/raw/refs/heads/master/TermuxDM-${version}-Codenamed-Morano.deb"

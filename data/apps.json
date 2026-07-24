@@ -762,6 +762,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Konsole/logo.png"
   },
   {
+    "app_name": "Krita",
+    "folder_name": "Krita",
+    "description": "Krita is the full-featured digital art studio.",
+    "categories": [
+      "Graphics"
+    ],
+    "app_type": "native",
+    "run_cmd": "krita",
+    "supported_arch": "aarch64,arm",
+    "version": "termux_local_version",
+    "package_name": "krita",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Krita/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Krita/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Krita/logo.png"
+  },
+  {
     "app_name": "Kvantum",
     "folder_name": "Kvantum",
     "description": "A Linux SVG-based theme engine for Qt and KDE",

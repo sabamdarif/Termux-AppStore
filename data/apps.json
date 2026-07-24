@@ -1308,6 +1308,22 @@
     "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Telegram-desktop/logo.png"
   },
   {
+    "app_name": "Termux dm",
+    "folder_name": "Termux-dm",
+    "description": "The termux display manager for termux! This adds a DM to termux",
+    "categories": [
+      "Accessories"
+    ],
+    "app_type": "native",
+    "run_cmd": "wget https://raw.githubusercontent.com/Superchavo/termux-display-manager-repo/refs/heads/master/tdmautoinstall.sh && chmod +x ./tdmautoinstall.sh && ./tdmautoinstall.sh",
+    "supported_arch": "aarch64",
+    "version": "5.0",
+    "package_name": "termux-dm",
+    "install_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Termux-dm/install.sh",
+    "uninstall_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Termux-dm/uninstall.sh",
+    "logo_url": "https://raw.githubusercontent.com/sabamdarif/Termux-AppStore/main/apps/Termux-dm/logo.png"
+  },
+  {
     "app_name": "Thunderbird",
     "folder_name": "Thunderbird",
     "description": "Thunderbird is an email client with features like a tabbed interface, smart spam filter, and numerous add-ons.",

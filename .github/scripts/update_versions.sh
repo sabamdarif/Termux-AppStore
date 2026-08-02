@@ -50,11 +50,13 @@ for app_folder in apps/*; do
 	repo_name=$(echo "$page_url" | sed -E 's|https://github.com/([^/]+)/([^/]+)|\1/\2|')
 	echo "Checking updates for $app_name (GitHub repo: $repo_name)"
 
-	LATEST_VERSION=$(curl -s "https://api.github.com/repos/$repo_name/releases/latest" |
-		grep '"tag_name":' |
-		sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+	LATEST_VERSION=$(curl -s ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+		"https://api.github.com/repos/$repo_name/releases/latest" |
+		jq -r '.tag_name // empty')
 
 	[[ -z "$LATEST_VERSION" ]] && continue
+	# tags with /, ", or spaces would break the sed in update_version
+	[[ "$LATEST_VERSION" =~ ^[A-Za-z0-9._+-]+$ ]] || continue
 	echo "Latest version for $app_name: $LATEST_VERSION"
 
 	CURRENT_VERSION=$(grep '^version=' "$install_file" | head -n1 | cut -d '"' -f2)

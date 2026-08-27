@@ -493,6 +493,7 @@ function package_install_and_check {
 	local packs_list
 	# Properly splits on spaces
 	IFS=' ' read -r -a packs_list <<<"$*"
+	local package_name
 	local overall_failed=0
 
 	# pacman part
@@ -619,6 +620,7 @@ function package_remove_and_check {
 	local packs_list
 	# Properly splits on spaces
 	IFS=' ' read -r -a packs_list <<<"$*"
+	local package_name
 
 	if [[ "$PACKAGE_MANAGER" == "pacman" ]]; then
 		for package_name in "${packs_list[@]}"; do
@@ -1118,6 +1120,7 @@ function _pd_package_install_and_check_internal() {
 
 	# shellcheck disable=SC2206
 	local packs_list=($@)
+	local package_name
 	local overall_failed=0
 
 	if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
@@ -1280,6 +1283,7 @@ function _pd_package_remove_and_check_internal() {
 
 	local packs_list
 	IFS=' ' read -r -a packs_list <<<"$*"
+	local package_name
 
 	if [[ "$SELECTED_DISTRO" == "debian" ]] || [[ "$SELECTED_DISTRO" == "ubuntu" ]]; then
 		for package_name in "${packs_list[@]}"; do

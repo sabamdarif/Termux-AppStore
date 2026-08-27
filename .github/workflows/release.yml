@@ -32,12 +32,18 @@ jobs:
 
             - name: Determine build parameters
               id: check
+              env:
+                  # Passed through the environment, never interpolated into the
+                  # script body: a title/message containing backticks or $(...)
+                  # would otherwise be executed by bash.
+                  PR_TITLE: ${{ github.event.pull_request.title }}
+                  HEAD_COMMIT_MSG: ${{ github.event.head_commit.message }}
               run: |
                   commit_msg=""
                   if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-                    commit_msg="${{ github.event.pull_request.title }}"
+                    commit_msg="$PR_TITLE"
                   elif [[ "${{ github.event_name }}" == "push" ]]; then
-                    commit_msg="${{ github.event.head_commit.message }}"
+                    commit_msg="$HEAD_COMMIT_MSG"
                   fi
 
                   if [[ "$commit_msg" =~ release\(appstore\):\ v?([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9]+)?) ]]; then

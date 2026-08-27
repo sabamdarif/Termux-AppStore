@@ -760,9 +760,7 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             return
 
         progress_dialog, status_label, progress_bar, terminal_view = (
-            self._create_progress_dialog(
-                title=f"{action_label}...", allow_cancel=True, use_terminal=True
-            )
+            self._create_progress_dialog(title=f"{action_label}...", allow_cancel=True)
         )
 
         def _refresh_current_view():

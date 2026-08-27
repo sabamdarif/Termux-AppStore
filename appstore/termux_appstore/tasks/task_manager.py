@@ -171,7 +171,6 @@ def create_progress_dialog(
     stack.add_named(terminal_box, "terminal")
 
     initial_view = "terminal" if use_terminal_default else "progress"
-    stack.set_visible_child_name(initial_view)
 
     if use_terminal_default:
         terminal_button.get_style_context().remove_class("suggested-action")
@@ -333,6 +332,11 @@ def create_progress_dialog(
     dialog.appstore_set_error = _set_error
 
     dialog.show_all()
+
+    # Gtk.Stack.set_visible_child_name() is a no-op while the target child is
+    # still unrealized, so the initial view can only be applied after
+    # show_all() has made both stack children visible.
+    stack.set_visible_child_name(initial_view)
 
     return (
         dialog,

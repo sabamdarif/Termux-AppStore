@@ -76,6 +76,7 @@ def run_script_with_progress(
         refresh_view_cb:  Optional callable that refreshes the current view.
     """
     cancelled = False
+    failed = False
     process = None
     script_file = None
     log_lines = []
@@ -104,6 +105,11 @@ def run_script_with_progress(
     def update_progress(fraction, text):
         if not progress_dialog or not progress_dialog.get_window():
             return False
+        # Once the dialog is in its error state the status label belongs to the
+        # failure message and the Cancel button has become an always-enabled
+        # Close button. Late progress updates must not undo either.
+        if failed:
+            return False
         status_label.set_text(text)
         progress_bar.set_fraction(fraction)
         progress_bar.set_text(f"{int(fraction * 100)}%")
@@ -122,7 +128,7 @@ def run_script_with_progress(
 
     # ── Worker thread ─────────────────────────────────────────────────
     def worker():
-        nonlocal script_file, process
+        nonlocal script_file, process, failed
 
         try:
             op = "install"
@@ -172,7 +178,7 @@ def run_script_with_progress(
             os.chmod(script_file, os.stat(script_file).st_mode | stat.S_IEXEC)
 
             def heartbeat_cb():
-                if cancelled or engine.is_done:
+                if cancelled or failed or engine.is_done:
                     return False  # Stop timer
                 engine.heartbeat()
                 elapsed = time.time() - engine._last_token_time
@@ -259,6 +265,7 @@ def run_script_with_progress(
                 GLib.idle_add(progress_dialog.destroy)
             else:
                 reason = engine.current_message if engine.has_error else ""
+                failed = True
                 _show_failure(
                     progress_dialog,
                     action_label,
@@ -272,6 +279,7 @@ def run_script_with_progress(
         except Exception as e:
             print(f"{action_label} error: {e}")
             log_lines.append(f"\n[appstore] Unexpected error: {e}")
+            failed = True
             _show_failure(progress_dialog, action_label, log_lines, None, str(e))
             # Leave the dialog open with the accumulated log.
 

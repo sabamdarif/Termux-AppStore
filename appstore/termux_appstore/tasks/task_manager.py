@@ -322,12 +322,19 @@ def create_progress_dialog(
         save_button.set_sensitive(True)
         save_button.set_tooltip_text("Save the full failure log")
 
-        # Swap Cancel -> Close (Cancel had a >80% sensitivity gate).
+        # Swap Cancel -> Close (Cancel had a >80% sensitivity gate). When the
+        # dialog was built without a Cancel button, add a Close one so the
+        # error state is never a dead end.
         cancel_btn = dialog.get_widget_for_response(Gtk.ResponseType.CANCEL)
-        if cancel_btn:
-            cancel_btn.set_label("Close")
-            cancel_btn.set_sensitive(True)
-            cancel_btn.get_style_context().remove_class("destructive-action")
+        if cancel_btn is None:
+            cancel_btn = dialog.add_button("Close", Gtk.ResponseType.CANCEL)
+        cancel_btn.set_label("Close")
+        cancel_btn.set_sensitive(True)
+        cancel_btn.get_style_context().remove_class("destructive-action")
+
+        # The header bar hides its close button during the run; restore it as a
+        # second way out. Any response id destroys the dialog.
+        header_bar.set_show_close_button(True)
 
     dialog.appstore_set_error = _set_error
 

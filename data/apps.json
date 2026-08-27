@@ -1315,7 +1315,7 @@
       "Internet"
     ],
     "app_type": "native",
-    "run_cmd": "telegram-desktop",
+    "run_cmd": "Telegram",
     "supported_arch": "aarch64,arm",
     "version": "termux_local_version",
     "package_name": "telegram-desktop",

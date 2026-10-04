@@ -3,14 +3,14 @@
 supported_arch="aarch64"
 package_name="brave-browser"
 run_cmd="/opt/brave-browser/brave-browser --no-sandbox"
-version="v1.96.59"
+version="v1.96.61"
 app_type="distro"
 page_url="https://github.com/brave/brave-browser"
 working_dir="${distro_path}/opt"
 supported_distro="all"
 
 # SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
-sha256="faa8a26f1e7c0c3b8632633503f82e571a798212d8e6fe9baba77f0c73509867"
+sha256="33a1513379505642e4df0dda36a1dd78f735ee351631cffd4a4ac90b1cec0cd5"
 
 if [ -z "$SELECTED_DISTRO" ]; then
 	print_failed "Error: No distro selected"

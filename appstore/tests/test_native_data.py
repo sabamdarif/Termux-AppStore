@@ -98,5 +98,31 @@ class TestFetchCatalogsCaching(unittest.TestCase):
         self.assertEqual(native_data.fetch_native_catalogs({"x11"}, "x86_64"), [])
 
 
+class TestSvgLogoSelection(unittest.TestCase):
+    """app_card._load_logo must fall back to logo.svg when logo.png is absent."""
+
+    def test_svg_fallback_path_selection(self):
+        import sys
+        from unittest import mock as _mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "MyApp"
+            folder.mkdir()
+            (folder / "logo.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"/>'
+            )
+            try:
+                from gi.repository import GdkPixbuf  # noqa: F401
+            except ImportError:
+                self.skipTest("no GdkPixbuf on this host")
+
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+            from termux_appstore.ui import app_card
+
+            with _mock.patch.object(app_card, "APPSTORE_LOGO_DIR", tmp):
+                image = app_card._load_logo({"folder_name": "MyApp"})
+            self.assertIsNotNone(image, "SVG logo was not loaded")
+
+
 if __name__ == "__main__":
     unittest.main()

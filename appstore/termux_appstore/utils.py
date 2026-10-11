@@ -65,6 +65,10 @@ def validate_logo_size(logo_path):
     except ImportError:
         return True  # skip validation when Pillow is not installed
 
+    if str(logo_path).lower().endswith(".svg"):
+        # Vector logos have no fixed pixel size; PIL cannot parse them.
+        return True
+
     try:
         with Image.open(logo_path) as img:
             width, height = img.size

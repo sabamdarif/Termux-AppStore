@@ -51,9 +51,15 @@ jobs:
                       if [ -f "$app_dir/logo.png" ]; then
                         mkdir -p "logo/${app_name}"
                         cp "$app_dir/logo.png" "logo/${app_name}/logo.png"
-                      elif [ -f "$app_dir/icon"*.png ]; then
+                      elif [ -f "$app_dir/logo.svg" ]; then
+                        mkdir -p "logo/${app_name}"
+                        cp "$app_dir/logo.svg" "logo/${app_name}/logo.svg"
+                      elif compgen -G "$app_dir/icon*.png" >/dev/null; then
                         mkdir -p "logo/${app_name}"
                         cp "$app_dir/icon"*.png "logo/${app_name}/logo.png"
+                      elif compgen -G "$app_dir/icon*.svg" >/dev/null; then
+                        mkdir -p "logo/${app_name}"
+                        cp "$app_dir/icon"*.svg "logo/${app_name}/logo.svg"
                       fi
                     fi
                   done

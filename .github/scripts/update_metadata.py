@@ -104,6 +104,7 @@ def get_urls(app_folder_name, app_folder):
         + [f"icon-{i}.png" for i in range(100)]
         + [f"logo-{i}.svg" for i in range(100)]
         + [f"icon-{i}.svg" for i in range(100)]
+        + ["icon-64.svg", "icon-128.svg"]
     )
 
     def get_logo_file():

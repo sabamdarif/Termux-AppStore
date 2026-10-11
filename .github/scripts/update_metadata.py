@@ -38,8 +38,11 @@ def compress_image(image_path):
             resample_filter = getattr(Image, "Resampling", Image).LANCZOS
 
             if target_max == max_dim:
-                img.save(image_path, optimize=True)
-                print(f"Optimized {image_path} without resizing")
+                # Already at target size: skip the re-save. Re-encoding here is
+                # not idempotent and produces endless diff churn in CI (the
+                # "Check for changes" step then trips the commit step, which
+                # only stages data/apps.json and fails with nothing to commit).
+                print(f"{image_path} already at target size, leaving as-is")
                 return
 
             if width > height:

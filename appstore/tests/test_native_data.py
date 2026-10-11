@@ -99,6 +99,70 @@ class TestFetchCatalogsCaching(unittest.TestCase):
                 self.assertEqual(out, good + good, "cached fallback used")
 
 
+class TestSyncNativeIcons(unittest.TestCase):
+    def _setup(self, tmp):
+        native = Path(tmp) / "native"
+        logo = Path(tmp) / "logo"
+        native.mkdir()
+        logo.mkdir()
+        return native, logo
+
+    def _make_zip(self, path):
+        import zipfile as _zf
+
+        with _zf.ZipFile(path, "w") as zf:
+            zf.writestr("MyApp/logo.svg", "<svg/>")
+
+    def test_downloads_extracts_and_marks_version(self):
+        import io
+        import zipfile as _zf
+
+        with tempfile.TemporaryDirectory() as tmp:
+            native, logo = self._setup(tmp)
+            buf = io.BytesIO()
+            with _zf.ZipFile(buf, "w") as zf:
+                zf.writestr("MyApp/logo.svg", "<svg/>")
+            zip_bytes = buf.getvalue()
+
+            class FakeResp:
+                def __enter__(self):
+                    return io.BytesIO(zip_bytes)
+
+                def __exit__(self, *a):
+                    return False
+
+            with mock.patch.object(native_data, "NATIVE_DIR", str(native)),                  mock.patch.object(native_data, "APPSTORE_LOGO_DIR", str(logo)),                  mock.patch.object(
+                     native_data, "_fetch_json",
+                     return_value={"catalog_version": "v1"},
+                 ),                  mock.patch.object(native_data, "urlopen", return_value=FakeResp()):
+                native_data.sync_native_icons()
+
+            self.assertTrue((logo / "MyApp" / "logo.svg").exists(), "icon extracted")
+            self.assertEqual((native / "icons-version").read_text(), "v1")
+
+    def test_skips_when_version_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            native, logo = self._setup(tmp)
+            (native / "icons-version").write_text("v1")
+            with mock.patch.object(native_data, "NATIVE_DIR", str(native)),                  mock.patch.object(native_data, "APPSTORE_LOGO_DIR", str(logo)),                  mock.patch.object(
+                     native_data, "_fetch_json",
+                     return_value={"catalog_version": "v1"},
+                 ),                  mock.patch.object(native_data, "urlopen") as m_url:
+                native_data.sync_native_icons()
+            m_url.assert_not_called()
+            self.assertFalse((logo / "MyApp").exists(), "no download should occur")
+
+    def test_failure_is_nonfatal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            native, logo = self._setup(tmp)
+            with mock.patch.object(native_data, "NATIVE_DIR", str(native)),                  mock.patch.object(native_data, "APPSTORE_LOGO_DIR", str(logo)),                  mock.patch.object(
+                     native_data, "_fetch_json",
+                     side_effect=OSError("offline"),
+                 ):
+                native_data.sync_native_icons()  # must not raise
+            self.assertFalse((native / "icons-version").exists())
+
+
 class TestSvgLogoSelection(unittest.TestCase):
     """app_card._load_logo must fall back to logo.svg when logo.png is absent."""
 

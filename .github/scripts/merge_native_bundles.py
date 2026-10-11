@@ -66,15 +66,20 @@ def main():
         if not bundle.is_dir():
             continue
         print(f"merging bundle: {bundle.name}")
-        for f in bundle.iterdir():
+        # upload-artifact preserves the upload paths relative to the workspace
+        # (out/<json>, state/native-state.json, out/icons/...), so resolve
+        # recursively rather than assuming a flat bundle root.
+        for f in bundle.rglob("*"):
+            if not f.is_file():
+                continue
             if f.name in EXPECTED_JSONS:
                 shutil.copy2(f, out / f.name)
                 found_jsons.append(f.name)
             elif f.name == "native-state.json":
                 with open(f) as fh:
                     deep_merge_state(state, json.load(fh))
-        icons_dir = bundle / "icons"
-        if icons_dir.is_dir():
+        icons_dirs = [d for d in bundle.rglob("icons") if d.is_dir()]
+        for icons_dir in icons_dirs:
             for item in icons_dir.iterdir():
                 dest = icons_out / item.name
                 if item.is_dir():

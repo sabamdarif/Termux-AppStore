@@ -115,6 +115,9 @@ def fetch_native_catalogs(repos, arch):
     if arch not in ("aarch64", "arm"):
         return []
     os.makedirs(NATIVE_DIR, exist_ok=True)
+    # The main-repo catalog (terminal exceptions, VLC-style entries) is always
+    # fetched: the main repo is enabled on every Termux install.
+    repos = set(repos) | {"main"}
     entries = []
     for repo in sorted(repos):
         cache = os.path.join(NATIVE_DIR, f"{repo}-{arch}.json")

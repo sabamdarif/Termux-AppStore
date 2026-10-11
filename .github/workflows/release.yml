@@ -66,13 +66,9 @@ jobs:
     build:
         needs: check-env
         runs-on: ubuntu-latest
-        strategy:
-            # The package sets TERMUX_PKG_PLATFORM_INDEPENDENT=true, so every
-            # arch builds the identical arch-independent package — one entry
-            # is enough (the value is only used for the -a flag/artifact name).
-            matrix:
-                target_arch: [aarch64]
-            fail-fast: false
+        # TERMUX_PKG_PLATFORM_INDEPENDENT=true makes the build arch-independent
+        # (output is termux-appstore_*_all.deb / .pkg.tar.*), so no matrix and
+        # no -a flag are needed.
         steps:
             - name: Checkout AppStore
               uses: actions/checkout@v7
@@ -108,17 +104,17 @@ jobs:
             - name: Build packages (deb)
               run: |
                   cd termux-packages
-                  ./scripts/run-docker.sh -d ./build-package.sh -I -C -a ${{ matrix.target_arch }} termux-appstore
+                  ./scripts/run-docker.sh -d ./build-package.sh -I -C termux-appstore
 
             - name: Build packages (pacman)
               run: |
                   cd termux-packages
-                  ./scripts/run-docker.sh -d ./build-package.sh -f --format pacman -I -C -a ${{ matrix.target_arch }} termux-appstore
+                  ./scripts/run-docker.sh -d ./build-package.sh -f --format pacman -I -C termux-appstore
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v7
               with:
-                  name: packages-${{ matrix.target_arch }}
+                  name: packages-all
                   path: |
                       termux-packages/output/termux-appstore*.deb
                       termux-packages/output/termux-appstore*.pkg.*

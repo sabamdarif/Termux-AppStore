@@ -15,6 +15,9 @@ permissions:
 
 jobs:
     update-metadata:
+        # Skip this workflow by including "SKIP_Update_Apps_Metadata" in the
+        # commit message (head commit for pushes).
+        if: ${{ !contains(github.event.head_commit.message, 'SKIP_Update_Apps_Metadata') }}
         runs-on: ubuntu-latest
         permissions:
             contents: write

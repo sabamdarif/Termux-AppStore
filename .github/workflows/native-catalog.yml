@@ -20,6 +20,9 @@ permissions:
 
 jobs:
     generate:
+        # Skip this workflow by including "SKIP_Native_Catalog_generate" in the
+        # commit message (with or without " = true"; head commit for pushes).
+        if: ${{ !contains(github.event.head_commit.message, 'SKIP_Native_Catalog_generate') }}
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7

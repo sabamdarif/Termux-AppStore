@@ -1,8 +1,12 @@
 name: Native Catalog
 
 # Daily regeneration of the native repo catalog (x11 + tur + metadata-only
-# main pass). Assets are published to the single rolling `native_data`
-# release, replacing the previous ones — the app always downloads the latest.
+# main pass). Each repo/arch combination builds in its own matrix leg and
+# uploads a {repo}-{arch}.tar.gz bundle; the publish job merges the bundles
+# and replaces the assets on the rolling `native_data` release.
+#
+# Skip on push by including "SKIP_Native_Catalog_generate" in the commit
+# message (with or without " = true").
 
 on:
     schedule:
@@ -24,6 +28,11 @@ jobs:
         # commit message (with or without " = true"; head commit for pushes).
         if: ${{ !contains(github.event.head_commit.message, 'SKIP_Native_Catalog_generate') }}
         runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                repo: [x11, tur]
+                arch: [aarch64, arm]
         steps:
             - uses: actions/checkout@v7
 
@@ -48,7 +57,80 @@ jobs:
             - name: Generate catalog
               run: |
                   python3 .github/scripts/native_catalog_gen.py --verbose \
+                      --repo "${{ matrix.repo }}" --arch "${{ matrix.arch }}" \
                       --state state/native-state.json --out out/
+
+            - name: Upload bundle
+              uses: actions/upload-artifact@v7
+              with:
+                  name: native-${{ matrix.repo }}-${{ matrix.arch }}
+                  path: |
+                      out/${{ matrix.repo }}-${{ matrix.arch }}.json
+                      out/icons/
+                      state/native-state.json
+                  if-no-files-found: error
+
+    generate-main:
+        # Metadata-only pass (no downloads) for overrides living in the main
+        # repo — covers the terminal-app exceptions and VLC-style entries.
+        if: ${{ !contains(github.event.head_commit.message, 'SKIP_Native_Catalog_generate') }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                arch: [aarch64, arm]
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Set up Python
+              uses: actions/setup-python@v7
+              with:
+                  python-version: "3.14"
+
+            - name: Fetch previous state
+              run: |
+                  mkdir -p state out/icons
+                  BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/native_data"
+                  curl -fsSL -o state/native-state.json "$BASE/native-state.json" \
+                      || echo '{}' > state/native-state.json
+
+            - name: Generate catalog
+              run: |
+                  python3 .github/scripts/native_catalog_gen.py --verbose \
+                      --repo main --arch "${{ matrix.arch }}" \
+                      --state state/native-state.json --out out/
+
+            - name: Upload bundle
+              uses: actions/upload-artifact@v7
+              with:
+                  name: native-main-${{ matrix.arch }}
+                  path: |
+                      out/main-${{ matrix.arch }}.json
+                      state/native-state.json
+                  if-no-files-found: error
+
+    publish:
+        needs: [generate, generate-main]
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Set up Python
+              uses: actions/setup-python@v7
+              with:
+                  python-version: "3.14"
+
+            - name: Download bundles
+              uses: actions/download-artifact@v8
+              with:
+                  path: bundles
+                  pattern: native-*
+                  merge-multiple: false
+
+            - name: Merge bundles
+              run: |
+                  python3 .github/scripts/merge_native_bundles.py \
+                      --bundles bundles/ --out out/
 
             - name: Publish rolling release
               uses: softprops/action-gh-release@v3
@@ -59,4 +141,4 @@ jobs:
                       Auto-generated native repo catalog for Termux-AppStore.
                       Rebuilt daily from the Termux x11 and TUR repositories.
                       Assets are replaced on every run — always fetch the latest.
-                  files: out/*.json out/native-icons.zip
+                  files: out/*

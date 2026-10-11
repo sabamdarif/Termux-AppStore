@@ -17,6 +17,7 @@ on:
             - "data/native-overrides.json"
             - "data/icons/**"
             - ".github/scripts/native_catalog_gen.py"
+            - ".github/scripts/merge_native_bundles.py"
             - ".github/workflows/native-catalog.yml"
 
 permissions:

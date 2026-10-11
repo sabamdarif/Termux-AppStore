@@ -46,7 +46,11 @@ jobs:
                     commit_msg="$HEAD_COMMIT_MSG"
                   fi
 
-                  if [[ "$commit_msg" =~ release\(appstore\):\ v?([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9]+)?) ]]; then
+                  # Anchored to the subject line start: only an explicit
+                  # "release(appstore): X.Y.Z" commit triggers a release, so
+                  # prose like "ci(release): ..." in a body can't misfire.
+                  subject="${commit_msg%%$'\n'*}"
+                  if [[ "$subject" =~ ^release\(appstore\):\ v?([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9]+)?) ]]; then
                     echo "is_release=true" >> "$GITHUB_OUTPUT"
                     echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
                     echo "Found release tag: v${BASH_REMATCH[1]}"

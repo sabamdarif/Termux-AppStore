@@ -79,27 +79,24 @@ class TestFetchCatalogsCaching(unittest.TestCase):
     def test_download_then_cached_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(native_data, "NATIVE_DIR", tmp):
-                good = [{"package_name": "foo"}]
+                good = [{"package_name": "foo", "supported_arch": "aarch64,arm"}]
                 with mock.patch.object(native_data, "_fetch_json", return_value=good):
-                    out = native_data.fetch_native_catalogs({"x11"}, "aarch64")
+                    out = native_data.fetch_native_catalogs({"x11"})
                 # x11 + the always-fetched main catalog -> the entry per repo.
                 self.assertEqual(out, good + good)
                 self.assertTrue(
-                    (Path(tmp) / "x11-aarch64.json").exists(), "cache written"
+                    (Path(tmp) / "x11.json").exists(), "cache written"
                 )
                 self.assertTrue(
-                    (Path(tmp) / "main-aarch64.json").exists(), "main cache written"
+                    (Path(tmp) / "main.json").exists(), "main cache written"
                 )
 
                 def boom(_url):
                     raise OSError("offline")
 
                 with mock.patch.object(native_data, "_fetch_json", side_effect=boom):
-                    out = native_data.fetch_native_catalogs({"x11"}, "aarch64")
+                    out = native_data.fetch_native_catalogs({"x11"})
                 self.assertEqual(out, good + good, "cached fallback used")
-
-    def test_unsupported_arch_returns_empty(self):
-        self.assertEqual(native_data.fetch_native_catalogs({"x11"}, "x86_64"), [])
 
 
 class TestSvgLogoSelection(unittest.TestCase):

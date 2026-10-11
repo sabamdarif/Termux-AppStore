@@ -279,7 +279,7 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
         # logo extraction above because that step wipes APPSTORE_LOGO_DIR (P8).
         if Settings().get("enable_native_repo_catalog", True):
             repos, _x11_missing = native_data.enabled_native_repos()
-            native_entries = native_data.fetch_native_catalogs(repos, system_arch)
+            native_entries = native_data.fetch_native_catalogs(repos)
             native_data.sync_native_icons()
         else:
             native_entries = []

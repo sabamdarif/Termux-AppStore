@@ -106,35 +106,36 @@ def _fetch_json(url, timeout=60):
         return json.loads(resp.read().decode("utf-8"))
 
 
-def fetch_native_catalogs(repos, arch):
-    """Download + cache the native catalogs for *repos* on *arch*.
+def fetch_native_catalogs(repos):
+    """Download + cache the native catalogs for *repos*.
 
-    On download failure the cached copy is used; a repo with neither is
-    skipped. Returns a flat list of entries.
+    Catalogs are one file per repo (``x11.json`` etc.); each entry's
+    ``supported_arch`` field records the arches it is available on, and the
+    app's existing arch filter in ``load_app_metadata`` consumes that. On
+    download failure the cached copy is used; a repo with neither is skipped.
+    Returns a flat list of entries.
     """
-    if arch not in ("aarch64", "arm"):
-        return []
     os.makedirs(NATIVE_DIR, exist_ok=True)
     # The main-repo catalog (terminal exceptions, VLC-style entries) is always
     # fetched: the main repo is enabled on every Termux install.
     repos = set(repos) | {"main"}
     entries = []
     for repo in sorted(repos):
-        cache = os.path.join(NATIVE_DIR, f"{repo}-{arch}.json")
+        cache = os.path.join(NATIVE_DIR, f"{repo}.json")
         try:
-            data = _fetch_json(f"{NATIVE_DATA_BASE}/{repo}-{arch}.json")
+            data = _fetch_json(f"{NATIVE_DATA_BASE}/{repo}.json")
             with open(cache, "w", encoding="utf-8") as f:
                 json.dump(data, f)
             entries.extend(data)
-            print(f"native catalog {repo}-{arch}: {len(data)} entries (fresh)")
+            print(f"native catalog {repo}: {len(data)} entries (fresh)")
         except Exception as e:
-            print(f"native catalog {repo}-{arch} download failed: {e}")
+            print(f"native catalog {repo} download failed: {e}")
             if os.path.exists(cache):
                 try:
                     with open(cache, encoding="utf-8") as f:
                         data = json.load(f)
                     entries.extend(data)
-                    print(f"native catalog {repo}-{arch}: {len(data)} entries (cached)")
+                    print(f"native catalog {repo}: {len(data)} entries (cached)")
                 except Exception as e2:
                     print(f"cached catalog unreadable: {e2}")
     return entries

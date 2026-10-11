@@ -214,5 +214,47 @@ class TestDebExtraction(unittest.TestCase):
         self.assertEqual(entry["homepage"], "https://x")
 
 
+class TestMergeRepoCatalogs(unittest.TestCase):
+    """merge_native_bundles.merge_repo_catalogs — per-arch -> per-repo."""
+
+    @classmethod
+    def setUpClass(cls):
+        spec2 = importlib.util.spec_from_file_location(
+            "merge_native_bundles",
+            Path(__file__).resolve().parents[2]
+            / ".github"
+            / "scripts"
+            / "merge_native_bundles.py",
+        )
+        cls.mnb = importlib.util.module_from_spec(spec2)
+        spec2.loader.exec_module(cls.mnb)
+
+    def test_supported_arch_accumulates(self):
+        entry_a = {"package_name": "foo", "version": "1.0", "app_name": "Foo"}
+        entry_b = {"package_name": "foo", "version": "1.1", "app_name": "Foo"}
+        merged = self.mnb.merge_repo_catalogs(
+            {"aarch64": [entry_a], "arm": [entry_b]}
+        )
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["supported_arch"], "aarch64,arm")
+        # newer version's scalar fields win
+        self.assertEqual(merged[0]["version"], "1.1")
+
+    def test_single_arch_entry(self):
+        merged = self.mnb.merge_repo_catalogs(
+            {"aarch64": [{"package_name": "bar", "version": "1.0"}], "arm": []}
+        )
+        self.assertEqual(merged[0]["supported_arch"], "aarch64")
+
+    def test_distinct_packages_kept(self):
+        merged = self.mnb.merge_repo_catalogs(
+            {
+                "aarch64": [{"package_name": "a", "version": "1"}],
+                "arm": [{"package_name": "b", "version": "1"}],
+            }
+        )
+        self.assertEqual(len(merged), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

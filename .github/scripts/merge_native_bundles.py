@@ -5,9 +5,10 @@ Each matrix leg of native-catalog.yml uploads a bundle artifact
 (``native-<repo>-<arch>``) containing that leg's catalog JSON, its extracted
 icons, and its slice of the incremental state file. This script merges them:
 
-- per-repo JSONs are copied through (``x11-aarch64.json`` etc.);
-- icons dirs are unioned into ``icons/`` (legs never write the same folder
-  for extracted icons; on collision the last one wins, which is fine);
+- per-arch JSONs are merged into ONE catalog per repo (``x11.json``,
+  ``tur.json``, ``main.json``); each entry's ``supported_arch`` records the
+  arches the package appeared in, and the newest version across arches wins;
+- icons dirs are unioned into ``icons/`` (extracted icons are arch-independent);
 - state files are deep-merged per package/repo/arch so no leg's cached
   results are lost;
 - ``native-version.json`` is regenerated fresh (new catalog_version);
@@ -23,14 +24,8 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_JSONS = [
-    "x11-aarch64.json",
-    "x11-arm.json",
-    "tur-aarch64.json",
-    "tur-arm.json",
-    "main-aarch64.json",
-    "main-arm.json",
-]
+REPOS = ("x11", "tur", "main")
+ARCHES = ("aarch64", "arm")
 
 
 def deep_merge_state(base, extra):
@@ -48,6 +43,36 @@ def deep_merge_state(base, extra):
     return base
 
 
+def merge_repo_catalogs(per_arch):
+    """Merge {arch: [entries]} into one list with supported_arch filled in.
+
+    Entries are keyed by package_name; the record from the arch whose version
+    sorts last wins for the scalar fields, and supported_arch lists every arch
+    the package appeared in.
+    """
+    by_pkg = {}
+    for arch in ARCHES:
+        for entry in per_arch.get(arch, []):
+            pkg = entry.get("package_name")
+            if not pkg:
+                continue
+            existing = by_pkg.get(pkg)
+            if existing is None:
+                entry = dict(entry)
+                entry["supported_arch"] = arch
+                by_pkg[pkg] = entry
+            else:
+                archs = existing["supported_arch"].split(",")
+                if arch not in archs:
+                    archs.append(arch)
+                    existing["supported_arch"] = ",".join(sorted(archs))
+                if entry.get("version", "") > existing.get("version", ""):
+                    for key, value in entry.items():
+                        if key != "supported_arch":
+                            existing[key] = value
+    return list(by_pkg.values())
+
+
 def main():
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     ap.add_argument("--bundles", required=True, help="dir of bundle artifact dirs")
@@ -61,7 +86,8 @@ def main():
     icons_out.mkdir(exist_ok=True)
 
     state = {}
-    found_jsons = []
+    # repo -> arch -> [entries]
+    per_repo = {repo: {} for repo in REPOS}
     for bundle in sorted(bundles.iterdir()):
         if not bundle.is_dir():
             continue
@@ -72,14 +98,16 @@ def main():
         for f in bundle.rglob("*"):
             if not f.is_file():
                 continue
-            if f.name in EXPECTED_JSONS:
-                shutil.copy2(f, out / f.name)
-                found_jsons.append(f.name)
-            elif f.name == "native-state.json":
+            stem = f.name.removesuffix(".json")
+            if f.name == "native-state.json":
                 with open(f) as fh:
                     deep_merge_state(state, json.load(fh))
-        icons_dirs = [d for d in bundle.rglob("icons") if d.is_dir()]
-        for icons_dir in icons_dirs:
+            elif "-" in stem:
+                repo, _, arch = stem.rpartition("-")
+                if repo in REPOS and arch in ARCHES:
+                    with open(f) as fh:
+                        per_repo[repo][arch] = json.load(fh)
+        for icons_dir in (d for d in bundle.rglob("icons") if d.is_dir()):
             for item in icons_dir.iterdir():
                 dest = icons_out / item.name
                 if item.is_dir():
@@ -87,18 +115,19 @@ def main():
                 else:
                     shutil.copy2(item, dest)
 
-    missing = [j for j in EXPECTED_JSONS if j not in found_jsons]
-    if missing:
-        raise SystemExit(f"missing catalog JSONs from bundles: {missing}")
+    counts = {}
+    for repo in REPOS:
+        if not per_repo[repo]:
+            raise SystemExit(f"missing all catalog JSONs for repo: {repo}")
+        merged = merge_repo_catalogs(per_repo[repo])
+        with open(out / f"{repo}.json", "w") as f:
+            json.dump(merged, f, indent=2, ensure_ascii=False)
+        counts[repo] = len(merged)
 
     with open(out / "native-state.json", "w") as f:
         json.dump(state, f, indent=1, sort_keys=True)
 
     now = datetime.now(timezone.utc)
-    counts = {}
-    for j in EXPECTED_JSONS:
-        with open(out / j) as f:
-            counts[j.removesuffix(".json")] = len(json.load(f))
     with open(out / "native-version.json", "w") as f:
         json.dump(
             {
@@ -116,7 +145,7 @@ def main():
                 zf.write(path, path.relative_to(icons_out))
 
     print(json.dumps(counts, indent=2))
-    print(f"merged {len(found_jsons)} catalogs, "
+    print(f"merged {len(counts)} repo catalogs, "
           f"{sum(1 for _ in icons_out.rglob('*') if _.is_file())} icon files, "
           f"{len(state)} state packages")
 

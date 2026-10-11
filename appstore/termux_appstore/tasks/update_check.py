@@ -20,7 +20,6 @@ from termux_appstore.backend.refresh import (
     _check_distro_packages,
     _check_native_packages,
 )
-from termux_appstore.utils import get_current_arch
 from termux_appstore.constants import (
     APPSTORE_DIR,
     APPSTORE_JSON,
@@ -167,9 +166,7 @@ def run_update_pipeline(
         _progress(42, "Fetching native catalog...")
         if Settings().get("enable_native_repo_catalog", True):
             repos, _x11_missing = native_data.enabled_native_repos()
-            native_entries = native_data.fetch_native_catalogs(
-                repos, get_current_arch()
-            )
+            native_entries = native_data.fetch_native_catalogs(repos)
         else:
             native_entries = []
         new_apps_data = native_data.merge_catalog(new_apps_data, native_entries)

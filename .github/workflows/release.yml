@@ -67,8 +67,11 @@ jobs:
         needs: check-env
         runs-on: ubuntu-latest
         strategy:
+            # The package sets TERMUX_PKG_PLATFORM_INDEPENDENT=true, so every
+            # arch builds the identical arch-independent package — one entry
+            # is enough (the value is only used for the -a flag/artifact name).
             matrix:
-                target_arch: [aarch64, arm, i686, x86_64]
+                target_arch: [aarch64]
             fail-fast: false
         steps:
             - name: Checkout AppStore

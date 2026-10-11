@@ -47,7 +47,7 @@ jobs:
 
             - name: Generate catalog
               run: |
-                  python3 .github/scripts/native_catalog_gen.py \
+                  python3 .github/scripts/native_catalog_gen.py --verbose \
                       --state state/native-state.json --out out/
 
             - name: Publish rolling release

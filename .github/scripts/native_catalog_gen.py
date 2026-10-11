@@ -138,6 +138,24 @@ ICON_SIZE_RANK = {"scalable": 4, "128": 3, "64": 2, "48": 1}
 
 USER_AGENT = "termux-appstore-native-catalog-gen/1.0"
 
+VERBOSE = False
+
+
+def log(msg):
+    """Always-on progress log (also unbuffered for live CI output)."""
+    print(msg, flush=True)
+
+
+def vlog(msg):
+    """Verbose-only detail log."""
+    if VERBOSE:
+        print(msg, flush=True)
+
+
+def elog(msg):
+    """Error log (stderr)."""
+    print(msg, file=sys.stderr, flush=True)
+
 
 # --------------------------------------------------------------------------
 # HTTP
@@ -195,12 +213,14 @@ def fetch_packages(repo, component, arch):
     """Return {pkg_name: stanza} for a repo component."""
     cfg = REPOS[repo]
     url = f"{cfg['base']}/dists/{cfg['dist']}/{component}/binary-{arch}/Packages"
+    vlog(f"  fetching Packages: {url}")
     text = fetch_bytes(url).decode("utf-8", errors="replace")
     pkgs = {}
     for st in parse_stanzas(text):
         name = st.get("Package")
         if name and not name.endswith(SKIP_SUFFIXES):
             pkgs[name] = st
+    vlog(f"  {component}: {len(pkgs)} packages after skip filters")
     return pkgs
 
 
@@ -229,8 +249,11 @@ def fetch_contents_desktop_pkgs(repo, arch):
     """Download and parse Contents-<arch>.gz -> {pkg: [desktop paths]}."""
     cfg = REPOS[repo]
     url = f"{cfg['base']}/dists/{cfg['dist']}/Contents-{arch}.gz"
+    vlog(f"  fetching Contents: {url}")
     text = gzip.decompress(fetch_bytes(url)).decode("utf-8", errors="replace")
-    return parse_contents(text)
+    result = parse_contents(text)
+    vlog(f"  {len(result)} desktop-carrying packages in Contents")
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -532,9 +555,11 @@ def process_repo(repo, arch, overrides, state, icons_dir, tmpdir, limit=None,
     exclude = set(overrides.get("exclude", []))
     ov_pkgs = overrides.get("packages", {})
 
+    log(f"[{repo}/{arch}] starting")
     pkgs = {}
     for comp in cfg["components"]:
         pkgs.update(fetch_packages(repo, comp, arch))
+    log(f"[{repo}/{arch}] {len(pkgs)} packages in index")
 
     entries = {}
 
@@ -556,9 +581,13 @@ def process_repo(repo, arch, overrides, state, icons_dir, tmpdir, limit=None,
         candidates |= set(ov_pkgs)
 
     candidates -= exclude
+    missing = sorted(c for c in candidates if c not in pkgs)
+    if missing:
+        vlog(f"  candidates not in repo index (skipped): {', '.join(missing)}")
     candidates = sorted(c for c in candidates if c in pkgs)
     if limit:
         candidates = candidates[:limit]
+    log(f"[{repo}/{arch}] {len(candidates)} candidates to process")
 
     for i, pkg in enumerate(candidates, 1):
         stanza = pkgs[pkg]
@@ -572,6 +601,7 @@ def process_repo(repo, arch, overrides, state, icons_dir, tmpdir, limit=None,
 
         if result == "PENDING":
             if cfg.get("metadata_only"):
+                vlog(f"  [{i}/{len(candidates)}] {pkg}: metadata-only entry")
                 result = build_entry_metadata_only(pkg, stanza, ov_pkgs)
                 if repo not in ("x11",):
                     result["repo"] = repo
@@ -580,6 +610,8 @@ def process_repo(repo, arch, overrides, state, icons_dir, tmpdir, limit=None,
                 deb_path = os.path.join(tmpdir, f"{pkg}_{arch}.deb")
                 try:
                     if not dry_run:
+                        size_mb = int(stanza.get("Size", 0)) / 1e6
+                        log(f"  [{i}/{len(candidates)}] downloading {pkg} {version} ({size_mb:.1f} MB)")
                         download(url, deb_path, stanza.get("SHA256"))
                         tf = open_deb_payload(deb_path)
                         entry, icon = build_entry_from_package(
@@ -587,18 +619,27 @@ def process_repo(repo, arch, overrides, state, icons_dir, tmpdir, limit=None,
                         )
                         if entry is None:
                             result = None  # negative cache
+                            vlog(f"    {pkg}: no usable desktop file (negative-cached)")
                         else:
                             entry["repo"] = repo
                             result = entry
+                            vlog(
+                                f"    {pkg}: entry '{entry['app_name']}' "
+                                f"v{entry['version']} [{', '.join(entry['categories'])}]"
+                            )
                             if icon:
                                 folder, ext, data = icon
                                 dest_dir = icons_dir / folder
                                 dest_dir.mkdir(parents=True, exist_ok=True)
                                 (dest_dir / f"logo{ext}").write_bytes(data)
+                                vlog(f"    {pkg}: icon -> {folder}/logo{ext}")
+                            else:
+                                vlog(f"    {pkg}: no icon found")
                     else:
+                        log(f"  [{i}/{len(candidates)}] (dry-run) {pkg} {version}")
                         result = {"_dry_run": True, "package_name": pkg}
                 except Exception as e:
-                    print(f"  ERROR {pkg}: {e}", file=sys.stderr)
+                    elog(f"  ERROR {pkg}: {e}")
                     result = None
                 finally:
                     if os.path.exists(deb_path):
@@ -608,11 +649,13 @@ def process_repo(repo, arch, overrides, state, icons_dir, tmpdir, limit=None,
                 "version": version,
                 "result": result,
             }
+        else:
+            vlog(f"  [{i}/{len(candidates)}] {pkg}: cached (v{version})")
 
         if result and not result.get("_dry_run"):
             entries[pkg] = result
         if i % 50 == 0:
-            print(f"  [{repo}/{arch}] {i}/{len(candidates)}")
+            log(f"  [{repo}/{arch}] progress: {i}/{len(candidates)}")
 
     return list(entries.values())
 
@@ -650,7 +693,15 @@ def main():
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--dry-run", action="store_true",
                     help="no downloads; print what would be processed")
+    ap.add_argument("-v", "--verbose", action="store_true",
+                    help="log per-package detail (cache hits, icons, skips)")
     args = ap.parse_args()
+
+    # CI runs capture piped output; make prints appear live.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    global VERBOSE
+    VERBOSE = args.verbose
 
     overrides_path = args.overrides or str(
         Path(__file__).resolve().parents[2] / "data" / "native-overrides.json"
@@ -680,6 +731,7 @@ def main():
                     limit=args.limit, dry_run=args.dry_run,
                 )
             counts[f"{repo}-{arch}"] = len(entries)
+            log(f"[{repo}/{arch}] done: {len(entries)} entries")
             if not args.dry_run:
                 with open(out_dir / f"{repo}-{arch}.json", "w") as f:
                     json.dump(entries, f, indent=2, ensure_ascii=False)

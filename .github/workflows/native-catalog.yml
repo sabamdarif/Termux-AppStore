@@ -1,0 +1,59 @@
+name: Native Catalog
+
+# Daily regeneration of the native repo catalog (x11 + tur + metadata-only
+# main pass). Assets are published to the single rolling `native_data`
+# release, replacing the previous ones — the app always downloads the latest.
+
+on:
+    schedule:
+        - cron: "17 3 * * *" # daily, off-peak
+    workflow_dispatch:
+    push:
+        paths:
+            - "data/native-overrides.json"
+            - "data/icons/**"
+            - ".github/scripts/native_catalog_gen.py"
+            - ".github/workflows/native-catalog.yml"
+
+permissions:
+    contents: write
+
+jobs:
+    generate:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Set up Python
+              uses: actions/setup-python@v7
+              with:
+                  python-version: "3.14"
+
+            - name: Fetch previous state and icons
+              run: |
+                  mkdir -p state out/icons
+                  BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/native_data"
+                  curl -fsSL -o state/native-state.json "$BASE/native-state.json" \
+                      || echo '{}' > state/native-state.json
+                  if curl -fsSL -o /tmp/native-icons.zip "$BASE/native-icons.zip"; then
+                      python3 -c "
+                  import zipfile
+                  zipfile.ZipFile('/tmp/native-icons.zip').extractall('out/icons')
+                  "
+                  fi
+
+            - name: Generate catalog
+              run: |
+                  python3 .github/scripts/native_catalog_gen.py \
+                      --state state/native-state.json --out out/
+
+            - name: Publish rolling release
+              uses: softprops/action-gh-release@v3
+              with:
+                  tag_name: native_data
+                  name: Native Catalog Data
+                  body: |
+                      Auto-generated native repo catalog for Termux-AppStore.
+                      Rebuilt daily from the Termux x11 and TUR repositories.
+                      Assets are replaced on every run — always fetch the latest.
+                  files: out/*.json out/native-icons.zip

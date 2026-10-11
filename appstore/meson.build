@@ -46,6 +46,7 @@ termux_appstore_backend_sources = files(
   'termux_appstore/backend/app_data.py',
   'termux_appstore/backend/distro.py',
   'termux_appstore/backend/installed_apps.py',
+  'termux_appstore/backend/native_data.py',
   'termux_appstore/backend/refresh.py',
   'termux_appstore/backend/script_runner.py',
   'termux_appstore/backend/settings.py',
@@ -162,6 +163,13 @@ install_data(
 install_data(
   'inbuild_functions/inbuild_functions',
   install_dir: pkgdir / 'inbuild_functions',
+)
+
+# Generic install/uninstall scripts for native-repo catalog entries
+install_data(
+  'termux_appstore/scripts/native-install.sh',
+  'termux_appstore/scripts/native-uninstall.sh',
+  install_dir: pkgdir / 'scripts',
 )
 
 gnome.post_install(

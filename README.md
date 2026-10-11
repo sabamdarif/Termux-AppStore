@@ -2,6 +2,24 @@
 
 A simple GTK3 based app store for Termux.
 
+## Where the app catalog comes from
+
+The store merges two data sources:
+
+- **Curated apps** (`apps/` → `data/apps.json`, published as the `apps_data`
+  release): distro (proot) apps and native apps with custom install steps.
+- **Native repo catalog** (published as the rolling `native_data` release):
+  generated daily by `.github/scripts/native_catalog_gen.py`, a small
+  AppStream-free generator that finds Termux packages shipping `.desktop`
+  launchers (x11 via the Contents index, TUR via a GUI-dependency shortlist),
+  extracts their desktop metadata and icons, and applies the curated
+  `data/native-overrides.json` (per-package names, descriptions, categories,
+  run commands, and terminal-app exceptions).
+
+To tweak how a repo package appears in the store, edit
+`data/native-overrides.json` — do not add a manual `apps/` folder for packages
+that exist in the Termux repos.
+
 ## Installation
 
 ### Pre-installed in my [Termux-Desktop](https://github.com/sabamdarif/termux-desktop) setup

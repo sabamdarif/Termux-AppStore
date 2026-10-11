@@ -1,2 +1,3 @@
 /tests
 /.add-new-app.defaults
+appstore/termux_appstore/_buildconf.py

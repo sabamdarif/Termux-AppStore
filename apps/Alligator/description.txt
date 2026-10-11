@@ -1,1 +1,0 @@
-Alligator is a convergent, cross-platform feed reader, supporting standard RSS/Atom feeds

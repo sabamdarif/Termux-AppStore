@@ -1,1 +1,0 @@
-Lightweight Spotify client using Qt

@@ -1,0 +1,676 @@
+{
+  "version": 1,
+  "packages": {
+    "abiword": {
+      "app_name": "Abiword",
+      "folder_name": "Abiword",
+      "description": "A free word processing program",
+      "categories": [
+        "Office"
+      ],
+      "run_cmd": "abiword"
+    },
+    "alacritty": {
+      "app_name": "Alacritty",
+      "folder_name": "Alacritty",
+      "description": "A fast, cross-platform, OpenGL terminal emulator",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "alacritty"
+    },
+    "alligator": {
+      "app_name": "Alligator",
+      "folder_name": "Alligator",
+      "description": "Alligator is a convergent, cross-platform feed reader, supporting standard RSS/Atom feeds",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "alligator"
+    },
+    "amberol": {
+      "app_name": "Amberol",
+      "folder_name": "Amberol",
+      "description": "Small and simple sound and music player that is well integrated with GNOME",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "amberol"
+    },
+    "atril": {
+      "app_name": "Atril",
+      "folder_name": "Atril",
+      "description": "Atril is a simple multi-page document viewer. It can display and print PostScript (PS), Encapsulated PostScript (EPS), DJVU, DVI, XPS and Portable Document Format (PDF) files",
+      "categories": [
+        "Accessories",
+        "Office"
+      ],
+      "run_cmd": "atril"
+    },
+    "audacious": {
+      "app_name": "Audacious",
+      "folder_name": "Audacious",
+      "description": "An advanced audio player",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "audacious"
+    },
+    "audacity": {
+      "app_name": "Audacity",
+      "folder_name": "Audacity",
+      "description": "Audacity is a free, open-source digital audio editor and recording application.",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "audacity"
+    },
+    "audiotube": {
+      "app_name": "Audiotube",
+      "folder_name": "Audiotube",
+      "description": "AudioTube can search YouTube Music, list albums and artists, play automatically generated playlists, albums and allows to put your own playlist together.",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "audiotube"
+    },
+    "blender": {
+      "app_name": "Blender",
+      "folder_name": "Blender",
+      "description": "Free and open-source 3D computer graphics software",
+      "categories": [
+        "Graphics",
+        "Productivity"
+      ],
+      "run_cmd": "blender"
+    },
+    "blender4": {
+      "app_name": "Blender4",
+      "folder_name": "Blender4",
+      "description": "Free and open-source 3D computer graphics software",
+      "categories": [
+        "Graphics",
+        "Productivity"
+      ],
+      "run_cmd": "blender-4.5"
+    },
+    "calligra": {
+      "app_name": "Calligra",
+      "folder_name": "Calligra",
+      "description": "Office and graphic art suite by KDE",
+      "categories": [
+        "Office"
+      ],
+      "run_cmd": "calligra"
+    },
+    "chromium": {
+      "app_name": "Chromium",
+      "folder_name": "Chromium",
+      "description": "Open-source version of Google Chrome.",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "/data/data/com.termux/files/usr/bin/chromium-browser --enable-features=Vulkan"
+    },
+    "code-oss": {
+      "app_name": "Code oss",
+      "folder_name": "Code-oss",
+      "description": "VSCodium is a build of Visual Studio Code without telemetry and tracking.",
+      "categories": [
+        "Development"
+      ],
+      "run_cmd": "code-oss"
+    },
+    "darktable": {
+      "app_name": "Darktable",
+      "folder_name": "Darktable",
+      "description": "Darktable is an advanced tool for editing and managing RAW image files.",
+      "categories": [
+        "Graphics"
+      ],
+      "run_cmd": "/data/data/com.termux/files/usr/bin/darktable"
+    },
+    "dconf-editor": {
+      "app_name": "Dconf editor",
+      "folder_name": "Dconf-editor",
+      "description": "A GSettings editor for GNOME",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "dconf-editor"
+    },
+    "deadbeef": {
+      "app_name": "Deadbeef",
+      "folder_name": "Deadbeef",
+      "description": "A modular cross-platform audio player",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "deadbeef"
+    },
+    "dosbox": {
+      "app_name": "Dosbox",
+      "folder_name": "Dosbox",
+      "description": "Emulator with builtin DOS for running DOS Games",
+      "categories": [
+        "Games"
+      ],
+      "run_cmd": "dosbox"
+    },
+    "dosbox-x": {
+      "app_name": "Dosbox x",
+      "folder_name": "Dosbox-x",
+      "description": "A cross-platform DOS emulator based on the DOSBox project",
+      "categories": [
+        "Games"
+      ],
+      "run_cmd": "dosbox-x"
+    },
+    "eog": {
+      "app_name": "Eye of gnome",
+      "folder_name": "Eye-of-gnome",
+      "description": "Eye of GNOME, an image viewing and cataloging program",
+      "categories": [
+        "Graphics"
+      ],
+      "run_cmd": "eog"
+    },
+    "evince": {
+      "app_name": "Evince",
+      "folder_name": "Evince",
+      "description": "document viewer for multiple document formats",
+      "categories": [
+        "Office"
+      ],
+      "run_cmd": "evince"
+    },
+    "fastfetch": {
+      "app_name": "Fastfetch",
+      "folder_name": "Fastfetch",
+      "description": "Fastfetch is a neofetch-like tool for fetching system information and displaying it prettily.",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "fastfetch",
+      "terminal": true
+    },
+    "feathernotes": {
+      "app_name": "Feathernotes",
+      "folder_name": "Feathernotes",
+      "description": "Lightweight Qt Notes-Manager for Linux",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "feathernotes"
+    },
+    "firefox": {
+      "app_name": "Firefox",
+      "folder_name": "Firefox",
+      "description": "Mozilla Firefox, is a free and open source web browser developed by the Mozilla Foundation",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "firefox"
+    },
+    "firefoxpwa": {
+      "app_name": "Pwasforfirefox",
+      "folder_name": "Pwasforfirefox",
+      "description": "PWAs for Firefox",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "firefoxpwa"
+    },
+    "flameshot": {
+      "app_name": "Flameshot",
+      "folder_name": "Flameshot",
+      "description": "Powerful yet simple to use screenshot software",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "flameshot"
+    },
+    "fontforge-gtk": {
+      "app_name": "Fontforge gtk",
+      "folder_name": "Fontforge-gtk",
+      "description": "A free (libre) font editor",
+      "categories": [
+        "Graphics"
+      ],
+      "run_cmd": "fontforge"
+    },
+    "gedit": {
+      "app_name": "Gedit",
+      "folder_name": "Gedit",
+      "description": "Gedit is a simple yet powerful text editor with syntax highlighting.",
+      "categories": [
+        "Office",
+        "Accessories"
+      ],
+      "run_cmd": "gedit"
+    },
+    "gimp": {
+      "app_name": "GIMP",
+      "folder_name": "GIMP",
+      "description": "GIMP stands for \"GNU Image Manipulation Program\" and is used to create images and edit photographs.",
+      "categories": [
+        "Graphics"
+      ],
+      "run_cmd": "gimp"
+    },
+    "git-gui": {
+      "app_name": "Git gui",
+      "folder_name": "Git-gui",
+      "description": "A graphical interface to Git",
+      "categories": [
+        "Development"
+      ],
+      "run_cmd": "/data/data/com.termux/files/usr/libexec/git-core/git-gui"
+    },
+    "gnome-calculator": {
+      "app_name": "Gnome calculator",
+      "folder_name": "Gnome-calculator",
+      "description": "Gnome Calculator",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "gnome-calculator"
+    },
+    "gnome-font-viewer": {
+      "app_name": "Gnome font viewer",
+      "folder_name": "Gnome-font-viewer",
+      "description": "Fonts shows you the fonts installed on your computer for your use as thumbnails.",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "gnome-font-viewer"
+    },
+    "gwenview": {
+      "app_name": "Gwenview",
+      "folder_name": "Gwenview",
+      "description": "Fast and easy to use image viewer by KDE",
+      "categories": [
+        "Multimedia",
+        "Accessories"
+      ],
+      "run_cmd": "gwenview"
+    },
+    "handbrake": {
+      "app_name": "Handbrake",
+      "folder_name": "Handbrake",
+      "description": "Handbrake is an open-source tool for compressing and converting video files",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "ghb"
+    },
+    "hangover": {
+      "app_name": "Hangover",
+      "folder_name": "Hangover",
+      "description": "Hangover runs simple Win64 and Win32 applications on arm64 Linux. Only the application is emulated instead of a whole Wine installation.",
+      "categories": [
+        "Accessories",
+        "Games"
+      ],
+      "run_cmd": "hangover"
+    },
+    "inkscape": {
+      "app_name": "Inkscape",
+      "folder_name": "Inkscape",
+      "description": "Inkscape is a popular free vector graphics editor.\n\n- Flexible drawing tools\n- Broad file format compatibility\n- Powerful text tool\n- Bezier and spiro curves\n\nTo run: Menu -> Graphics -> Inkscape\nTo run in a terminal: inkscape\n\nNote: Also see the Boxy SVG tool.",
+      "categories": [
+        "Graphics"
+      ],
+      "run_cmd": "inkscape"
+    },
+    "kate": {
+      "app_name": "Kate",
+      "folder_name": "Kate",
+      "description": "Kate is a fast multi-document, multi-view text editor for programmers by KDE",
+      "categories": [
+        "Development",
+        "Accessories"
+      ],
+      "run_cmd": "kate"
+    },
+    "kdenlive": {
+      "app_name": "Kdenlive",
+      "folder_name": "Kdenlive",
+      "description": "Kdenlive is a popular video editor compatible with PiOS Bookworm.",
+      "categories": [
+        "Multimedia",
+        "Graphics"
+      ],
+      "run_cmd": "kdenlive"
+    },
+    "kget": {
+      "app_name": "Kget",
+      "folder_name": "Kget",
+      "description": "Download Manager by KDE",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "kget"
+    },
+    "kig": {
+      "app_name": "Kig",
+      "folder_name": "Kig",
+      "description": "Interactive Geometry",
+      "categories": [
+        "Office"
+      ],
+      "run_cmd": "kig"
+    },
+    "konsole": {
+      "app_name": "Konsole",
+      "folder_name": "Konsole",
+      "description": "Konsole is a terminal to run a command shell. It provides a command line interface for directly controlling your computer.",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "konsole"
+    },
+    "krita": {
+      "app_name": "Krita",
+      "folder_name": "Krita",
+      "description": "Krita is the full-featured digital art studio.",
+      "categories": [
+        "Graphics"
+      ],
+      "run_cmd": "krita"
+    },
+    "kvantum": {
+      "app_name": "Kvantum",
+      "folder_name": "Kvantum",
+      "description": "A Linux SVG-based theme engine for Qt and KDE",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "kvantummanager"
+    },
+    "lazygit": {
+      "app_name": "Lazygit",
+      "folder_name": "Lazygit",
+      "description": "simple terminal UI for git commands",
+      "categories": [
+        "Development"
+      ],
+      "run_cmd": "lazygit",
+      "terminal": true
+    },
+    "libreoffice": {
+      "app_name": "Libreoffice",
+      "folder_name": "Libreoffice",
+      "description": "LibreOffice is a free open source office suite.",
+      "categories": [
+        "Office"
+      ],
+      "run_cmd": "libreoffice"
+    },
+    "librewolf": {
+      "app_name": "Librewolf",
+      "folder_name": "Librewolf",
+      "description": "A custom version of Firefox, focused on privacy, security and freedom.",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "librewolf"
+    },
+    "luanti": {
+      "app_name": "Luanti",
+      "folder_name": "Luanti",
+      "description": "An open source voxel game engine",
+      "categories": [
+        "Games"
+      ],
+      "run_cmd": "luanti"
+    },
+    "lximage-qt": {
+      "app_name": "Lximage qt",
+      "folder_name": "Lximage-qt",
+      "description": "LXQt Image Viewer",
+      "categories": [
+        "Graphics"
+      ],
+      "run_cmd": "lximage-qt"
+    },
+    "morphosis": {
+      "app_name": "Morphosis",
+      "folder_name": "Morphosis",
+      "description": "Convert your documents",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "morphosis"
+    },
+    "mousepad": {
+      "app_name": "Mousepad",
+      "folder_name": "Mousepad",
+      "description": "Simple text editor of the desktop environment Xfce",
+      "categories": [
+        "Accessories",
+        "Productivity"
+      ],
+      "run_cmd": "mousepad"
+    },
+    "mpv-x": {
+      "app_name": "Mpv",
+      "folder_name": "Mpv",
+      "description": "mpv is free and open-source media player software based on MPlayer, mplayer2 and FFmpeg",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "mpv --player-operation-mode=pseudo-gui"
+    },
+    "msedit": {
+      "app_name": "Msedit",
+      "folder_name": "Msedit",
+      "description": "A simple editor for simple needs (Microsoft Edit)",
+      "categories": [
+        "Development",
+        "Accessories"
+      ],
+      "run_cmd": "msedit",
+      "terminal": true
+    },
+    "neofetch": {
+      "app_name": "Neofetch",
+      "folder_name": "Neofetch",
+      "description": "Neofetch is an aesthetically pleasing bash script to show system information.",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "neofetch",
+      "terminal": true
+    },
+    "neovim": {
+      "app_name": "Neovim",
+      "folder_name": "Neovim",
+      "description": "Vim-fork focused on extensibility and usability",
+      "categories": [
+        "Development"
+      ],
+      "run_cmd": "nvim",
+      "terminal": true
+    },
+    "qbittorrent": {
+      "app_name": "Qbittorrent",
+      "folder_name": "Qbittorrent",
+      "description": "A Qt6 based BitTorrent client",
+      "categories": [
+        "Accessories",
+        "Internet"
+      ],
+      "run_cmd": "qbittorrent"
+    },
+    "rawtherapee": {
+      "app_name": "Rawtherapee",
+      "folder_name": "Rawtherapee",
+      "description": "RawTherapee is a free, cross-platform raw image processing program",
+      "categories": [
+        "Graphics"
+      ],
+      "run_cmd": "rawtherapee"
+    },
+    "rclone": {
+      "app_name": "Rclone",
+      "folder_name": "Rclone",
+      "description": "Rclone is an open source, multi threaded, command line computer program to manage or migrate content on cloud and other high latency storage.",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "rclone",
+      "terminal": true
+    },
+    "rhythmbox": {
+      "app_name": "Rhythmbox",
+      "folder_name": "Rhythmbox",
+      "description": "Rhythmbox is a music management and playback application.",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "rhythmbox"
+    },
+    "scrcpy": {
+      "app_name": "Scrcpy",
+      "folder_name": "Scrcpy",
+      "description": "Connect and control your Android smartphone.\nThis is similar to a remote desktop, where you can view the device's screen and navigate it normally.\n\nTo run: Menu -> System Tools -> Scrcpy\nTo run in a terminal: scrcpy\n\nNotes:\n- For more info, run \"scrcpy --help\"\n- The Android device requires at least API 21 (Android 5.0).\n- Make sure you enabled ADB debugging on your device.\n- The device needs to be connected to the same local network, or via USB.\n- On some devices, you also need to enable an additional option to control it using keyboard and mouse.\n- If you have issues, try to run the app a couple of times through Terminal.",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "scrcpy"
+    },
+    "shotcut": {
+      "app_name": "Shotcut",
+      "folder_name": "Shotcut",
+      "description": "Shotcut is a feature-rich video editor supporting various formats and advanced editing features.",
+      "categories": [
+        "Multimedia",
+        "Graphics"
+      ],
+      "run_cmd": "shotcut"
+    },
+    "simulide": {
+      "app_name": "Simulide",
+      "folder_name": "Simulide",
+      "description": "SimulIDE Circuit Simulator.",
+      "categories": [
+        "Development"
+      ],
+      "run_cmd": "simulide"
+    },
+    "spotify-qt": {
+      "app_name": "Spotify qt",
+      "folder_name": "Spotify-qt",
+      "description": "Lightweight Spotify client using Qt",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "spotify-qt"
+    },
+    "switcheroo": {
+      "app_name": "Switcheroo",
+      "folder_name": "Switcheroo",
+      "description": "Convert and manipulate images easily (GTK4/libadwaita frontend to ImageMagick)",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "switcheroo"
+    },
+    "tageditor": {
+      "app_name": "Tageditor",
+      "folder_name": "Tageditor",
+      "description": "A tag editor with Qt GUI and command-line interface. Supports MP4 (iTunes), ID3, Vorbis, Opus, FLAC and Matroska",
+      "categories": [
+        "Accessories",
+        "Productivity"
+      ],
+      "run_cmd": "tageditor"
+    },
+    "telegram-desktop": {
+      "app_name": "Telegram desktop",
+      "folder_name": "Telegram-desktop",
+      "description": "Telegram is a free and open-source, cross-platform instant messaging software.",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "Telegram"
+    },
+    "thunderbird": {
+      "app_name": "Thunderbird",
+      "folder_name": "Thunderbird",
+      "description": "Thunderbird is an email client with features like a tabbed interface, smart spam filter, and numerous add-ons.",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "thunderbird"
+    },
+    "transmission": {
+      "app_name": "Transmission",
+      "folder_name": "Transmission",
+      "description": "Transmission is a lightweight BitTorrent client used to download torrent files from the Internet.",
+      "categories": [
+        "Office"
+      ],
+      "run_cmd": "transmission-gtk"
+    },
+    "uget": {
+      "app_name": "Uget",
+      "folder_name": "Uget",
+      "description": "GTK+ download manager featuring download classification and HTML import",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "uget"
+    },
+    "video-downloader": {
+      "app_name": "Video downloader",
+      "folder_name": "Video-downloader",
+      "description": "Download videos from websites like YouTube and many others (based on yt-dlp)",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "video-downloader"
+    },
+    "vlc": {
+      "app_name": "VLC",
+      "folder_name": "VLC",
+      "description": "VLC is a free and open source cross-platform multimedia player that plays most multimedia files and various streaming protocols.",
+      "categories": [
+        "Multimedia"
+      ],
+      "run_cmd": "vlc"
+    },
+    "xpdf": {
+      "app_name": "Xpdf Reader",
+      "folder_name": "Xpdf-Reader",
+      "description": "Xpdf is a lightweight PDF reader for viewing documents.",
+      "categories": [
+        "Productivity",
+        "Office",
+        "Accessories"
+      ],
+      "run_cmd": "xpdf"
+    },
+    "yazi": {
+      "app_name": "Yazi",
+      "folder_name": "Yazi",
+      "description": "Blazing fast terminal file manager written in Rust, based on async I/O",
+      "categories": [
+        "Accessories"
+      ],
+      "run_cmd": "yazi",
+      "terminal": true
+    },
+    "zen-browser": {
+      "app_name": "Zen browser",
+      "folder_name": "Zen-browser",
+      "description": "Zen is a firefox-based browser with the aim of pushing your productivity to a new level!",
+      "categories": [
+        "Internet"
+      ],
+      "run_cmd": "zen-browser"
+    }
+  },
+  "exclude": []
+}

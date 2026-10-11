@@ -149,7 +149,7 @@ class ProgressEngine:
             if "download" in stype or "extract" in stype:
                 return PHASE_MAPS["distro_install_download"]
             return PHASE_MAPS["distro_install_repo"]
-        if atyp == "native":
+        if atyp in ("native", "native-repo"):
             return PHASE_MAPS["native_install"]
         return PHASE_MAPS["default"]
 

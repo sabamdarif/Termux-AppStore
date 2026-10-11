@@ -70,6 +70,7 @@ def show_settings_dialog(parent, get_setting, set_setting):
         ("enable_auto_refresh", "Enable auto-refresh", True),
         ("show_command_output", "Show command output in terminal", False),
         ("enable_fuzzy_search", "Enable fuzzy search", False),
+        ("enable_native_repo_catalog", "Show apps from Termux repositories", True),
     ]
 
     for key, label_text, default in _SETTINGS:

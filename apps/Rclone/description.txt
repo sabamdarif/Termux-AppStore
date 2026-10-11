@@ -1,1 +1,0 @@
-Rclone is an open source, multi threaded, command line computer program to manage or migrate content on cloud and other high latency storage.

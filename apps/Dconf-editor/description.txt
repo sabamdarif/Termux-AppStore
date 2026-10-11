@@ -1,1 +1,0 @@
-A GSettings editor for GNOME

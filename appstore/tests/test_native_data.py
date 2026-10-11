@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Unit tests for termux_appstore.backend.native_data (stdlib unittest).
+
+Run with: PYTHONPATH=appstore venv/bin/python -m unittest discover appstore/tests
+Requires the _buildconf.py test shim in termux_appstore/ (gitignored; see the implementation plan for its contents).
+"""
+
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from termux_appstore.backend import native_data
+
+
+class TestEnabledReposApt(unittest.TestCase):
+    def _prefix(self, files):
+        tmp = tempfile.TemporaryDirectory()
+        base = Path(tmp.name)
+        (base / "etc/apt/sources.list.d").mkdir(parents=True)
+        for rel, content in files.items():
+            (base / "etc/apt" / rel).write_text(content)
+        return tmp, str(base)
+
+    def test_x11_and_tur_enabled(self):
+        tmp, prefix = self._prefix(
+            {
+                "sources.list": "deb https://packages-cf.termux.dev/apt/termux-main stable main\n",
+                "sources.list.d/x11.list": "deb https://packages-cf.termux.dev/apt/termux-x11 x11 main\n",
+                "sources.list.d/tur.list": "deb https://tur.kcubeterm.com tur-packages tur\n",
+            }
+        )
+        with tmp:
+            self.assertEqual(native_data.enabled_repos_apt(prefix), {"x11", "tur"})
+
+    def test_commented_out_ignored(self):
+        tmp, prefix = self._prefix(
+            {
+                "sources.list": "# deb https://packages-cf.termux.dev/apt/termux-x11 x11 main\n",
+            }
+        )
+        with tmp:
+            self.assertEqual(native_data.enabled_repos_apt(prefix), set())
+
+
+class TestEnabledReposPacman(unittest.TestCase):
+    def test_sections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            etc = Path(tmp) / "etc"
+            etc.mkdir()
+            (etc / "pacman.conf").write_text(
+                "[options]\n[main]\n[x11]\n#[tur]\n[tur-continuous]\n"
+            )
+            self.assertEqual(native_data.enabled_repos_pacman(tmp), {"x11"})
+
+
+class TestMergeCatalog(unittest.TestCase):
+    def test_curated_wins_by_package_name(self):
+        curated = [
+            {"app_name": "Abiword", "folder_name": "Abiword", "package_name": "abiword"}
+        ]
+        native = [
+            {"app_name": "Abiword", "folder_name": "abiword", "package_name": "abiword"},
+            {"app_name": "SciTE", "folder_name": "scite", "package_name": "scite"},
+        ]
+        merged = native_data.merge_catalog(curated, native)
+        self.assertEqual(len(merged), 2)
+        self.assertEqual(merged[0]["folder_name"], "Abiword")  # curated casing kept
+        self.assertEqual(merged[1]["package_name"], "scite")
+
+    def test_folder_name_fallback_dedupe(self):
+        curated = [{"app_name": "X", "folder_name": "X"}]
+        native = [{"app_name": "X", "folder_name": "x"}]
+        merged = native_data.merge_catalog(curated, native)
+        self.assertEqual(len(merged), 1)
+
+
+class TestFetchCatalogsCaching(unittest.TestCase):
+    def test_download_then_cached_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(native_data, "NATIVE_DIR", tmp):
+                good = [{"package_name": "foo"}]
+                with mock.patch.object(native_data, "_fetch_json", return_value=good):
+                    out = native_data.fetch_native_catalogs({"x11"}, "aarch64")
+                self.assertEqual(out, good)
+                self.assertTrue(
+                    (Path(tmp) / "x11-aarch64.json").exists(), "cache written"
+                )
+
+                def boom(_url):
+                    raise OSError("offline")
+
+                with mock.patch.object(native_data, "_fetch_json", side_effect=boom):
+                    out = native_data.fetch_native_catalogs({"x11"}, "aarch64")
+                self.assertEqual(out, good, "cached fallback used")
+
+    def test_unsupported_arch_returns_empty(self):
+        self.assertEqual(native_data.fetch_native_catalogs({"x11"}, "x86_64"), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

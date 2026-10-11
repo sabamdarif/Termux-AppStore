@@ -13,6 +13,7 @@ import shutil
 import subprocess
 from datetime import datetime
 
+from termux_appstore.backend import native_data
 from termux_appstore.backend.app_data import read_termux_desktop_config
 from termux_appstore.backend.distro import (
     DistroConfig,
@@ -32,6 +33,7 @@ from termux_appstore.constants import (
     TERMUX_PREFIX,
     TERMUX_TMP,
 )
+from termux_appstore.backend.settings import Settings
 from termux_appstore.utils import get_current_arch
 
 
@@ -259,9 +261,10 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
 
         if not download_success:
             print("All download methods failed for apps.json")
-            if on_error:
-                on_error("Failed to download apps.json")
-            return False
+            if os.path.exists(old_json_path):
+                print("Falling back to previous apps.json backup")
+                shutil.copy2(old_json_path, APPSTORE_JSON)
+            # Non-fatal: the native catalog may still produce a usable store.
 
         if os.path.exists(APPSTORE_LOGO_DIR):
             print("Removing existing logos...")
@@ -269,14 +272,25 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
 
         print("Downloading and extracting new logos...")
         if not download_and_extract_logos():
-            print("Error handling logos")
-            if on_error:
-                on_error("Failed to update logos")
-            return False
+            # Non-fatal: cards render without logos.
+            print("Error handling logos — continuing without them")
+
+        # Native repo catalog (CI-generated). Icons sync AFTER the curated
+        # logo extraction above because that step wipes APPSTORE_LOGO_DIR (P8).
+        if Settings().get("enable_native_repo_catalog", True):
+            repos, _x11_missing = native_data.enabled_native_repos()
+            native_entries = native_data.fetch_native_catalogs(repos, system_arch)
+            native_data.sync_native_icons()
+        else:
+            native_entries = []
 
         print("Filtering apps based on architecture...")
-        with open(APPSTORE_JSON, "r") as f:
-            all_apps = json.load(f)
+        if os.path.exists(APPSTORE_JSON):
+            with open(APPSTORE_JSON, "r") as f:
+                all_apps = json.load(f)
+        else:
+            all_apps = []
+        all_apps = native_data.merge_catalog(all_apps, native_entries)
 
         filtered_apps = []
         for app in all_apps:
@@ -334,7 +348,7 @@ def refresh_data(installed_apps_manager, update_tracker, on_error=None):
 def _check_native_packages(apps, installed_apps):
     """Resolve versions and detect installed native packages."""
     for app in apps:
-        if app["app_type"] != "native":
+        if app.get("app_type") not in ("native", "native-repo"):
             continue
 
         package_name = app.get("package_name") or app.get("run_cmd")

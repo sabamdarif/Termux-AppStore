@@ -675,6 +675,19 @@ main() {
 	package_name="$(prompt_field "package_name" "Enter package name")"
 	remember "package_name" "$package_name"
 
+	# Repo-native packages are covered by the generated native catalog; a
+	# manual apps/ entry is usually unnecessary — edit the overrides instead.
+	if [[ "$mechanism" == "native" || "$mechanism" == "multi_package" ]]; then
+		if [ -f data/native-overrides.json ] && \
+			grep -qF ""$package_name"" data/native-overrides.json 2>/dev/null; then
+			echo "  NOTE: '$package_name' is covered by the generated native catalog."
+			echo "  Edit data/native-overrides.json instead of adding an app folder."
+			local anyway
+			anyway="$(prompt_yesno "native_override_exists" "Add a manual entry anyway?")"
+			[ "$anyway" = "yes" ] || abort "use data/native-overrides.json instead"
+		fi
+	fi
+
 	# --- download URL / version / sha / filename template (download mechanisms) ---
 	local download_url="" base_url="" version="" filename_tmpl="" sha_header=""
 	case "$mechanism" in

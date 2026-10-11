@@ -7,6 +7,7 @@ terminal, and task modules into a working application window.
 
 import os
 import queue
+import shutil
 import subprocess
 import threading
 
@@ -19,7 +20,12 @@ from gi.repository import Gdk, GLib, Gtk  # type: ignore # noqa: E402
 from termux_appstore.backend.app_data import load_app_metadata
 from termux_appstore.backend.distro import DistroConfig
 from termux_appstore.backend.installed_apps import InstalledApps
-from termux_appstore.backend.refresh import migrate_old_data, refresh_data
+from termux_appstore.backend import native_data
+from termux_appstore.backend.refresh import (
+    migrate_old_data,
+    refresh_data,
+    should_auto_refresh,
+)
 from termux_appstore.backend.settings import Settings
 from termux_appstore.backend.updates import UpdateTracker
 from termux_appstore.constants import (
@@ -189,6 +195,9 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         if not os.path.exists(APPSTORE_JSON):
             print("First time setup: Initializing app store...")
+            self._start_refresh()
+        elif self.get_setting("enable_auto_refresh", True) and should_auto_refresh():
+            print("Auto-refresh: data is stale, refreshing...")
             self._start_refresh()
         else:
             self._load_and_display()
@@ -595,6 +604,25 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             on_success=lambda: self._mark_installed(app, False),
         )
 
+    @staticmethod
+    def _find_terminal():
+        """Return a terminal emulator command prefix, or None."""
+        candidates = [
+            os.environ.get("TERMINAL"),
+            "xterm",
+            "alacritty",
+            "kitty",
+            "konsole",
+            "gnome-terminal",
+            "xfce4-terminal",
+            "lxterminal",
+            "qterminal",
+        ]
+        for term in candidates:
+            if term and shutil.which(term):
+                return f"{term} -e"
+        return None
+
     def on_open_clicked(self, button, app):
         """Handle open button."""
         run_cmd = app.get("run_cmd", "")
@@ -603,6 +631,15 @@ class AppStoreWindow(Gtk.ApplicationWindow):
             return
         if app.get("app_type") == "distro":
             run_cmd = f"pdrun {run_cmd}"
+        if app.get("terminal"):
+            term = self._find_terminal()
+            if not term:
+                self._show_error(
+                    f"{app.get('app_name', 'This app')} is a terminal app and "
+                    "no terminal emulator was found"
+                )
+                return
+            run_cmd = f"{term} {run_cmd}"
         if self.get_setting("show_command_output", False):
             show_command_output(run_cmd, app.get("app_name", "App"), self)
         else:
@@ -840,6 +877,24 @@ class AppStoreWindow(Gtk.ApplicationWindow):
 
         self.main_stack.set_visible_child_name("content")
         print("Refresh complete — UI updated")
+
+        if native_data.LAST_X11_MISSING and self.get_setting(
+            "enable_native_repo_catalog", True
+        ):
+            dlg = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK,
+                text="The x11 repository is not enabled",
+            )
+            dlg.format_secondary_text(
+                "Most GUI apps come from the x11 repository. "
+                "Enable it with:\n\n    pkg install x11-repo\n\n"
+                "then refresh the app store."
+            )
+            dlg.run()
+            dlg.destroy()
 
     def _on_refresh_error(self, message):
         """Called on main thread when refresh fails."""

@@ -13,11 +13,14 @@ import shutil
 import subprocess
 from datetime import datetime
 
+from termux_appstore.backend import native_data
 from termux_appstore.backend.app_data import load_app_metadata
+from termux_appstore.backend.settings import Settings
 from termux_appstore.backend.refresh import (
     _check_distro_packages,
     _check_native_packages,
 )
+from termux_appstore.utils import get_current_arch
 from termux_appstore.constants import (
     APPSTORE_DIR,
     APPSTORE_JSON,
@@ -150,13 +153,26 @@ def run_update_pipeline(
         )
 
         if not os.path.exists(APPSTORE_JSON):
-            print("Failed to download new apps.json")
-            if on_error:
-                on_error("Failed to download new apps.json")
-            return None
+            print("Failed to download new apps.json — using previous snapshot")
+            if os.path.exists(old_json_path):
+                shutil.copy2(old_json_path, APPSTORE_JSON)
+            else:
+                with open(APPSTORE_JSON, "w") as f:
+                    json.dump([], f)
 
         with open(APPSTORE_JSON, "r") as f:
             new_apps_data = json.load(f)
+
+        # Native repo catalog merge (P1: both pipelines must merge).
+        _progress(42, "Fetching native catalog...")
+        if Settings().get("enable_native_repo_catalog", True):
+            repos, _x11_missing = native_data.enabled_native_repos()
+            native_entries = native_data.fetch_native_catalogs(
+                repos, get_current_arch()
+            )
+        else:
+            native_entries = []
+        new_apps_data = native_data.merge_catalog(new_apps_data, native_entries)
 
         _progress(50, "Checking versions...")
         installed_set = set(installed_apps)
@@ -187,6 +203,8 @@ def run_update_pipeline(
 
         _progress(80, "Updating app logos...")
         _update_logos()
+        if Settings().get("enable_native_repo_catalog", True):
+            native_data.sync_native_icons()
 
         _progress(90, "Finishing up...")
         os.makedirs(os.path.dirname(LAST_VERSION_CHECK_FILE), exist_ok=True)

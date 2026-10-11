@@ -1,1 +1,0 @@
-A Qt6 based BitTorrent client

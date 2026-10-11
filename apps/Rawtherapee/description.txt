@@ -1,1 +1,0 @@
-RawTherapee is a free, cross-platform raw image processing program 

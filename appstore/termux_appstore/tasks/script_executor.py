@@ -195,7 +195,11 @@ def run_script_with_progress(
 
             GLib.timeout_add(500, heartbeat_cb)
 
-            script_env = {**os.environ, "PROGRESS_ENABLED": "1"}
+            script_env = {
+                **os.environ,
+                "PROGRESS_ENABLED": "1",
+                "APPSTORE_PACKAGE_NAME": app.get("package_name", ""),
+            }
 
             process = subprocess.Popen(
                 ["bash", script_file],

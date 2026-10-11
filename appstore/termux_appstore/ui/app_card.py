@@ -118,7 +118,9 @@ def build_app_card(
         top_row.pack_start(Gtk.Label(), True, True, 0)
 
         source_label = Gtk.Label()
-        source_type = app.get("app_type", "unknown").capitalize()
+        source_type = {"native-repo": "Native"}.get(
+            app.get("app_type"), app.get("app_type", "unknown").capitalize()
+        )
         source_label.set_markup(f"Source: {GLib.markup_escape_text(source_type)}")
         source_label.get_style_context().add_class("metadata-label")
         source_label.set_size_request(120, -1)

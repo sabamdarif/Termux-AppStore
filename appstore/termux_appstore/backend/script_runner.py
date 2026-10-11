@@ -121,6 +121,25 @@ def download_script(url):
     try:
         os.makedirs(TERMUX_TMP, exist_ok=True)
 
+        # Local packaged script (native-repo catalog entries): copy it into
+        # tmp and run the same injection as downloaded scripts.
+        if not url.startswith(("http://", "https://")):
+            pkg_root = Path(__file__).resolve().parent.parent
+            src_local = pkg_root / url
+            if not src_local.is_file():
+                print(f"Local script not found: {src_local}")
+                return None
+            script_name = f"appstore_{int(time.time())}.sh"
+            script_path = os.path.join(TERMUX_TMP, script_name)
+            with open(src_local, "r", encoding="utf-8") as f:
+                content = f.read()
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            if not modify_script(script_path):
+                print("Failed to modify local script")
+                return None
+            return script_path
+
         script_name = f"appstore_{int(time.time())}.sh"
         script_path = os.path.join(TERMUX_TMP, script_name)
 

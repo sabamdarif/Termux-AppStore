@@ -32,6 +32,11 @@ GITHUB_APPS_JSON = "https://github.com/sabamdarif/Termux-AppStore/releases/downl
 GITHUB_LOGOS_ZIP = (
     "https://github.com/sabamdarif/Termux-AppStore/releases/download/logos/logos.zip"
 )
+NATIVE_DATA_BASE = (
+    "https://github.com/sabamdarif/Termux-AppStore/releases/download/native_data"
+)
+NATIVE_DIR = os.path.join(APPSTORE_DIR, "native")
+NATIVE_REPOS = ("x11", "tur")
 
 # Architecture compatibility mapping
 ARCH_COMPATIBILITY = {
@@ -48,6 +53,7 @@ DEFAULT_SETTINGS = {
     "show_command_output": False,
     "enable_fuzzy_search": False,
     "last_category": "All Apps",
+    "enable_native_repo_catalog": True,
 }
 
 TERMUX_REPOS = [

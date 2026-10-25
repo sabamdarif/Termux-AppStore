@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 supported_arch="arm64"
-version="v1.14.4"
+version="v1.14.5"
 app_type="distro"
 supported_distro="all"
 # working_dir="${distro_path}/opt/AppImageLauncher"
@@ -9,7 +9,7 @@ page_url="https://github.com/obsidianmd/obsidian-releases"
 run_cmd="/opt/AppImageLauncher/Obsidian/obsidian --no-sandbox"
 
 # SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
-sha256="721829a4f0ffadf7674f396aed58a5699e116b76b78747873d1751193efb66a9"
+sha256="378d88c6c01c26783d3565c4b7a8de865e163e67c8ffb447ae06675d52623665"
 
 cd ${TMPDIR}
 appimage_filename="Obsidian-${version#v}-${supported_arch}.AppImage"

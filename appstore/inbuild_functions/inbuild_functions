@@ -92,13 +92,48 @@ else
 	PASS="${pass:-}"
 fi
 
-if [[ "$SELECTED_DISTRO_TYPE" == "proot" ]]; then
-	DISTRO_PATH="$TERMUX_PREFIX/var/lib/proot-distro/installed-rootfs/$SELECTED_DISTRO"
-elif [[ "$SELECTED_DISTRO_TYPE" == "chroot" ]]; then
-	DISTRO_PATH="/data/local/chroot-distro/installed-rootfs/$SELECTED_DISTRO"
-else
-	DISTRO_PATH=""
-fi
+# Both proot-distro (>=5.0) and chroot-distro (all versions) store each
+# container as "<runtime dir>/containers/<name>/rootfs". The old flat
+# "installed-rootfs/<name>" layout only exists for proot-distro <=4.x and
+# is a *legacy* directory for current versions: nothing writes to it, and
+# proot-distro treats a stray entry there as a container to migrate on
+# next login. Never build paths under it -- fall back to it only if a real
+# container is already installed there (pre-5.0 proot-distro).
+#
+# Chroot-distro also lives under $PREFIX, not /data/local.
+function _appstore_distro_path() {
+	local type="$1"
+	local name="$2"
+	local new_path legacy_path
+
+	# No distro configured: emit nothing so callers see an empty path
+	# rather than failing (this file is sourced by native-only apps too,
+	# under the runner's `set -e`).
+	if [[ -z "$type" || -z "$name" ]]; then
+		echo ""
+		return 0
+	fi
+
+	if [[ "$type" == "chroot" ]]; then
+		new_path="$TERMUX_PREFIX/var/lib/chroot-distro/containers/$name/rootfs"
+		legacy_path="/data/local/chroot-distro/installed-rootfs/$name"
+	else
+		new_path="$TERMUX_PREFIX/var/lib/proot-distro/containers/$name/rootfs"
+		legacy_path="$TERMUX_PREFIX/var/lib/proot-distro/installed-rootfs/$name"
+	fi
+
+	if [[ -d "$new_path" ]]; then
+		echo "$new_path"
+	elif [[ -d "$legacy_path" ]]; then
+		echo "$legacy_path"
+	else
+		# Not installed (yet): answer with the current layout so callers
+		# never create -- or trigger a migration from -- the legacy tree.
+		echo "$new_path"
+	fi
+}
+
+DISTRO_PATH="$(_appstore_distro_path "$SELECTED_DISTRO_TYPE" "$SELECTED_DISTRO")"
 
 if [[ -n "$DISTRO_PATH" ]]; then
 	DISTRO_ROOT_PATH="$DISTRO_PATH/root"
@@ -1072,6 +1107,17 @@ function distro_run() {
 	local pd_setup_content="${command}"
 	local script_name="pd_setup_$$_${RANDOM}.sh"
 	local script_path="$DISTRO_PATH/root/$script_name"
+
+	# The helper is written to the container's rootfs from the host side and
+	# then executed inside. If the rootfs is not where we think it is (an
+	# unknown proot-distro/chroot-distro layout), the write lands in a
+	# directory nobody runs and the login fails with a bare "No such file
+	# or directory". Say what is actually wrong instead.
+	if [[ ! -d "$DISTRO_PATH" ]]; then
+		print_failed "Distro rootfs for '${SELECTED_DISTRO}' not found at: ${DISTRO_PATH}"
+		print_msg "Make sure the ${SELECTED_DISTRO_TYPE}-distro container '${SELECTED_DISTRO}' is installed."
+		return 1
+	fi
 
 	create_shell_script "$script_path" "$pd_setup_content"
 	"${SELECTED_DISTRO_TYPE}"-distro login "$SELECTED_DISTRO" -- /bin/bash "/root/$script_name" 2>&1 |

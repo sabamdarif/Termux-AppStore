@@ -2,14 +2,14 @@
 
 supported_arch="aarch64"
 run_cmd="/opt/Signal-Unofficial/signal-desktop-unofficial --no-sandbox"
-version="v8.35.0"
+version="v8.36.0"
 app_type="distro"
 supported_distro="all"
 page_url="https://github.com/dennisameling/Signal-Desktop"
 working_dir="${distro_path}/root"
 
 # SHA256 of downloaded artifact(s); verified by download_file (Part C-bis).
-sha256="7501a7fa0fcfcee29b4169b7fd3f57e16ce9db80784fe405661408265cc09b7c"
+sha256="48092af886e9a443b66cc624ba28c2e0e33b324e68d0b8be62b84c2c7c20e242"
 
 progress_phase "prepare" 0 "Preparing..."
 
